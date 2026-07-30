@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Users,
   Clock,
@@ -43,6 +44,30 @@ export default function TeamWorkloadPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
   const [allTasks, setAllTasks] = useState<any[]>([]);
+  const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, number>>>({});
+
+  // Check URL query string for ?tab=timesheet
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['workload', 'analytics', 'priorities', 'timesheet'].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+    }
+  }, []);
+
+  // Load live attendance timesheet recap from localStorage
+  useEffect(() => {
+    const recapStr = localStorage.getItem('bilik_timesheet_recap');
+    if (recapStr) {
+      try {
+        setTimesheetRecap(JSON.parse(recapStr));
+      } catch {
+        setTimesheetRecap({});
+      }
+    }
+  }, [activeTab]);
 
   const fetchTeamWorkload = async () => {
     setLoading(true);
@@ -552,8 +577,13 @@ export default function TeamWorkloadPage() {
             </div>
 
             <div className="flex items-center gap-2 text-xs">
-              <span className="px-3 py-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg font-bold text-[#737680]">$ Billable status</span>
-              <span className="px-3 py-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg font-bold text-[#737680]">🏷️ Tag</span>
+              <Link
+                href="/attendance"
+                className="px-3.5 py-1.5 bg-[#4F9D78] text-white rounded-xl font-extrabold hover:bg-[#3D8362] transition-colors shadow-2xs flex items-center gap-1.5"
+              >
+                <Clock className="w-3.5 h-3.5 text-white" />
+                <span>⏱️ Presensi Check-In Live</span>
+              </Link>
               <span className="px-3 py-1 bg-[#EEF2F7] border border-[#24324A]/20 rounded-lg font-bold text-[#24324A]">⏱️ Tracked time</span>
             </div>
           </div>
@@ -576,28 +606,41 @@ export default function TeamWorkloadPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E8E8EC]">
-                  {members.map((m) => (
-                    <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
-                          <div>
-                            <span className="font-bold text-[#24324A] block">{m.full_name}</span>
-                            <span className="text-[10px] text-[#737680]">40h capacity</span>
+                  {members.map((m) => {
+                    const userRecap = timesheetRecap[m.full_name] || {};
+                    const sun = userRecap['Sun'] || 0;
+                    const mon = userRecap['Mon'] || (m.hours_tracked > 0 ? 8 : 0);
+                    const tue = userRecap['Tue'] || (m.hours_tracked > 0 ? 8 : 0);
+                    const wed = userRecap['Wed'] || (m.hours_tracked > 0 ? 8 : 0);
+                    const thu = userRecap['Thu'] || (m.hours_tracked > 0 ? 8 : 0);
+                    const fri = userRecap['Fri'] || (m.hours_tracked > 0 ? 8 : 0);
+                    const sat = userRecap['Sat'] || 0;
+
+                    const total = parseFloat((sun + mon + tue + wed + thu + fri + sat).toFixed(2));
+
+                    return (
+                      <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
+                            <div>
+                              <span className="font-bold text-[#24324A] block">{m.full_name}</span>
+                              <span className="text-[10px] text-[#737680]">40h capacity</span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-2 text-center text-[#737680]">0h</td>
-                      <td className="py-3 px-2 text-center font-semibold text-[#24324A]">8h</td>
-                      <td className="py-3 px-2 text-center font-semibold text-[#24324A]">8h</td>
-                      <td className="py-3 px-2 text-center font-semibold text-[#24324A]">8h</td>
-                      <td className="py-3 px-2 text-center font-semibold text-[#24324A]">8h</td>
-                      <td className="py-3 px-2 text-center font-semibold text-[#24324A]">8h</td>
-                      <td className="py-3 px-2 text-center text-[#737680]">0h</td>
-                      <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">40h</td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-3 px-2 text-center text-[#737680]">{sun ? `${sun}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{mon ? `${mon}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{tue ? `${tue}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{wed ? `${wed}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{thu ? `${thu}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{fri ? `${fri}h` : '0h'}</td>
+                        <td className="py-3 px-2 text-center text-[#737680]">{sat ? `${sat}h` : '0h'}</td>
+                        <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">{total}h</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
