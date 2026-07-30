@@ -137,17 +137,8 @@ export default function AttendancePage() {
           const teamData = await teamRes.json();
           const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
-          // Simulated / Restored base active team list
-          const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any, idx: number) => {
-            // Default demo online statuses for active team overview
-            const isDemoOnline = idx === 1 || idx === 3;
-            const demoStartTs = Date.now() - (idx === 1 ? 14400000 : 9600000); // 4h or 2.6h ago
-            const demoStartStr = new Date(demoStartTs).toLocaleTimeString('id-ID', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            });
-
+          // Real base active team list (defaults to offline unless real check-in performed)
+          const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
             return {
               id: String(m.id),
               name: m.username || m.email.split('@')[0],
@@ -156,11 +147,11 @@ export default function AttendancePage() {
               avatar:
                 m.profilePicture ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'User')}&background=24324A&color=fff`,
-              isOnline: isDemoOnline,
-              checkInTime: isDemoOnline ? demoStartStr : undefined,
-              checkInTimestamp: isDemoOnline ? demoStartTs : undefined,
-              project: isDemoOnline ? 'Bilik Strategi Workspace' : undefined,
-              statusText: isDemoOnline ? 'Online & Bekerja' : 'Belum Check-In',
+              isOnline: false,
+              checkInTime: undefined,
+              checkInTimestamp: undefined,
+              project: undefined,
+              statusText: 'Belum Check-In',
             };
           });
 
