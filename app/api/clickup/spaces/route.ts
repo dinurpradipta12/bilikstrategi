@@ -11,15 +11,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ mock: true });
     }
 
-    const teamId = process.env.CLICKUP_TEAM_ID || '90182855619';
-    const spacesData = await getSpaces(teamId);
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
+    const spacesData = await getSpaces(teamId, token);
     const spaces = spacesData.spaces || [];
 
     // For each space, fetch folders
     const detailedSpaces = await Promise.all(
       spaces.map(async (sp) => {
         try {
-          const folderData = await getFolders(sp.id);
+          const folderData = await getFolders(sp.id, token);
           return { ...sp, folders: folderData.folders || [] };
         } catch {
           return { ...sp, folders: [] };

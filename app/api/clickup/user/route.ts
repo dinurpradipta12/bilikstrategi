@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Default fallback to API key user
-    const userData = await getAuthenticatedUser();
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const userData = await getAuthenticatedUser(token);
     return NextResponse.json(userData);
   } catch (error: any) {
     return NextResponse.json(

@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ mock: true });
     }
 
-    const teamId = process.env.CLICKUP_TEAM_ID || '90182855619';
-    const teamsData = await getAuthorizedTeams();
-    const members = await getWorkspaceMembers(teamId);
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
+    const teamsData = await getAuthorizedTeams(token);
+    const members = await getWorkspaceMembers(teamId, token);
 
     return NextResponse.json({
       teams: teamsData.teams || [],

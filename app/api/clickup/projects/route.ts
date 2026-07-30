@@ -5,14 +5,15 @@ import { getFolderlessLists, createList, deleteList } from '@/lib/clickup/lists'
 import { getFolders } from '@/lib/clickup/folders';
 import { getTasks } from '@/lib/clickup/tasks';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const spaceId = process.env.CLICKUP_SPACE_ID || '90182855619';
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const spaceId = process.env.CLICKUP_SPACE_ID || '90182512965';
     
     // Fetch folderless lists and folders in space
     const [folderless, foldersRes] = await Promise.all([
-      getFolderlessLists(spaceId).catch(() => ({ lists: [] })),
-      getFolders(spaceId).catch(() => ({ folders: [] })),
+      getFolderlessLists(spaceId, token).catch(() => ({ lists: [] })),
+      getFolders(spaceId, token).catch(() => ({ folders: [] })),
     ]);
 
     const allLists = [...(folderless.lists || [])];
@@ -29,7 +30,7 @@ export async function GET() {
       allLists.map(async (list) => {
         let tasks: any[] = [];
         try {
-          const tasksData = await getTasks(list.id, { include_closed: true });
+          const tasksData = await getTasks(list.id, { include_closed: true }, token);
           tasks = tasksData.tasks || [];
         } catch {
           // ignore task fetch error for empty list

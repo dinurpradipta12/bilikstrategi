@@ -62,17 +62,18 @@ function mapClickUpTaskToAgencyTask(cuTask: any) {
 
 export async function GET(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const { searchParams } = new URL(req.url);
     const listId = searchParams.get('listId');
     const assigneeId = searchParams.get('assigneeId');
-    const teamId = process.env.CLICKUP_TEAM_ID || '90182855619';
+    const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
 
     let rawTasks: any[] = [];
     if (listId) {
-      const data = await getTasks(listId, { include_closed: true, subtasks: true });
+      const data = await getTasks(listId, { include_closed: true, subtasks: true }, token);
       rawTasks = data.tasks || [];
     } else {
-      const data = await getFilteredTeamTasks(teamId, { include_closed: true, subtasks: true });
+      const data = await getFilteredTeamTasks(teamId, { include_closed: true, subtasks: true }, token);
       rawTasks = data.tasks || [];
     }
 
