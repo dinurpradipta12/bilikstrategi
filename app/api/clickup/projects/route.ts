@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getFolderlessLists, createList, deleteList } from '@/lib/clickup/lists';
 import { getFolders } from '@/lib/clickup/folders';
 import { getTasks } from '@/lib/clickup/tasks';

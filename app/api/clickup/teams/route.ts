@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getAuthorizedTeams } from '@/lib/clickup/teams';
 import { getWorkspaceMembers } from '@/lib/clickup/users';
 

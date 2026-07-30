@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
 
 export async function GET(req: NextRequest) {

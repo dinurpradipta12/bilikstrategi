@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getTaskComments, createTaskComment } from '@/lib/clickup/comments';
 
 export async function GET(req: NextRequest) {

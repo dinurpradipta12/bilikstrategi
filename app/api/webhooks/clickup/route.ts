@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { verifyWebhookSignature } from '@/lib/clickup/webhooks';
 
 // In-memory processed event tracker for idempotency

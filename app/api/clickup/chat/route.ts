@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getChatChannels, getViewComments, postViewComment } from '@/lib/clickup/chat';
 
 export async function GET(req: NextRequest) {

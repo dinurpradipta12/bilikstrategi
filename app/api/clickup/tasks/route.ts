@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getTasks, getFilteredTeamTasks, createTask, updateTask, deleteTask } from '@/lib/clickup/tasks';
 
 function mapClickUpTaskToAgencyTask(cuTask: any) {

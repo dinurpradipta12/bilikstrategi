@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'edge';
 import { getSpaces } from '@/lib/clickup/spaces';
 import { getFolders } from '@/lib/clickup/folders';
 
