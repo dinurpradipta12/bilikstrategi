@@ -67,17 +67,33 @@ function MessageStatusIcon({ status }: { status: MessageStatus }) {
   return <CheckCheck className="w-3 h-3 text-[#4FC3F7]" aria-label="Dibaca" />;
 }
 
-function renderMentionedText(text: string) {
+function renderMentionedText(text: string, members: Array<{ username: string }> = []) {
   if (!text || !text.includes('@')) return text;
-  const parts = text.split(/(@[A-Za-z0-9_.\s]+)/g);
+
+  const memberNames = members.map((m) => m.username).filter(Boolean);
+  const defaultNames = [
+    'Dinur Pradipta',
+    'Syaiful Akhsin',
+    'Doni Setiawan',
+    'Amalia Fitriani',
+    'Mohammad Nuris Bayu Samodro',
+    'Mohammad Nuris',
+    'Mei Indraningrum',
+  ];
+  const allNames = Array.from(new Set([...memberNames, ...defaultNames])).sort((a, b) => b.length - a.length);
+
+  const escaped = allNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const regex = new RegExp(`(@(?:${escaped}))`, 'gi');
+
+  const parts = text.split(regex);
   return parts.map((part, idx) => {
     if (part.startsWith('@')) {
       return (
         <span
           key={idx}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#7B68EE]/25 text-[#7B68EE] font-extrabold text-[11px] mx-0.5 border border-[#7B68EE]/40"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#7B68EE]/20 text-[#7B68EE] font-extrabold text-[11px] mx-0.5 border border-[#7B68EE]/30"
         >
-          <AtSign className="w-3 h-3 text-[#7B68EE]" />
+          <AtSign className="w-3 h-3 text-[#7B68EE] inline flex-shrink-0" />
           {part.slice(1)}
         </span>
       );
@@ -842,7 +858,7 @@ export default function ChatPage() {
                                 : 'bg-[#F4F4F5] text-[#202124] rounded-bl-sm hover:bg-[#EBEBED]'}
                               ${isSelected ? 'ring-2 ring-[#7B68EE] ring-offset-1' : ''}`}
                           >
-                            {renderMentionedText(msg.text)}
+                            {renderMentionedText(msg.text, liveMembers)}
                           </div>
 
                           {/* Hover action */}
@@ -969,7 +985,7 @@ export default function ChatPage() {
                   <span className="text-[11px] font-bold text-[#24324A]">{activeThreadMessage.user_name}</span>
                   <span className="text-[10px] text-[#737680] ml-auto">{formatTime(activeThreadMessage.created_at)}</span>
                 </div>
-                <p className="text-xs text-[#202124] whitespace-pre-wrap">{activeThreadMessage.text}</p>
+                <div className="text-xs text-[#202124] whitespace-pre-wrap">{renderMentionedText(activeThreadMessage.text, liveMembers)}</div>
               </div>
 
               <div className="flex items-center justify-between text-[10px] text-[#737680] border-b border-[#E8E8EC] pb-2">
@@ -1008,7 +1024,7 @@ export default function ChatPage() {
                         </div>
                         <div className={`px-3 py-2 rounded-xl text-xs whitespace-pre-wrap
                           ${isReplyMe ? 'bg-[#7B68EE]/10 text-[#24324A]' : 'bg-[#F4F4F5] text-[#202124]'}`}>
-                          {reply.text}
+                          {renderMentionedText(reply.text, liveMembers)}
                         </div>
                         {/* status for own thread replies */}
                         {isReplyMe && (
