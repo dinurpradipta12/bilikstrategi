@@ -175,21 +175,23 @@ export default function TeamWorkloadPage() {
         </div>
 
         <div className="flex items-center gap-2 self-start md:self-auto">
-          {/* Role Status Badge & Test Switcher */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs shadow-2xs">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#4F9D78]" />
-            <span className="text-[#737680]">Akses Anda:</span>
-            <select
-              value={currentUserRole}
-              onChange={(e) => setCurrentUserRole(e.target.value as any)}
-              className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
-              title="Ganti Mode Role Pengguna"
-            >
-              <option value="Owner">Owner 👑 (Admin Edit)</option>
-              <option value="Admin">Admin 🛡️ (Admin Edit)</option>
-              <option value="Member">Member 👤 (Read Only)</option>
-            </select>
-          </div>
+          {/* Role Status Badge & Test Switcher (Admin/Owner Only) */}
+          {isAdminOrOwner && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs shadow-2xs">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#4F9D78]" />
+              <span className="text-[#737680]">Akses Anda:</span>
+              <select
+                value={currentUserRole}
+                onChange={(e) => setCurrentUserRole(e.target.value as any)}
+                className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
+                title="Ganti Mode Role Pengguna"
+              >
+                <option value="Owner">Owner 👑 (Admin Edit)</option>
+                <option value="Admin">Admin 🛡️ (Admin Edit)</option>
+                <option value="Member">Member 👤 (Read Only)</option>
+              </select>
+            </div>
+          )}
 
           <button
             onClick={fetchTeamWorkload}
