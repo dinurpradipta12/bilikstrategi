@@ -468,7 +468,7 @@ export default function ClientsPage() {
       )}
 
       {/* Modal Add / Edit Client */}
-      {showAddModal && (
+      {showAddModal && mounted && createPortal(
         <div className="fixed inset-0 bg-[#24324A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative">
             <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
@@ -585,11 +585,12 @@ export default function ClientsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Confirmation Modal Delete Client */}
-      {clientToDelete && (
+      {clientToDelete && mounted && createPortal(
         <div className="fixed inset-0 bg-[#24324A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
             <AlertTriangle className="w-10 h-10 text-[#F26B5E] mx-auto" />
@@ -612,7 +613,8 @@ export default function ClientsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
