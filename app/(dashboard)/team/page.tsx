@@ -12,7 +12,6 @@ import {
   Lock,
   BarChart2,
   Flag,
-  Network,
   Calendar,
   Plus,
   ChevronLeft,
@@ -38,259 +37,8 @@ interface TeamMemberWorkload {
   tasks?: Array<{ id: string; name: string; priority: string; progress: number }>;
 }
 
-interface NodePosition {
-  id: string;
-  x: number;
-  y: number;
-  parentId?: string | null;
-}
-
-function InteractiveTeamChart({ members }: { members: TeamMemberWorkload[] }) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [positions, setPositions] = useState<Record<string, NodePosition>>({});
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [parentMap, setParentMap] = useState<Record<string, string>>({});
-
-  // Initialize layout positions
-  useEffect(() => {
-    if (members.length === 0) return;
-    const initial: Record<string, NodePosition> = {};
-    const pMap: Record<string, string> = {};
-
-    const rootId = members[0].id;
-    initial[rootId] = { id: rootId, x: 380, y: 30 };
-
-    const childMembers = members.slice(1);
-    const cols = 4;
-    const itemWidth = 180;
-    const itemGap = 25;
-
-    childMembers.forEach((m, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      const x = 50 + col * (itemWidth + itemGap);
-      const y = 190 + row * 150;
-      initial[m.id] = { id: m.id, x, y, parentId: rootId };
-      pMap[m.id] = rootId;
-    });
-
-    setPositions(initial);
-    setParentMap(pMap);
-  }, [members]);
-
-  const handleMouseDown = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    setDraggingId(id);
-    const pos = positions[id] || { x: 0, y: 0 };
-    setDragOffset({
-      x: e.clientX - pos.x,
-      y: e.clientY - pos.y,
-    });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingId) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    let newX = e.clientX - rect.left - dragOffset.x + containerRef.current!.scrollLeft;
-    let newY = e.clientY - rect.top - dragOffset.y + containerRef.current!.scrollTop;
-
-    newX = Math.max(10, Math.min(newX, 1100));
-    newY = Math.max(10, Math.min(newY, 700));
-
-    setPositions((prev) => ({
-      ...prev,
-      [draggingId]: { ...prev[draggingId], x: newX, y: newY },
-    }));
-  };
-
-  const handleMouseUp = () => {
-    setDraggingId(null);
-  };
-
-  const handleParentChange = (childId: string, newParentId: string) => {
-    setParentMap((prev) => ({ ...prev, [childId]: newParentId }));
-    setPositions((prev) => ({
-      ...prev,
-      [childId]: { ...prev[childId], parentId: newParentId },
-    }));
-  };
-
-  const resetPositions = () => {
-    if (members.length === 0) return;
-    const initial: Record<string, NodePosition> = {};
-    const rootId = members[0].id;
-    initial[rootId] = { id: rootId, x: 380, y: 30 };
-
-    const childMembers = members.slice(1);
-    const cols = 4;
-    const itemWidth = 180;
-    const itemGap = 25;
-
-    childMembers.forEach((m, idx) => {
-      const col = idx % cols;
-      const row = Math.floor(idx / cols);
-      const x = 50 + col * (itemWidth + itemGap);
-      const y = 190 + row * 150;
-      initial[m.id] = { id: m.id, x, y, parentId: rootId };
-    });
-    setPositions(initial);
-  };
-
-  const CARD_WIDTH = 175;
-  const CARD_HEIGHT = 100;
-
-  return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-center justify-between bg-white px-4 py-2 border border-[#E8E8EC] rounded-xl text-xs font-semibold gap-2">
-        <div className="flex items-center gap-2 text-[#737680]">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 bg-[#EEF2F7] text-[#24324A] rounded-lg font-bold">
-            🖐️ Klik & Geser Card untuk mengatur hirarki tim • Garis terhubung otomatis!
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={resetPositions}
-            className="px-3 py-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] font-bold transition-colors cursor-pointer"
-          >
-            Reset Tata Letak
-          </button>
-          <div className="flex items-center gap-1 bg-[#F7F7F8] border border-[#E8E8EC] px-2 py-1 rounded-lg">
-            <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))} className="px-1.5 hover:text-[#F26B5E] font-bold cursor-pointer">-</button>
-            <span className="w-12 text-center font-bold text-[#24324A]">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom((z) => Math.min(1.5, z + 0.1))} className="px-1.5 hover:text-[#F26B5E] font-bold cursor-pointer">+</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Canvas Viewport */}
-      <div
-        ref={containerRef}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className="relative bg-white border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-auto h-[550px] select-none bg-grid-pattern cursor-grab active:cursor-grabbing"
-      >
-        <div
-          className="relative min-w-[1000px] min-h-[750px] transition-transform duration-75 origin-top-left"
-          style={{ transform: `scale(${zoom})` }}
-        >
-          {/* Dynamic SVG Connecting Lines */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            <defs>
-              <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#24324A" stopOpacity="0.9" />
-                <stop offset="100%" stopColor="#7B68EE" stopOpacity="0.9" />
-              </linearGradient>
-            </defs>
-            {members.map((m) => {
-              const pId = parentMap[m.id] || (m.id !== members[0]?.id ? members[0]?.id : null);
-              if (!pId || !positions[m.id] || !positions[pId]) return null;
-
-              const parentPos = positions[pId];
-              const childPos = positions[m.id];
-
-              const x1 = parentPos.x + CARD_WIDTH / 2;
-              const y1 = parentPos.y + CARD_HEIGHT;
-
-              const x2 = childPos.x + CARD_WIDTH / 2;
-              const y2 = childPos.y;
-
-              const midY = (y1 + y2) / 2;
-              const pathD = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-
-              return (
-                <g key={`link-${pId}-${m.id}`}>
-                  <path
-                    d={pathD}
-                    fill="none"
-                    stroke="url(#lineGrad)"
-                    strokeWidth="2.5"
-                    strokeDasharray="6 3"
-                    className="animate-pulse"
-                  />
-                  <circle cx={x1} cy={y1} r="4" fill="#24324A" />
-                  <circle cx={x2} cy={y2} r="4" fill="#7B68EE" />
-                </g>
-              );
-            })}
-          </svg>
-
-          {/* Draggable Cards */}
-          {members.map((m, idx) => {
-            const isRoot = idx === 0;
-            const pos = positions[m.id] || { x: 50 + idx * 180, y: isRoot ? 30 : 190 };
-            const isDragging = draggingId === m.id;
-
-            return (
-              <div
-                key={m.id}
-                onMouseDown={(e) => handleMouseDown(m.id, e)}
-                style={{
-                  left: `${pos.x}px`,
-                  top: `${pos.y}px`,
-                  width: `${CARD_WIDTH}px`,
-                }}
-                className={`absolute z-10 p-3 rounded-2xl border transition-shadow cursor-grab active:cursor-grabbing ${
-                  isRoot
-                    ? 'bg-[#24324A] text-white border-[#24324A] shadow-lg'
-                    : 'bg-white text-[#24324A] border-[#E8E8EC] hover:border-[#7B68EE] shadow-sm'
-                } ${isDragging ? 'ring-2 ring-[#7B68EE] shadow-2xl scale-105 z-20' : ''}`}
-              >
-                <div className="flex flex-col items-center text-center space-y-1.5">
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={m.avatar_url}
-                      alt={m.full_name}
-                      className={`w-9 h-9 rounded-full object-cover border-2 ${
-                        isRoot ? 'border-white' : 'border-[#E8E8EC]'
-                      }`}
-                    />
-                    {isRoot && (
-                      <span className="absolute -top-1 -right-1 text-xs">👑</span>
-                    )}
-                  </div>
-
-                  <div className="w-full min-w-0">
-                    <h5 className="text-xs font-bold truncate leading-tight">{m.full_name}</h5>
-                    <p className={`text-[10px] truncate ${isRoot ? 'text-[#EEF2F7]' : 'text-[#737680]'}`}>
-                      {isRoot ? 'Workspace Owner' : m.role}
-                    </p>
-                  </div>
-
-                  {!isRoot && (
-                    <div className="w-full pt-1 border-t border-[#E8E8EC]/80 mt-0.5">
-                      <select
-                        value={parentMap[m.id] || members[0]?.id}
-                        onChange={(e) => handleParentChange(m.id, e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full text-[9px] font-bold text-[#737680] bg-[#F7F7F8] border border-[#E8E8EC] rounded px-1 py-0.5 outline-none cursor-pointer text-center"
-                        title="Ubah Atasan / Lead Manager"
-                      >
-                        {members.map((pm) => (
-                          <option key={pm.id} value={pm.id}>
-                            ↑ {pm.full_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function TeamWorkloadPage() {
-  const [activeTab, setActiveTab] = useState<'workload' | 'analytics' | 'priorities' | 'chart' | 'timesheet'>('workload');
+  const [activeTab, setActiveTab] = useState<'workload' | 'analytics' | 'priorities' | 'timesheet'>('workload');
   const [members, setMembers] = useState<TeamMemberWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
@@ -490,18 +238,6 @@ export default function TeamWorkloadPage() {
         >
           <Flag className="w-4 h-4 text-[#D95858]" />
           <span>Priorities</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('chart')}
-          className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'chart'
-              ? 'bg-[#24324A] text-[#FFFFFF] shadow-2xs'
-              : 'text-[#737680] hover:text-[#24324A] hover:bg-[#EEF2F7]'
-          }`}
-        >
-          <Network className="w-4 h-4 text-[#3B82F6]" />
-          <span>Team Chart</span>
         </button>
 
         <button
@@ -800,12 +536,7 @@ export default function TeamWorkloadPage() {
         </div>
       )}
 
-      {/* ---------------------------------------------------- */}
-      {/* TAB 4: TEAM CHART (Organizational Hierarchy Map)     */}
-      {/* ---------------------------------------------------- */}
-      {activeTab === 'chart' && (
-        <InteractiveTeamChart members={members} />
-      )}
+
 
       {/* ---------------------------------------------------- */}
       {/* TAB 5: TIMESHEET (Weekly Logged Hours Matrix Grid)   */}
