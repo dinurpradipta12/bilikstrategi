@@ -37,9 +37,10 @@ export default function Sidebar() {
         const res = await fetch('/api/clickup/user');
         const data = await res.json();
         if (data.user) {
+          const userRole = data.user.role === 1 ? 'owner' : data.user.role === 2 ? 'admin' : 'member';
           setUserProfile({
             name: data.user.username,
-            role: 'owner',
+            role: userRole,
             avatar: data.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.username)}&background=24324A&color=fff`,
           });
         }
@@ -59,8 +60,8 @@ export default function Sidebar() {
     { name: 'Calendar', href: '/calendar', icon: CalendarDays },
     { name: 'Team Workload', href: '/team', icon: Users },
     { name: 'Client Listing', href: '/clients', icon: Building2 },
-    { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: 3 },
-    { name: 'Notifications', href: '/notifications', icon: Bell, badge: 2 },
+    { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: pathname.startsWith('/chat') ? undefined : 3 },
+    { name: 'Notifications', href: '/notifications', icon: Bell, badge: pathname.startsWith('/notifications') ? undefined : 2 },
     { name: 'Activity Log', href: '/activity-logs', icon: History },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
