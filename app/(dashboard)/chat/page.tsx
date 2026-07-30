@@ -1,0 +1,984 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  MessageSquare, Send, Hash, RefreshCw,
+  MessageCircle, X, Reply, ChevronRight,
+  User, Sparkles, Bell, AtSign, Check, CheckCheck,
+} from 'lucide-react';
+import { AgencyChatMessage } from '@/lib/mock/data';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
+
+interface ChatMessageItem extends AgencyChatMessage {
+  parent_id?: string | null;
+  reply_count?: number;
+  replies?: ChatMessageItem[];
+  /** Only set for messages sent by current user in this session */
+  localStatus?: MessageStatus;
+  /** Temp ID before server confirms */
+  isOptimistic?: boolean;
+}
+
+interface ToastNotification {
+  id: string;
+  senderName: string;
+  senderAvatar: string;
+  channelName: string;
+  channelId: string;
+  text: string;
+  exiting?: boolean;
+}
+
+interface DynamicIslandState {
+  visible: boolean;
+  exiting: boolean;
+  data: ToastNotification | null;
+}
+
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Render WhatsApp-style status ticks for own messages */
+function MessageStatusIcon({ status }: { status: MessageStatus }) {
+  if (status === 'sending') {
+    return (
+      <span title="Mengirim…" className="inline-flex items-center">
+        <svg className="w-3 h-3 text-white/40 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+        </svg>
+      </span>
+    );
+  }
+  if (status === 'sent') {
+    return <Check className="w-3 h-3 text-white/50" aria-label="Terkirim" />;
+  }
+  if (status === 'delivered') {
+    return <CheckCheck className="w-3 h-3 text-white/60" aria-label="Tersampaikan" />;
+  }
+  // read
+  return <CheckCheck className="w-3 h-3 text-[#4FC3F7]" aria-label="Dibaca" />;
+}
+
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function ChatPage() {
+  // ── State ──────────────────────────────────────────────────────────────────
+  const [channels, setChannels] = useState<Array<{
+    id: string; name: string; type: string; unread_count: number;
+  }>>([
+    { id: '7-90182855619-8',  name: '📢 General - Bilik Strategi Workspace', type: 'general',  unread_count: 0 },
+    { id: '4-901811772332-8', name: '💬 Media Brand',      type: 'project', unread_count: 0 },
+    { id: '6-901819386455-8', name: '💬 Brainstorming',    type: 'project', unread_count: 0 },
+    { id: '6-901819384971-8', name: '💬 Approval Script',  type: 'project', unread_count: 0 },
+    { id: '6-901819385000-8', name: '💬 Approval Content', type: 'project', unread_count: 0 },
+  ]);
+
+  const [activeChannelId, setActiveChannelId]       = useState('7-90182855619-8');
+  const [rawMessages, setRawMessages]               = useState<ChatMessageItem[]>([]);
+  const [textInput, setTextInput]                   = useState('');
+  const [threadInput, setThreadInput]               = useState('');
+  const [activeThreadMessage, setActiveThreadMessage] = useState<ChatMessageItem | null>(null);
+  const [liveMembers, setLiveMembers]               = useState<Array<{ id: number; username: string; email: string; avatar: string }>>([]);
+  const [loadingMessages, setLoadingMessages]       = useState(false);
+  const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>({});
+
+  // local status map: messageId → status (for own messages)
+  const [statusMap, setStatusMap]     = useState<Record<string, MessageStatus>>({});
+
+  // typing debounce
+  const typingTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef     = useRef(false);
+
+  // Authenticated user
+  const [currentUser, setCurrentUser] = useState({
+    id: 276885530,
+    username: 'Dinur Pradipta',
+    email: 'snllabsarchive@gmail.com',
+    avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+  });
+
+  // Toast
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+
+  // Dynamic Island
+  const [island, setIsland] = useState<DynamicIslandState>({ visible: false, exiting: false, data: null });
+  const islandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Scroll anchors
+  const messagesEndRef  = useRef<HTMLDivElement>(null);
+  const threadEndRef    = useRef<HTMLDivElement>(null);
+  const previousCountRef = useRef<number>(0);
+
+  // ── Scroll helpers ────────────────────────────────────────────────────────
+  const scrollToBottom      = (smooth = true) => setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' }), 80);
+  const scrollToThreadBottom = (smooth = true) => setTimeout(() => threadEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' }), 80);
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  const showToast = useCallback((data: ToastNotification) => {
+    const id = data.id;
+    setToasts((prev) => [...prev.slice(-3), { ...data, id }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, exiting: true } : t)));
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 300);
+    }, 5000);
+  }, []);
+
+  // ── Dynamic Island helper ─────────────────────────────────────────────────
+  const showDynamicIsland = useCallback((data: ToastNotification) => {
+    if (islandTimerRef.current) clearTimeout(islandTimerRef.current);
+    setIsland({ visible: true, exiting: false, data });
+    islandTimerRef.current = setTimeout(() => {
+      setIsland((prev) => ({ ...prev, exiting: true }));
+      setTimeout(() => setIsland({ visible: false, exiting: false, data: null }), 300);
+    }, 4500);
+  }, []);
+
+  const triggerNotification = useCallback((data: ToastNotification) => {
+    showDynamicIsland(data);
+    showToast({ ...data, id: `toast-${Date.now()}` });
+    setUnreadMap((prev) => ({ ...prev, [data.channelId]: (prev[data.channelId] || 0) + 1 }));
+  }, [showDynamicIsland, showToast]);
+
+  // ── Simulate "read" after another member receives message ────────────────
+  const advanceStatusToRead = useCallback((msgId: string) => {
+    // sent → delivered after 800ms
+    setTimeout(() => {
+      setStatusMap((prev) => ({ ...prev, [msgId]: 'delivered' }));
+    }, 800);
+    // delivered → read after 2–5s (random, simulating other user opening)
+    const readDelay = 2000 + Math.random() * 3000;
+    setTimeout(() => {
+      setStatusMap((prev) => ({ ...prev, [msgId]: 'read' }));
+    }, readDelay);
+  }, []);
+
+  // ── Load workspace data ───────────────────────────────────────────────────
+  useEffect(() => {
+    async function loadWorkspaceData() {
+      try {
+        const [userRes, teamRes, chatRes] = await Promise.all([
+          fetch('/api/clickup/user'),
+          fetch('/api/clickup/teams'),
+          fetch('/api/clickup/chat'),
+        ]);
+        const userData = await userRes.json();
+        if (userData.user) {
+          setCurrentUser({
+            id: userData.user.id,
+            username: userData.user.username,
+            email: userData.user.email,
+            avatar: userData.user.profilePicture ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.user.username)}&background=24324A&color=fff`,
+          });
+        }
+        const teamData = await teamRes.json();
+        if (teamData.members?.length > 0) {
+          setLiveMembers(teamData.members.map((m: any) => ({
+            id: m.id, username: m.username, email: m.email,
+            avatar: m.profilePicture ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username)}&background=24324A&color=fff`,
+          })));
+        }
+        const chatData = await chatRes.json();
+        if (chatData.channels?.length > 0) {
+          const unique: typeof channels = [];
+          const seen = new Set<string>();
+          chatData.channels.forEach((c: any) => {
+            const key = `${c.id}-${c.name}`;
+            if (!seen.has(key)) { seen.add(key); unique.push(c); }
+          });
+          setChannels(unique);
+        }
+      } catch (err) {
+        console.warn('[Chat] Gagal memuat workspace data:', err);
+      }
+    }
+    loadWorkspaceData();
+  }, []);
+
+  // ── Fetch messages ────────────────────────────────────────────────────────
+  const fetchActiveMessages = useCallback(async (channelId: string, shouldScroll = false) => {
+    setLoadingMessages(true);
+    try {
+      const res  = await fetch(`/api/clickup/chat?channelId=${channelId}`);
+      const data = await res.json();
+      if (data.messages) {
+        const newMsgs: ChatMessageItem[] = data.messages;
+
+        if (previousCountRef.current > 0 && newMsgs.length > previousCountRef.current) {
+          const latestMsg = newMsgs[newMsgs.length - 1];
+          if (latestMsg.user_id !== String(currentUser.id) && !latestMsg.user_name.includes('Dinur')) {
+            const chName = channels.find((c) => c.id === channelId)?.name || 'Channel';
+            triggerNotification({
+              id: latestMsg.id,
+              senderName: latestMsg.user_name,
+              senderAvatar: latestMsg.user_avatar,
+              channelName: chName.replace('💬 ', '').replace('📢 ', ''),
+              channelId,
+              text: latestMsg.text,
+            });
+          }
+        }
+        previousCountRef.current = newMsgs.length;
+
+        // Merge: keep localStatus for optimistic messages
+        setRawMessages((prev) => {
+          const statusPreserved = newMsgs.map((nm) => {
+            const existing = prev.find((p) => p.id === nm.id);
+            return existing?.localStatus ? { ...nm, localStatus: existing.localStatus } : nm;
+          });
+          return statusPreserved;
+        });
+
+        if (shouldScroll) scrollToBottom(true);
+      }
+    } catch (err) {
+      console.warn('[Chat] Gagal memuat pesan:', err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels, currentUser.id, triggerNotification]);
+
+  // ── Typing API integration ────────────────────────────────────────────────
+  const [otherTypingUsers, setOtherTypingUsers] = useState<Array<{ userId: string | number; username: string }>>([]);
+
+  const sendTypingStatus = useCallback(async (isTyping: boolean) => {
+    if (!activeChannelId) return;
+    try {
+      await fetch('/api/typing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: activeChannelId,
+          userId: currentUser.id,
+          username: currentUser.username,
+          isTyping,
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  }, [activeChannelId, currentUser.id, currentUser.username]);
+
+  const fetchTypingStatus = useCallback(async () => {
+    if (!activeChannelId) return;
+    try {
+      const res = await fetch(`/api/typing?channel_id=${encodeURIComponent(activeChannelId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.typingUsers)) {
+          const others = data.typingUsers.filter(
+            (u: { userId: string | number }) => String(u.userId) !== String(currentUser.id)
+          );
+          setOtherTypingUsers(others);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeChannelId, currentUser.id]);
+
+  useEffect(() => {
+    if (!activeChannelId) return;
+    setActiveThreadMessage(null);
+    previousCountRef.current = 0;
+    setIsSelfTyping(false);
+    isTypingRef.current = false;
+    setOtherTypingUsers([]);
+    setUnreadMap((prev) => ({ ...prev, [activeChannelId]: 0 }));
+    fetchActiveMessages(activeChannelId, true);
+    fetchTypingStatus();
+  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
+
+  // 2-second polling
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!document.hidden && activeChannelId) {
+        fetchActiveMessages(activeChannelId, false);
+        fetchTypingStatus();
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
+
+  // ── Handle text input change (typing indicator self + backend) ────────────
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTextInput(e.target.value);
+    const hasText = e.target.value.length > 0;
+    if (hasText && !isTypingRef.current) {
+      isTypingRef.current = true;
+      setIsSelfTyping(true);
+      sendTypingStatus(true);
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      isTypingRef.current = false;
+      setIsSelfTyping(false);
+      sendTypingStatus(false);
+    }, 2000);
+    if (!hasText) {
+      isTypingRef.current = false;
+      setIsSelfTyping(false);
+      sendTypingStatus(false);
+    }
+  };
+
+  // ── Build message tree: root messages + nested replies ─────────────────────
+  const { rootMessages, replyMap } = React.useMemo(() => {
+    const sorted = [...rawMessages].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    const roots: ChatMessageItem[] = [];
+    const replies: Record<string, ChatMessageItem[]> = {};
+
+    for (const msg of sorted) {
+      if (msg.parent_id) {
+        // This is a thread reply — group under its parent
+        if (!replies[msg.parent_id]) replies[msg.parent_id] = [];
+        replies[msg.parent_id].push(msg);
+      } else {
+        roots.push(msg);
+      }
+    }
+    return { rootMessages: roots, replyMap: replies };
+  }, [rawMessages]);
+
+  // Attach fetched replies to a root message
+  const getMessageWithReplies = (msg: ChatMessageItem): ChatMessageItem => ({
+    ...msg,
+    replies: replyMap[msg.id] ?? msg.replies ?? [],
+    reply_count: (replyMap[msg.id]?.length ?? 0) || msg.reply_count || 0,
+  });
+
+  // ── Send main message ─────────────────────────────────────────────────────
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!textInput.trim()) return;
+
+    const tempId = `msg-${Date.now()}`;
+    // Optimistic: add to root messages only (no parent_id)
+    const tempMsg: ChatMessageItem = {
+      id: tempId,
+      channel_id: activeChannelId,
+      user_id: String(currentUser.id),
+      user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
+      text: textInput,
+      created_at: new Date().toISOString(),
+      parent_id: null,   // explicitly root message
+      localStatus: 'sending',
+      isOptimistic: true,
+    };
+
+    setRawMessages((prev) => [...prev, tempMsg]);
+    setStatusMap((prev) => ({ ...prev, [tempId]: 'sending' }));
+    scrollToBottom(true);
+
+    const toSend = textInput;
+    setTextInput('');
+    isTypingRef.current = false;
+    setIsSelfTyping(false);
+    sendTypingStatus(false);
+
+    try {
+      await fetch('/api/clickup/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: activeChannelId, text: toSend }),
+      });
+      setStatusMap((prev) => ({ ...prev, [tempId]: 'sent' }));
+      setRawMessages((prev) =>
+        prev.map((m) => m.id === tempId ? { ...m, localStatus: 'sent', isOptimistic: false } : m)
+      );
+      advanceStatusToRead(tempId);
+      await fetchActiveMessages(activeChannelId, true);
+    } catch (err) {
+      console.error('[Chat] Gagal kirim:', err);
+    }
+  };
+
+  // ── Send thread reply ─────────────────────────────────────────────────────
+  const handleSendThreadReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!threadInput.trim() || !activeThreadMessage) return;
+
+    const replyId  = `reply-${Date.now()}`;
+    const parentId = activeThreadMessage.id;
+
+    const replyMsg: ChatMessageItem = {
+      id: replyId,
+      channel_id: activeChannelId,
+      user_id: String(currentUser.id),
+      user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
+      text: threadInput,
+      created_at: new Date().toISOString(),
+      parent_id: parentId,   // marks this as a thread reply, NOT a root message
+      localStatus: 'sending',
+    };
+
+    // ── Optimistic update: append to thread panel ONLY ─────────────────────
+    // We do NOT add replyMsg to rawMessages so it won't appear in the main feed.
+    // Instead we immediately update the activeThreadMessage's replies.
+    setActiveThreadMessage((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        reply_count: (prev.reply_count || 0) + 1,
+        replies: [...(prev.replies || []), replyMsg],
+      };
+    });
+    setStatusMap((prev) => ({ ...prev, [replyId]: 'sending' }));
+    scrollToThreadBottom(true);
+
+    const toSend = threadInput;
+    setThreadInput('');
+
+    try {
+      await fetch('/api/clickup/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: activeChannelId, text: toSend, parentId }),
+      });
+      setStatusMap((prev) => ({ ...prev, [replyId]: 'sent' }));
+      advanceStatusToRead(replyId);
+      // Refresh to get server-confirmed replies — the API will return the new
+      // reply with parent_id set, so replyMap will pick it up correctly.
+      await fetchActiveMessages(activeChannelId, false);
+    } catch (err) {
+      console.error('[Chat] Gagal kirim thread reply:', err);
+    }
+  };
+
+  // ── Sidebar grouping ──────────────────────────────────────────────────────
+  const generalChannels = channels.filter((c) => c.type === 'general');
+  const spaceChannels   = channels.filter((c) => c.type === 'project' || (!c.type && !c.name.includes('DM:')));
+  const dmChannels      = channels.filter((c) => c.type === 'direct' || c.name.includes('DM:'));
+
+  const activeChannel  = channels.find((c) => c.id === activeChannelId) || channels[0];
+  const totalUnread    = Object.values(unreadMap).reduce((s, n) => s + n, 0);
+
+  // isSelfTyping: true only when the current user is actively typing in the input box
+  const [isSelfTyping, setIsSelfTyping] = useState(false);
+
+  const typingText = React.useMemo(() => {
+    const names = otherTypingUsers.map((u) => u.username);
+    if (isSelfTyping) {
+      names.push('Kamu');
+    }
+    if (names.length === 0) return null;
+    if (names.length === 1) return `${names[0]} sedang mengetik…`;
+    if (names.length === 2) return `${names[0]} dan ${names[1]} sedang mengetik…`;
+    return `${names[0]} dan ${names.length - 1} orang lainnya sedang mengetik…`;
+  }, [otherTypingUsers, isSelfTyping]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* inject typing keyframes */}
+      <style>{`
+        @keyframes typingBounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+          30% { transform: translateY(-4px); opacity: 1; }
+        }
+      `}</style>
+
+      <div className="relative h-[calc(100vh-8rem)] bg-white border border-[#E8E8EC] rounded-2xl shadow-xs overflow-hidden flex animate-fade-in">
+
+        {/* ══ ① Dynamic Island ══════════════════════════════════════════════ */}
+        {island.visible && island.data && (
+          <div
+            onClick={() => {
+              setActiveChannelId(island.data!.channelId);
+              setUnreadMap((prev) => ({ ...prev, [island.data!.channelId]: 0 }));
+              setIsland({ visible: false, exiting: false, data: null });
+            }}
+            className={`fixed top-4 left-1/2 z-[60] cursor-pointer select-none
+              ${island.exiting ? 'dynamic-island-exit' : 'dynamic-island-enter'}`}
+            style={{ transform: 'translateX(-50%)' }}
+          >
+            <div className="relative flex items-center gap-3 bg-[#0D0D0D] text-white
+              pl-2 pr-5 py-2 rounded-full shadow-2xl border border-white/10"
+              style={{ backdropFilter: 'blur(20px)', minWidth: 260 }}>
+              <div className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={island.data.senderAvatar} alt={island.data.senderName}
+                  className="w-9 h-9 rounded-full object-cover border-2 border-white/20" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4F9D78] border-2 border-[#0D0D0D] rounded-full online-dot" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-white leading-none">{island.data.senderName}</span>
+                  <span className="text-[9px] bg-[#F26B5E]/90 text-white px-1.5 py-0.5 rounded-full font-bold leading-none">
+                    {island.data.channelName}
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/75 truncate mt-0.5 leading-snug max-w-[200px]">{island.data.text}</p>
+              </div>
+              <Sparkles className="w-4 h-4 text-[#F26B5E] flex-shrink-0 animate-pulse" />
+            </div>
+          </div>
+        )}
+
+        {/* ══ ② Toast Stack ════════════════════════════════════════════════ */}
+        <div className="fixed bottom-6 right-6 z-[55] flex flex-col-reverse gap-2 pointer-events-none">
+          {toasts.map((toast) => (
+            <div key={toast.id}
+              className={`pointer-events-auto flex items-start gap-3 bg-white border border-[#E8E8EC]
+                rounded-2xl shadow-xl px-4 py-3 w-80 cursor-pointer
+                ${toast.exiting ? 'toast-exit' : 'toast-enter'}`}
+              onClick={() => {
+                setActiveChannelId(toast.channelId);
+                setUnreadMap((prev) => ({ ...prev, [toast.channelId]: 0 }));
+                setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+              }}
+            >
+              <div className="relative flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={toast.senderAvatar} alt={toast.senderName} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4F9D78] border-2 border-white rounded-full" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[12px] font-bold text-[#24324A] truncate">{toast.senderName}</span>
+                  <span className="text-[10px] text-[#737680] ml-2 flex-shrink-0 flex items-center gap-1">
+                    <Hash className="w-2.5 h-2.5" />{toast.channelName}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#737680] line-clamp-2 leading-snug">{toast.text}</p>
+              </div>
+              <button onClick={(ev) => { ev.stopPropagation(); setToasts((p) => p.filter((t) => t.id !== toast.id)); }}
+                className="flex-shrink-0 text-[#737680] hover:text-[#202124] cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* ══ ③ Left Sidebar ════════════════════════════════════════════════ */}
+        <div className="w-72 border-r border-[#E8E8EC] bg-[#F7F7F8] flex flex-col flex-shrink-0">
+          <div className="px-4 pt-4 pb-3 border-b border-[#E8E8EC]">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-[#F26B5E]" /> Agency Chat
+              </h2>
+              <div className="flex items-center gap-2">
+                {totalUnread > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-[#F26B5E] text-white font-extrabold text-[10px] rounded-full badge-pop">
+                    <Bell className="w-2.5 h-2.5" />{totalUnread}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-[10px] text-[#4F9D78] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] online-dot" />Live 2s
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto py-3 space-y-5 px-2">
+            {generalChannels.length > 0 && (
+              <div>
+                <p className="text-[9px] font-extrabold text-[#737680] uppercase tracking-widest px-3 mb-1.5">📢 Workspace</p>
+                <div className="space-y-0.5">
+                  {generalChannels.map((ch) => (
+                    <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
+                      unread={unreadMap[ch.id] || 0} label={ch.name}
+                      icon={<Hash className="w-3 h-3 text-[#F26B5E]" />}
+                      onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {spaceChannels.length > 0 && (
+              <div>
+                <p className="text-[9px] font-extrabold text-[#737680] uppercase tracking-widest px-3 mb-1.5">💬 Chat Space</p>
+                <div className="space-y-0.5">
+                  {spaceChannels.map((ch) => (
+                    <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
+                      unread={unreadMap[ch.id] || 0} label={ch.name.replace('💬 ', '')}
+                      icon={<Hash className="w-3 h-3 text-[#737680]" />}
+                      onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {dmChannels.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 px-3 mb-1.5">
+                  <p className="text-[9px] font-extrabold text-[#737680] uppercase tracking-widest whitespace-nowrap">👤 Direct Messages</p>
+                  <div className="flex-1 h-px bg-[#E8E8EC]" />
+                </div>
+                <div className="space-y-0.5">
+                  {dmChannels.map((ch) => {
+                    const isActive = ch.id === activeChannelId;
+                    const unread   = unreadMap[ch.id] || 0;
+                    const dmName   = ch.name.replace('👤 DM: ', '').replace('DM:', '').trim();
+                    const initials = dmName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+                    return (
+                      <button key={ch.id}
+                        onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold
+                          transition-all text-left cursor-pointer
+                          ${isActive ? 'bg-gradient-to-r from-[#7B68EE]/15 to-[#7B68EE]/5 text-[#7B68EE] border border-[#7B68EE]/20'
+                            : 'text-[#737680] hover:bg-white hover:text-[#202124]'}`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-extrabold flex-shrink-0
+                            ${isActive ? 'bg-[#7B68EE] text-white' : 'bg-[#E8E8EC] text-[#737680]'}`}>
+                            {initials || <User className="w-3 h-3" />}
+                          </div>
+                          <span className="truncate">{dmName}</span>
+                        </div>
+                        {unread > 0 && (
+                          <span className="ml-1 px-1.5 py-0.5 bg-[#7B68EE] text-white font-extrabold text-[9px] rounded-full badge-pop flex-shrink-0">
+                            {unread}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar footer */}
+          <div className="px-3 py-3 border-t border-[#E8E8EC] flex items-center gap-2">
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={currentUser.avatar} alt={currentUser.username} className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4F9D78] border-2 border-[#F7F7F8] rounded-full online-dot" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold text-[#24324A] truncate">{currentUser.username}</p>
+              <p className="text-[9px] text-[#4F9D78] font-semibold">● Online</p>
+            </div>
+            <AtSign className="w-3.5 h-3.5 text-[#737680]" />
+          </div>
+        </div>
+
+        {/* ══ ④ Main Message Area ══════════════════════════════════════════ */}
+        <div className="flex-1 flex flex-col bg-white min-w-0">
+          {/* Header */}
+          <div className="h-14 px-6 border-b border-[#E8E8EC] flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">{activeChannel?.name}</h3>
+
+              {/* Subtitle: switches between member count and "sedang mengetik" */}
+              <div className="h-4 mt-0.5 overflow-hidden">
+                {typingText ? (
+                  <p className="text-[11px] text-[#4F9D78] font-medium flex items-center gap-1.5 animate-fade-in">
+                    <span className="inline-flex items-center gap-0.5">
+                      {[0, 150, 300].map((delay) => (
+                        <span key={delay} className="w-1 h-1 bg-[#4F9D78] rounded-full"
+                          style={{ animation: `typingBounce 1.2s ${delay}ms ease-in-out infinite` }} />
+                      ))}
+                    </span>
+                    <span>{typingText}</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-[#737680] animate-fade-in">
+                    {liveMembers.length} anggota • Login sebagai {currentUser.username}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button onClick={() => fetchActiveMessages(activeChannelId, true)}
+              className="ml-4 flex-shrink-0 px-3 py-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8] text-[11px]
+                text-[#737680] flex items-center gap-1.5 transition-colors cursor-pointer">
+              <RefreshCw className={`w-3 h-3 ${loadingMessages ? 'animate-spin' : ''}`} />
+              Sync
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            {rootMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center space-y-2">
+                <MessageSquare className="w-10 h-10 text-[#E8E8EC]" />
+                <p className="text-sm font-semibold text-[#24324A]">Belum ada percakapan</p>
+                <p className="text-xs text-[#737680]">Kirim pesan pertama ke {activeChannel?.name}</p>
+              </div>
+            ) : (
+              rootMessages.map((rawMsg) => {
+                const msg = getMessageWithReplies(rawMsg);
+                const isMe = msg.user_name.includes('Dinur') || msg.user_id === String(currentUser.id);
+                const replyCount = msg.reply_count || 0;
+                const isSelected = activeThreadMessage?.id === msg.id;
+                const msgStatus: MessageStatus = statusMap[msg.id] || 'read';
+
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+                    <div className={`flex items-end gap-2 max-w-[72%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+
+                      {/* Avatar */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={msg.user_avatar} alt={msg.user_name}
+                        className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC] flex-shrink-0 mb-5" />
+
+                      <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                        {/* Name + time */}
+                        <div className={`flex items-center gap-1.5 mb-1 text-[11px] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <span className="font-bold text-[#24324A]">{isMe ? 'Saya' : msg.user_name}</span>
+                          <span className="text-[#737680]">{formatTime(msg.created_at)}</span>
+                        </div>
+
+                        {/* Bubble */}
+                        <div className="relative group/bubble">
+                          <div
+                            onClick={() => setActiveThreadMessage(msg.id === activeThreadMessage?.id ? null : msg)}
+                            className={`px-4 py-2.5 rounded-2xl text-xs whitespace-pre-wrap cursor-pointer
+                              transition-all select-text
+                              ${isMe
+                                ? 'bg-[#24324A] text-white rounded-br-sm shadow-sm hover:opacity-95'
+                                : 'bg-[#F4F4F5] text-[#202124] rounded-bl-sm hover:bg-[#EBEBED]'}
+                              ${isSelected ? 'ring-2 ring-[#7B68EE] ring-offset-1' : ''}`}
+                          >
+                            {msg.text}
+                          </div>
+
+                          {/* Hover action */}
+                          <div className={`absolute bottom-0 opacity-0 group-hover/bubble:opacity-100 transition-opacity
+                            flex items-center gap-1 bg-white border border-[#E8E8EC] shadow-md rounded-lg px-2 py-1 z-10
+                            ${isMe ? 'right-full mr-2' : 'left-full ml-2'}`}>
+                            <button type="button"
+                              onClick={() => setActiveThreadMessage(msg.id === activeThreadMessage?.id ? null : msg)}
+                              className="hover:text-[#24324A] text-[#737680] flex items-center gap-1
+                                text-[10px] font-bold cursor-pointer whitespace-nowrap">
+                              <Reply className="w-3 h-3 text-[#F26B5E]" />Balas
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* ── Status row (only for own messages) ─────────────── */}
+                        {isMe && (
+                          <div className="flex items-center gap-1 mt-1 px-1">
+                            <span className="text-[9px] text-[#737680]">
+                              {msgStatus === 'sending'   && 'Mengirim…'}
+                              {msgStatus === 'sent'      && 'Terkirim'}
+                              {msgStatus === 'delivered' && 'Tersampaikan'}
+                              {msgStatus === 'read'      && 'Dibaca'}
+                            </span>
+                            <MessageStatusIcon status={msgStatus} />
+                          </div>
+                        )}
+
+                        {/* Thread badge — click opens Thread panel */}
+                        {replyCount > 0 && (
+                          <button type="button"
+                            onClick={() => setActiveThreadMessage(msg.id === activeThreadMessage?.id ? null : msg)}
+                            className={`mt-1.5 flex items-center gap-1.5 text-[10px] font-bold
+                              transition-colors cursor-pointer
+                              ${isSelected ? 'text-[#6852ED]' : 'text-[#7B68EE] hover:text-[#6852ED]'}`}>
+                            <MessageCircle className="w-3 h-3" />
+                            {replyCount} balasan thread
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+
+            <div ref={messagesEndRef} className="h-1" />
+          </div>
+
+          {/* Input bar */}
+          <form onSubmit={handleSendMessage}
+            className="px-4 py-3 border-t border-[#E8E8EC] flex items-center gap-2 bg-[#F7F7F8]">
+            <input type="text" value={textInput} onChange={handleInputChange}
+              placeholder={`Kirim pesan ke ${activeChannel?.name ?? '…'}`}
+              className="flex-1 px-4 py-2.5 text-xs bg-white border border-[#E8E8EC] rounded-xl
+                focus:outline-none focus:border-[#24324A] transition-colors" />
+            <button type="submit"
+              className="px-4 py-2.5 bg-[#24324A] text-white text-xs font-semibold rounded-xl
+                hover:bg-[#1A2536] flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer">
+              <Send className="w-3.5 h-3.5 text-[#F26B5E]" />Kirim
+            </button>
+          </form>
+        </div>
+
+        {/* ══ ⑤ Right Panel ═════════════════════════════════════════════════ */}
+        {activeThreadMessage ? (
+          <div className="w-80 border-l border-[#E8E8EC] bg-white flex flex-col flex-shrink-0 animate-slide-left">
+            {/* header */}
+            <div className="h-14 px-4 border-b border-[#E8E8EC] flex items-center justify-between bg-[#F7F7F8]">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-[#7B68EE]" />
+                <span className="text-xs font-extrabold text-[#24324A]">Thread</span>
+              </div>
+              <button onClick={() => setActiveThreadMessage(null)}
+                className="p-1 rounded-lg hover:bg-white text-[#737680] hover:text-[#202124] cursor-pointer transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* root */}
+              <div className="p-3 bg-[#F4F4F5] rounded-2xl space-y-2">
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={activeThreadMessage.user_avatar} alt={activeThreadMessage.user_name}
+                    className="w-6 h-6 rounded-full object-cover border border-[#E8E8EC]" />
+                  <span className="text-[11px] font-bold text-[#24324A]">{activeThreadMessage.user_name}</span>
+                  <span className="text-[10px] text-[#737680] ml-auto">{formatTime(activeThreadMessage.created_at)}</span>
+                </div>
+                <p className="text-xs text-[#202124] whitespace-pre-wrap">{activeThreadMessage.text}</p>
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-[#737680] border-b border-[#E8E8EC] pb-2">
+                <span className="font-extrabold uppercase tracking-wide">
+                  {(replyMap[activeThreadMessage.id]?.length ?? (activeThreadMessage.replies ?? []).length)} Balasan
+                </span>
+                <span className="text-[#7B68EE] text-[9px]">↕ ClickUp Sync</span>
+              </div>
+
+              {/* replies — merge thread panel's own optimistic replies with replyMap from API */}
+              {(() => {
+                const serverReplies = replyMap[activeThreadMessage.id] ?? [];
+                // Merge: server replies + optimistic replies not yet confirmed by server
+                const serverIds = new Set(serverReplies.map((r) => r.id));
+                const optimisticReplies = (activeThreadMessage.replies ?? []).filter(
+                  (r) => r.isOptimistic || !serverIds.has(r.id)
+                );
+                const allReplies = [...serverReplies, ...optimisticReplies].sort(
+                  (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                );
+                return allReplies.length ? (
+                allReplies.map((reply) => {
+                  const isReplyMe = reply.user_name.includes('Dinur') || reply.user_id === String(currentUser.id);
+                  const replyStatus: MessageStatus = statusMap[reply.id] || 'read';
+                  return (
+                    <div key={reply.id} className="flex items-start gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={reply.user_avatar} alt={reply.user_name}
+                        className="w-6 h-6 rounded-full object-cover border border-[#E8E8EC] mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`text-[11px] font-bold ${isReplyMe ? 'text-[#7B68EE]' : 'text-[#24324A]'}`}>
+                            {isReplyMe ? 'Saya' : reply.user_name}
+                          </span>
+                          <span className="text-[9px] text-[#737680]">{formatTime(reply.created_at)}</span>
+                        </div>
+                        <div className={`px-3 py-2 rounded-xl text-xs whitespace-pre-wrap
+                          ${isReplyMe ? 'bg-[#7B68EE]/10 text-[#24324A]' : 'bg-[#F4F4F5] text-[#202124]'}`}>
+                          {reply.text}
+                        </div>
+                        {/* status for own thread replies */}
+                        {isReplyMe && (
+                          <div className="flex items-center gap-1 mt-0.5 px-1">
+                            <span className="text-[9px] text-[#737680]">
+                              {replyStatus === 'sending'   && 'Mengirim…'}
+                              {replyStatus === 'sent'      && 'Terkirim'}
+                              {replyStatus === 'delivered' && 'Tersampaikan'}
+                              {replyStatus === 'read'      && 'Dibaca'}
+                            </span>
+                            <MessageStatusIcon status={replyStatus} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-8 text-xs text-[#737680]">
+                  <MessageCircle className="w-6 h-6 mx-auto mb-2 text-[#E8E8EC]" />
+                  <p className="font-semibold text-[#24324A]">Belum ada balasan</p>
+                  <p className="text-[10px] mt-0.5">Mulai diskusi di thread ini!</p>
+                </div>
+              );
+              })()}
+              <div ref={threadEndRef} className="h-1" />
+            </div>
+
+            {/* thread input */}
+            <form onSubmit={handleSendThreadReply}
+              className="p-3 border-t border-[#E8E8EC] bg-[#F7F7F8] flex items-center gap-2">
+              <input type="text" value={threadInput}
+                onChange={(e) => setThreadInput(e.target.value)}
+                placeholder={`Balas thread ${activeThreadMessage.user_name}…`}
+                className="flex-1 px-3 py-2 text-xs bg-white border border-[#E8E8EC] rounded-xl
+                  focus:outline-none focus:border-[#7B68EE] transition-colors" />
+              <button type="submit"
+                className="px-3 py-2 bg-[#7B68EE] text-white text-xs font-semibold rounded-xl
+                  hover:bg-[#6852ED] flex items-center gap-1 shadow-sm cursor-pointer transition-colors">
+                <Send className="w-3.5 h-3.5" />Balas
+              </button>
+            </form>
+          </div>
+        ) : (
+          /* Members panel */
+          <div className="w-60 border-l border-[#E8E8EC] bg-white p-4 hidden lg:flex flex-col gap-4 flex-shrink-0">
+            <h3 className="text-[10px] font-extrabold text-[#737680] uppercase tracking-widest border-b border-[#E8E8EC] pb-2">
+              Tim ClickUp ({liveMembers.length})
+            </h3>
+            <div className="space-y-2 overflow-y-auto flex-1">
+              {liveMembers.map((m) => (
+                <div key={m.id} className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-[#F7F7F8] transition-colors">
+                  <div className="relative flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={m.avatar} alt={m.username} className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC]" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#4F9D78] border border-white rounded-full" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-[#202124] truncate">{m.username}</p>
+                    <p className="text-[9px] text-[#737680] truncate">{m.email}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ─── ChannelButton ────────────────────────────────────────────────────────────
+
+function ChannelButton({
+  ch, isActive, unread, icon, label, onClick,
+}: {
+  ch: { id: string };
+  isActive: boolean;
+  unread: number;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold
+        transition-all text-left cursor-pointer
+        ${isActive ? 'bg-white text-[#24324A] shadow-sm border border-[#E8E8EC]' : 'text-[#737680] hover:bg-white hover:text-[#202124]'}`}
+    >
+      <div className="flex items-center gap-2 truncate min-w-0">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      {unread > 0 && (
+        <span className="ml-1 px-1.5 py-0.5 bg-[#F26B5E] text-white font-extrabold text-[9px] rounded-full badge-pop flex-shrink-0">
+          {unread}
+        </span>
+      )}
+    </button>
+  );
+}
