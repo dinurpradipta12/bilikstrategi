@@ -14,9 +14,9 @@ export async function clickUpFetch<T>(endpoint: string, options: RequestOptions 
     throw new ClickUpError('Aplikasi sedang berjalan dalam Mock Data Mode.', 200, 'MOCK_MODE');
   }
 
-  const token = options.token || process.env.CLICKUP_PERSONAL_TOKEN;
+  const token = options.token || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
   if (!token) {
-    throw new ClickUpError('ClickUp Personal Token / Access Token belum dikonfigurasi.', 401, 'MISSING_TOKEN');
+    throw new ClickUpError('ClickUp API Key / Access Token belum dikonfigurasi.', 401, 'MISSING_TOKEN');
   }
 
   await checkRateLimit();

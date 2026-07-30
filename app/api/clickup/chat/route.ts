@@ -10,14 +10,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ mock: true });
     }
 
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const { searchParams } = new URL(req.url);
     const channelId = searchParams.get('channelId');
-    const teamId = process.env.CLICKUP_TEAM_ID || '90182855619';
+    const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
 
     if (channelId) {
       if (channelId.includes('-')) {
         try {
-          const data = await getViewComments(channelId);
+          const data = await getViewComments(channelId, token);
           const formattedMessages = (data.comments || []).map((c: any) => {
             const rawDate = c.date || c.date_created || c.posted_at || `${Date.now()}`;
             const parsedTimestamp = parseInt(rawDate, 10) || Date.now();
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const channels = await getChatChannels(teamId);
+    const channels = await getChatChannels(teamId, token);
     return NextResponse.json({ channels });
   } catch (error: any) {
     return NextResponse.json(
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const body = await req.json();
     const { channelId, text, parentId } = body;
 
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (channelId.includes('-')) {
-      const comment = await postViewComment(channelId, text, parentId);
+      const comment = await postViewComment(channelId, text, parentId, true, token);
       return NextResponse.json({
         id: comment.id,
         channel_id: channelId,
