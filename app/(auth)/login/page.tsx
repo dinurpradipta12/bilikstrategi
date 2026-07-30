@@ -1,51 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Shield, CheckCircle2, ArrowRight, ChevronDown, UserCheck } from 'lucide-react';
-
-interface ClickUpMember {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatar: string;
-}
+import React, { useState } from 'react';
+import { Shield, CheckCircle2, ArrowRight, Users, Lock } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [members, setMembers] = useState<ClickUpMember[]>([]);
-  const [selectedMember, setSelectedMember] = useState<ClickUpMember | null>(null);
-
-  useEffect(() => {
-    fetch('/api/clickup/teams')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.members && Array.isArray(data.members)) {
-          const mapped: ClickUpMember[] = data.members.map((m: any) => ({
-            id: String(m.id),
-            name: m.username || m.email?.split('@')[0] || 'Team Member',
-            email: m.email || `${(m.username || 'member').toLowerCase().replace(/\s+/g, '')}@bilikstrategi.id`,
-            role: m.role === 1 ? 'owner' : m.role === 2 ? 'admin' : 'member',
-            avatar: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'User')}&background=24324A&color=fff`,
-          }));
-          setMembers(mapped);
-          if (mapped.length > 0) setSelectedMember(mapped[0]);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   const handleClickUpOAuth = () => {
     setLoading(true);
-
-    if (selectedMember) {
-      const url = `/api/auth/clickup/callback?name=${encodeURIComponent(selectedMember.name)}&email=${encodeURIComponent(selectedMember.email)}&role=${selectedMember.role}&avatar=${encodeURIComponent(selectedMember.avatar)}`;
-      window.location.href = url;
-    } else {
-      window.location.href = '/api/auth/clickup/login';
-    }
+    // Redirect ke endpoint OAuth yang akan mengarahkan ke halaman login resmi ClickUp
+    window.location.href = '/api/auth/clickup/login';
   };
 
   return (
@@ -64,58 +28,41 @@ export default function LoginPage() {
           <p className="text-xs text-[#737680] mt-1">Agency Operations & ClickUp Project Management Engine</p>
         </div>
 
-        {/* Pure ClickUp SSO Body */}
+        {/* ClickUp OAuth Login Body */}
         <div className="p-8 pt-2 space-y-6 text-center">
           <div className="space-y-2">
-            <h2 className="text-sm font-bold text-[#24324A]">Masuk dengan Akun ClickUp</h2>
+            <h2 className="text-sm font-bold text-[#24324A]">Masuk dengan Akun ClickUp Anda</h2>
             <p className="text-xs text-[#737680] leading-relaxed">
-              Pilih akun anggota tim ClickUp Anda untuk masuk dan menghubungkan hak akses ke dashboard aplikasi.
+              Klik tombol di bawah untuk diarahkan ke halaman login resmi <strong>ClickUp.com</strong>. 
+              Setiap anggota tim masuk menggunakan email & password akun ClickUp masing-masing.
             </p>
           </div>
 
-          {/* Member Selection Box */}
-          {members.length > 0 && (
-            <div className="text-left space-y-2">
-              <label className="block text-xs font-semibold text-[#202124]">Pilih Akun Member ClickUp Anda:</label>
-              <div className="relative">
-                <select
-                  value={selectedMember?.id || ''}
-                  onChange={(e) => {
-                    const found = members.find((m) => m.id === e.target.value);
-                    if (found) setSelectedMember(found);
-                  }}
-                  className="w-full p-3.5 bg-[#F7F7F8] border border-[#24324A]/20 rounded-xl text-xs font-bold text-[#24324A] outline-none appearance-none cursor-pointer pr-10"
-                >
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.role.toUpperCase()}) — {m.email}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-[#24324A] absolute right-3 top-4 pointer-events-none" />
-              </div>
+          {/* OAuth Flow Illustration */}
+          <div className="flex items-center justify-center gap-3 py-3">
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#EEF2F7] rounded-lg">
+              <Users className="w-4 h-4 text-[#24324A]" />
+              <span className="text-[10px] font-bold text-[#24324A]">Anda</span>
             </div>
-          )}
-
-          {/* Selected Profile Card Preview */}
-          {selectedMember && (
-            <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl flex items-center gap-3 text-left">
+            <ArrowRight className="w-4 h-4 text-[#737680]" />
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#7B68EE]/10 rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selectedMember.avatar} alt={selectedMember.name} className="w-10 h-10 rounded-full object-cover border border-[#E8E8EC]" />
-              <div className="flex-1 min-w-0">
-                <span className="font-bold text-xs text-[#24324A] block truncate">{selectedMember.name}</span>
-                <span className="text-[11px] text-[#737680] block truncate">{selectedMember.email}</span>
-                <span className="text-[10px] text-[#4F9D78] font-bold block mt-0.5 uppercase">{selectedMember.role} • ClickUp Account</span>
-              </div>
+              <img src="/clickup.png" alt="ClickUp" className="w-4 h-4 object-contain" />
+              <span className="text-[10px] font-bold text-[#7B68EE]">ClickUp Login</span>
             </div>
-          )}
+            <ArrowRight className="w-4 h-4 text-[#737680]" />
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#4F9D78]/10 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 text-[#4F9D78]" />
+              <span className="text-[10px] font-bold text-[#4F9D78]">Dashboard</span>
+            </div>
+          </div>
 
           {/* Direct ClickUp Official OAuth Button */}
           <button
             type="button"
             onClick={handleClickUpOAuth}
             disabled={loading}
-            className="w-full py-4 bg-[#7B68EE] hover:bg-[#6C5CE7] text-white font-extrabold text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer group"
+            className="w-full py-4 bg-[#7B68EE] hover:bg-[#6C5CE7] text-white font-extrabold text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer group disabled:opacity-70"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -123,18 +70,31 @@ export default function LoginPage() {
               alt="ClickUp Logo"
               className="w-7 h-7 object-contain flex-shrink-0 group-hover:scale-105 transition-transform"
             />
-            <span>{loading ? 'Menghubungkan Akun...' : `Masuk sebagai ${selectedMember?.name || 'ClickUp User'}`}</span>
+            <span>{loading ? 'Mengarahkan ke ClickUp.com...' : 'Masuk dengan Akun ClickUp'}</span>
             <ArrowRight className="w-4 h-4 text-white opacity-80 group-hover:translate-x-0.5 transition-transform" />
           </button>
 
-          <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-left space-y-2 text-xs text-[#737680]">
-            <div className="flex items-center gap-2 font-semibold text-[#24324A]">
-              <CheckCircle2 className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
-              <span>Multi-Browser & Sesi Mandiri</span>
+          {/* Info Cards */}
+          <div className="space-y-3">
+            <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-left space-y-2 text-xs text-[#737680]">
+              <div className="flex items-center gap-2 font-semibold text-[#24324A]">
+                <Lock className="w-4 h-4 text-[#7B68EE] flex-shrink-0" />
+                <span>Login OAuth Resmi ClickUp</span>
+              </div>
+              <p className="text-[11px] text-[#737680] pl-6">
+                Anda akan diarahkan ke halaman login resmi ClickUp.com. Masukkan email & password akun ClickUp Anda di sana. Aplikasi ini tidak pernah menyimpan password Anda.
+              </p>
             </div>
-            <p className="text-[11px] text-[#737680] pl-6">
-              Buka tab Incognito atau browser berbeda untuk masuk sebagai akun anggota tim lain (*Member* / *Admin*) secara independen.
-            </p>
+
+            <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-left space-y-2 text-xs text-[#737680]">
+              <div className="flex items-center gap-2 font-semibold text-[#24324A]">
+                <CheckCircle2 className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
+                <span>Sesi Mandiri Per Anggota Tim</span>
+              </div>
+              <p className="text-[11px] text-[#737680] pl-6">
+                Setiap anggota tim dapat login dengan akun ClickUp mereka sendiri. Profil, role, dan hak akses otomatis terhubung ke dashboard.
+              </p>
+            </div>
           </div>
         </div>
 
