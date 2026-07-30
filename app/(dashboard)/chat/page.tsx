@@ -67,6 +67,24 @@ function MessageStatusIcon({ status }: { status: MessageStatus }) {
   return <CheckCheck className="w-3 h-3 text-[#4FC3F7]" aria-label="Dibaca" />;
 }
 
+function renderMentionedText(text: string) {
+  if (!text || !text.includes('@')) return text;
+  const parts = text.split(/(@[A-Za-z0-9_.\s]+)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('@')) {
+      return (
+        <span
+          key={idx}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#7B68EE]/25 text-[#7B68EE] font-extrabold text-[11px] mx-0.5 border border-[#7B68EE]/40"
+        >
+          <AtSign className="w-3 h-3 text-[#7B68EE]" />
+          {part.slice(1)}
+        </span>
+      );
+    }
+    return part;
+  });
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -97,6 +115,12 @@ export default function ChatPage() {
   // typing debounce
   const typingTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef     = useRef(false);
+
+  // Mention Autocomplete State
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Authenticated user (dynamic initial state)
   const [currentUser, setCurrentUser] = useState({
@@ -318,10 +342,69 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
 
-  // ── Handle text input change (typing indicator self + backend) ────────────
+  // ── Mention autocomplete filtering ─────────────────────────────────────────
+  const filteredMentionMembers = React.useMemo(() => {
+    if (!mentionQuery) return liveMembers;
+    return liveMembers.filter((m) =>
+      m.username.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+      m.email.toLowerCase().includes(mentionQuery.toLowerCase())
+    );
+  }, [liveMembers, mentionQuery]);
+
+  const insertMention = (member: { username: string }) => {
+    const val = textInput;
+    const cursorPos = inputRef.current?.selectionStart || val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastAt = textBeforeCursor.lastIndexOf('@');
+    if (lastAt !== -1) {
+      const newText = val.slice(0, lastAt) + `@${member.username} ` + val.slice(cursorPos);
+      setTextInput(newText);
+      setMentionOpen(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (mentionOpen && filteredMentionMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev + 1) % filteredMentionMembers.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((prev) => (prev - 1 + filteredMentionMembers.length) % filteredMentionMembers.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(filteredMentionMembers[mentionIndex]);
+      } else if (e.key === 'Escape') {
+        setMentionOpen(false);
+      }
+    }
+  };
+
+  // ── Handle text input change (typing indicator self + mention detector) ────
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTextInput(e.target.value);
-    const hasText = e.target.value.length > 0;
+    const val = e.target.value;
+    setTextInput(val);
+
+    // Detect @ trigger
+    const cursorPos = e.target.selectionStart || val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastAt = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAt !== -1) {
+      const query = textBeforeCursor.slice(lastAt + 1);
+      if (!query.includes(' ') && query.length <= 25) {
+        setMentionOpen(true);
+        setMentionQuery(query);
+        setMentionIndex(0);
+      } else {
+        setMentionOpen(false);
+      }
+    } else {
+      setMentionOpen(false);
+    }
+
+    const hasText = val.length > 0;
     if (hasText && !isTypingRef.current) {
       isTypingRef.current = true;
       setIsSelfTyping(true);
@@ -759,7 +842,7 @@ export default function ChatPage() {
                                 : 'bg-[#F4F4F5] text-[#202124] rounded-bl-sm hover:bg-[#EBEBED]'}
                               ${isSelected ? 'ring-2 ring-[#7B68EE] ring-offset-1' : ''}`}
                           >
-                            {msg.text}
+                            {renderMentionedText(msg.text)}
                           </div>
 
                           {/* Hover action */}
@@ -807,23 +890,58 @@ export default function ChatPage() {
               })
             )}
 
-
             <div ref={messagesEndRef} className="h-1" />
           </div>
 
-          {/* Input bar */}
-          <form onSubmit={handleSendMessage}
-            className="px-4 py-3 border-t border-[#E8E8EC] flex items-center gap-2 bg-[#F7F7F8]">
-            <input type="text" value={textInput} onChange={handleInputChange}
-              placeholder={`Kirim pesan ke ${activeChannel?.name ?? '…'}`}
-              className="flex-1 px-4 py-2.5 text-xs bg-white border border-[#E8E8EC] rounded-xl
-                focus:outline-none focus:border-[#24324A] transition-colors" />
-            <button type="submit"
-              className="px-4 py-2.5 bg-[#24324A] text-white text-xs font-semibold rounded-xl
-                hover:bg-[#1A2536] flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer">
-              <Send className="w-3.5 h-3.5 text-[#F26B5E]" />Kirim
-            </button>
-          </form>
+          {/* Input bar + Mention Autocomplete Popup */}
+          <div className="relative">
+            {mentionOpen && filteredMentionMembers.length > 0 && (
+              <div className="absolute bottom-full left-4 mb-2 w-64 bg-white border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden z-50 animate-fade-in divide-y divide-[#E8E8EC]">
+                <div className="px-3 py-2 bg-[#F7F7F8] flex items-center justify-between text-[10px] font-bold text-[#737680] uppercase tracking-wider">
+                  <span className="flex items-center gap-1"><AtSign className="w-3 h-3 text-[#7B68EE]" /> Mention Tim</span>
+                  <span>{filteredMentionMembers.length} anggota</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto py-1">
+                  {filteredMentionMembers.map((m, idx) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => insertMention(m)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors cursor-pointer ${
+                        idx === mentionIndex ? 'bg-[#EEF2F7] text-[#24324A] font-bold' : 'hover:bg-[#F7F7F8] text-[#202124]'
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.avatar} alt={m.username} className="w-6 h-6 rounded-full object-cover border border-[#E8E8EC] flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold truncate leading-tight text-xs">{m.username}</p>
+                        <p className="text-[10px] text-[#737680] truncate">{m.email}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSendMessage}
+              className="px-4 py-3 border-t border-[#E8E8EC] flex items-center gap-2 bg-[#F7F7F8]">
+              <input
+                ref={inputRef}
+                type="text"
+                value={textInput}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={`Kirim pesan (ketik @ untuk mention tim) ke ${activeChannel?.name ?? '…'}`}
+                className="flex-1 px-4 py-2.5 text-xs bg-white border border-[#E8E8EC] rounded-xl
+                  focus:outline-none focus:border-[#24324A] transition-colors"
+              />
+              <button type="submit"
+                className="px-4 py-2.5 bg-[#24324A] text-white text-xs font-semibold rounded-xl
+                  hover:bg-[#1A2536] flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer">
+                <Send className="w-3.5 h-3.5 text-[#F26B5E]" />Kirim
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* ══ ⑤ Right Panel ═════════════════════════════════════════════════ */}
