@@ -98,12 +98,12 @@ export default function ChatPage() {
   const typingTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef     = useRef(false);
 
-  // Authenticated user
+  // Authenticated user (dynamic initial state)
   const [currentUser, setCurrentUser] = useState({
-    id: 276885530,
-    username: 'Dinur Pradipta',
-    email: 'snllabsarchive@gmail.com',
-    avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+    id: 0,
+    username: 'Pengguna',
+    email: '',
+    avatar: 'https://ui-avatars.com/api/?name=User&background=24324A&color=fff',
   });
 
   // Toast
@@ -161,16 +161,12 @@ export default function ChatPage() {
     }, readDelay);
   }, []);
 
-  // ── Load workspace data ───────────────────────────────────────────────────
+  // ── Load workspace data in parallel ───────────────────────────────────────
   useEffect(() => {
-    async function loadWorkspaceData() {
-      try {
-        const [userRes, teamRes, chatRes] = await Promise.all([
-          fetch('/api/clickup/user'),
-          fetch('/api/clickup/teams'),
-          fetch('/api/clickup/chat'),
-        ]);
-        const userData = await userRes.json();
+    // 1. Fetch current logged-in user profile immediately
+    fetch('/api/clickup/user')
+      .then((res) => res.json())
+      .then((userData) => {
         if (userData.user) {
           setCurrentUser({
             id: userData.user.id,
@@ -180,15 +176,29 @@ export default function ChatPage() {
               `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.user.username)}&background=24324A&color=fff`,
           });
         }
-        const teamData = await teamRes.json();
+      })
+      .catch((err) => console.warn('[Chat] User fetch error:', err));
+
+    // 2. Fetch team members list immediately
+    fetch('/api/clickup/teams')
+      .then((res) => res.json())
+      .then((teamData) => {
         if (teamData.members?.length > 0) {
           setLiveMembers(teamData.members.map((m: any) => ({
-            id: m.id, username: m.username, email: m.email,
+            id: m.id,
+            username: m.username || m.email?.split('@')[0] || 'Team Member',
+            email: m.email || '',
             avatar: m.profilePicture ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username)}&background=24324A&color=fff`,
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'User')}&background=24324A&color=fff`,
           })));
         }
-        const chatData = await chatRes.json();
+      })
+      .catch((err) => console.warn('[Chat] Team fetch error:', err));
+
+    // 3. Fetch chat channels list
+    fetch('/api/clickup/chat')
+      .then((res) => res.json())
+      .then((chatData) => {
         if (chatData.channels?.length > 0) {
           const unique: typeof channels = [];
           const seen = new Set<string>();
@@ -198,11 +208,8 @@ export default function ChatPage() {
           });
           setChannels(unique);
         }
-      } catch (err) {
-        console.warn('[Chat] Gagal memuat workspace data:', err);
-      }
-    }
-    loadWorkspaceData();
+      })
+      .catch((err) => console.warn('[Chat] Channels fetch error:', err));
   }, []);
 
   // ── Fetch messages ────────────────────────────────────────────────────────
@@ -717,7 +724,10 @@ export default function ChatPage() {
             ) : (
               rootMessages.map((rawMsg) => {
                 const msg = getMessageWithReplies(rawMsg);
-                const isMe = msg.user_name.includes('Dinur') || msg.user_id === String(currentUser.id);
+                const isMe =
+                  (currentUser.id > 0 && String(msg.user_id) === String(currentUser.id)) ||
+                  (currentUser.username !== 'Pengguna' &&
+                    msg.user_name.toLowerCase().includes(currentUser.username.toLowerCase()));
                 const replyCount = msg.reply_count || 0;
                 const isSelected = activeThreadMessage?.id === msg.id;
                 const msgStatus: MessageStatus = statusMap[msg.id] || 'read';
