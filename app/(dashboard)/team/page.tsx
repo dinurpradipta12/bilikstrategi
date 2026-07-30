@@ -44,7 +44,7 @@ export default function TeamWorkloadPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
   const [allTasks, setAllTasks] = useState<any[]>([]);
-  const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, number>>>({});
+  const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
 
   // Check URL query string for ?tab=timesheet
   useEffect(() => {
@@ -594,7 +594,7 @@ export default function TeamWorkloadPage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#F7F7F8] border-b border-[#E8E8EC] text-[#737680] uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-4 min-w-[200px]">People ({members.length})</th>
+                    <th className="py-3 px-4 min-w-[180px]">People ({members.length})</th>
                     <th className="py-3 px-2 text-center">Sun, Jul 26</th>
                     <th className="py-3 px-2 text-center">Mon, Jul 27</th>
                     <th className="py-3 px-2 text-center">Tue, Jul 28</th>
@@ -602,21 +602,58 @@ export default function TeamWorkloadPage() {
                     <th className="py-3 px-2 text-center">Thu, Jul 30</th>
                     <th className="py-3 px-2 text-center">Fri, Jul 31</th>
                     <th className="py-3 px-2 text-center">Sat, Aug 1</th>
-                    <th className="py-3 px-4 text-center font-bold">Total</th>
+                    <th className="py-3 px-3 text-center font-bold text-[#E6A23C]">Total OT</th>
+                    <th className="py-3 px-4 text-center font-bold text-[#4F9D78]">Total Jam</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E8E8EC]">
                   {members.map((m) => {
                     const userRecap = timesheetRecap[m.full_name] || {};
-                    const sun = userRecap['Sun'] || 0;
-                    const mon = userRecap['Mon'] || (m.hours_tracked > 0 ? 8 : 0);
-                    const tue = userRecap['Tue'] || (m.hours_tracked > 0 ? 8 : 0);
-                    const wed = userRecap['Wed'] || (m.hours_tracked > 0 ? 8 : 0);
-                    const thu = userRecap['Thu'] || (m.hours_tracked > 0 ? 8 : 0);
-                    const fri = userRecap['Fri'] || (m.hours_tracked > 0 ? 8 : 0);
-                    const sat = userRecap['Sat'] || 0;
 
-                    const total = parseFloat((sun + mon + tue + wed + thu + fri + sat).toFixed(2));
+                    const getDayCell = (dayKey: string, defaultHours: number) => {
+                      const dayData = userRecap[dayKey];
+                      if (!dayData) return defaultHours ? <span className="font-semibold text-[#24324A]">{defaultHours}h</span> : <span className="text-[#737680]">0h</span>;
+
+                      if (typeof dayData === 'number') {
+                        return <span className="font-semibold text-[#24324A]">{dayData}h</span>;
+                      }
+
+                      if (dayData.status === 'ALPHA') {
+                        return <span className="px-1.5 py-0.5 bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/30 rounded font-bold text-[10px]">ALPHA</span>;
+                      }
+                      if (['IZIN', 'SAKIT', 'CUTI'].includes(dayData.status)) {
+                        return <span className="px-1.5 py-0.5 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded font-bold text-[10px]">{dayData.status}</span>;
+                      }
+
+                      const reg = dayData.regular || 0;
+                      const ot = dayData.overtime || 0;
+
+                      return (
+                        <div className="flex flex-col items-center">
+                          <span className="font-bold text-[#24324A]">{reg}h</span>
+                          {ot > 0 && <span className="text-[9px] font-bold text-[#E6A23C] bg-[#E6A23C]/10 px-1 rounded">+{ot}h OT</span>}
+                        </div>
+                      );
+                    };
+
+                    // Compute totals
+                    let totalReg = 0;
+                    let totalOT = 0;
+
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    days.forEach((d) => {
+                      const dayData = userRecap[d];
+                      if (typeof dayData === 'number') {
+                        totalReg += dayData;
+                      } else if (dayData) {
+                        totalReg += dayData.regular || 0;
+                        totalOT += dayData.overtime || 0;
+                      } else if (['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(d) && m.hours_tracked > 0) {
+                        totalReg += 8;
+                      }
+                    });
+
+                    const totalOverall = parseFloat((totalReg + totalOT).toFixed(2));
 
                     return (
                       <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
@@ -630,14 +667,19 @@ export default function TeamWorkloadPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-2 text-center text-[#737680]">{sun ? `${sun}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{mon ? `${mon}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{tue ? `${tue}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{wed ? `${wed}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{thu ? `${thu}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center font-semibold text-[#24324A]">{fri ? `${fri}h` : '0h'}</td>
-                        <td className="py-3 px-2 text-center text-[#737680]">{sat ? `${sat}h` : '0h'}</td>
-                        <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">{total}h</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Sun', 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Mon', m.hours_tracked > 0 ? 8 : 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Tue', m.hours_tracked > 0 ? 8 : 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Wed', m.hours_tracked > 0 ? 8 : 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Thu', m.hours_tracked > 0 ? 8 : 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Fri', m.hours_tracked > 0 ? 8 : 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Sat', 0)}</td>
+                        <td className="py-3 px-3 text-center font-extrabold text-[#E6A23C] bg-[#E6A23C]/5">
+                          {totalOT > 0 ? `+${totalOT}h` : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">
+                          {totalOverall}h
+                        </td>
                       </tr>
                     );
                   })}
