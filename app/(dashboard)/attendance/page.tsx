@@ -132,11 +132,24 @@ export default function AttendancePage() {
           }
         }
 
-        // Fetch ClickUp team members for Admin panel
+        // Fetch ClickUp team members for Admin panel & Role resolution
         const teamRes = await fetch('/api/clickup/teams');
+        let resolvedUserRole: 'Owner' | 'Admin' | 'Member' = 'Owner';
+
         if (teamRes.ok) {
           const teamData = await teamRes.json();
           const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
+
+          // Find current user in workspace members to resolve exact role
+          const matchedMember = clickUpMembers.find((m: any) => {
+            const mName = (m.username || '').toLowerCase().trim();
+            const uName = (currentUser.username || '').toLowerCase().trim();
+            return mName === uName || mName.includes(uName) || uName.includes(mName);
+          });
+
+          if (matchedMember) {
+            resolvedUserRole = matchedMember.role === 1 ? 'Owner' : matchedMember.role === 2 ? 'Admin' : 'Member';
+          }
 
           // Real base active team list (defaults to offline unless real check-in performed)
           const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
@@ -163,6 +176,12 @@ export default function AttendancePage() {
             syncRealTimeTeamAttendance();
           }, 100);
         }
+
+        // Update currentUser with exact resolved workspace role
+        setCurrentUser((prev) => ({
+          ...prev,
+          role: resolvedUserRole,
+        }));
       } catch (err) {
         console.warn('[Attendance] User, projects, or team fetch error', err);
       }
