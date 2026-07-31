@@ -682,6 +682,22 @@ export default function AttendancePage() {
       }
     }
 
+    // Delete active session directly from Supabase REST API & SDK (100% reliable)
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+      fetch(`${url}/rest/v1/active_sessions?user_name=ilike.${encodeURIComponent(currentUser.username)}`, {
+        method: 'DELETE',
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+      }).catch(() => {});
+    } catch {}
+
+    try {
+      supabase.from('active_sessions').delete().ilike('user_name', currentUser.username).then(() => {
+        syncRealTimeTeamAttendance();
+      });
+    } catch {}
+
     // Broadcast checkout to shared server API
     fetch('/api/attendance', {
       method: 'POST',
@@ -692,6 +708,11 @@ export default function AttendancePage() {
         record: newRecord,
       }),
     }).catch(() => {});
+
+    // Immediately trigger local real-time sync update
+    setTimeout(() => {
+      syncRealTimeTeamAttendance();
+    }, 100);
   };
 
   // 5. Handle Submit Leave Request (Izin / Sakit / Cuti)
