@@ -346,6 +346,108 @@ export default function AttendancePage() {
     };
   }, [isCheckedIn, checkInTime, checkInTimestamp, selectedProject, currentUser.username]);
 
+  // 3. Supabase Live Realtime WebSocket Listener (Instant Push Notification on DB Changes)
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime_attendance_sessions')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'active_sessions' },
+        () => {
+          syncRealTimeTeamAttendance();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Admin Quick Action: Toggle Check-In for any Team Member
+  const handleAdminToggleMemberCheckIn = async (member: TeamMemberStatus, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const now = new Date();
+    const startTimeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const startTimestamp = now.getTime();
+
+    if (!member.isOnline) {
+      const activeObj = {
+        user_name: member.name,
+        user_avatar: member.avatar,
+        checkInTime: startTimeStr,
+        checkInTimestamp: startTimestamp,
+        selectedProject: 'Bilik Strategi Workspace',
+        notesInput: 'Check-In via Admin',
+      };
+
+      try {
+        const storeStr = localStorage.getItem('bilik_team_active_store');
+        const storeMap = storeStr ? JSON.parse(storeStr) : {};
+        storeMap[member.name.toLowerCase()] = activeObj;
+        localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
+      } catch {}
+
+      try {
+        await supabase.from('active_sessions').upsert({
+          user_name: member.name,
+          user_avatar: member.avatar,
+          check_in_time: startTimeStr,
+          check_in_timestamp: startTimestamp,
+          selected_project: 'Bilik Strategi Workspace',
+          notes_input: 'Check-In via Admin',
+          updated_at: new Date().toISOString(),
+        });
+      } catch {}
+
+      fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkin',
+          user_name: member.name,
+          user_avatar: member.avatar,
+          selectedProject: 'Bilik Strategi Workspace',
+          notesInput: 'Check-In via Admin',
+          checkInTime: startTimeStr,
+          checkInTimestamp: startTimestamp,
+        }),
+      }).catch(() => {});
+    } else {
+      try {
+        const storeStr = localStorage.getItem('bilik_team_active_store');
+        if (storeStr) {
+          const storeMap = JSON.parse(storeStr);
+          delete storeMap[member.name.toLowerCase()];
+          localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
+        }
+      } catch {}
+
+      try {
+        await supabase.from('active_sessions').delete().eq('user_name', member.name);
+      } catch {}
+
+      fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkout',
+          user_name: member.name,
+        }),
+      }).catch(() => {});
+    }
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+        bc.close();
+      } catch {}
+    }
+
+    syncRealTimeTeamAttendance();
+  };
+
   // 3. Handle Check-In
   const handleCheckIn = () => {
     const now = new Date();
@@ -861,7 +963,22 @@ export default function AttendancePage() {
                       </div>
 
                       {/* Online Status & Live Duration Badge */}
-                      <div className="text-right flex-shrink-0">
+                      <div className="text-right flex-shrink-0 flex items-center gap-1.5">
+                        {isAdminOrOwner && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleAdminToggleMemberCheckIn(m, e)}
+                            title={m.isOnline ? 'Check-Out-kan anggota ini' : 'Check-In-kan anggota ini (Test Admin)'}
+                            className={`px-2 py-1 text-[9px] font-bold rounded-lg transition-colors cursor-pointer border ${
+                              m.isOnline
+                                ? 'bg-[#F26B5E]/10 text-[#F26B5E] border-[#F26B5E]/30 hover:bg-[#F26B5E]/20'
+                                : 'bg-[#4F9D78]/10 text-[#4F9D78] border-[#4F9D78]/30 hover:bg-[#4F9D78]/20'
+                            }`}
+                          >
+                            {m.isOnline ? '🛑 Out' : '🟢 Check-In'}
+                          </button>
+                        )}
+
                         {m.isOnline ? (
                           <div>
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded-md font-mono font-bold text-[11px] border border-[#4F9D78]/30">
