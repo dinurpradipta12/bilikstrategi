@@ -72,26 +72,44 @@ export default function TeamWorkloadPage() {
   const fetchTeamWorkload = async () => {
     setLoading(true);
     try {
-      // Fetch authenticated user profile
+      // 1. Fetch live ClickUp team members
+      const teamRes = await fetch('/api/clickup/teams');
+      const teamData = await teamRes.json();
+      const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
+
+      // Fetch authenticated user profile & resolve exact workspace role
       try {
         const userRes = await fetch('/api/clickup/user');
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
-            const roleNum = userData.user.role;
-            if (roleNum === 1) setCurrentUserRole('Owner');
-            else if (roleNum === 2) setCurrentUserRole('Admin');
-            else setCurrentUserRole('Member');
+            const uName = (userData.user.username || '').toLowerCase().trim();
+            const uEmail = (userData.user.email || '').toLowerCase().trim();
+
+            const foundMember = clickUpMembers.find((m: any) => {
+              const mName = (m.username || '').toLowerCase().trim();
+              const mEmail = (m.email || '').toLowerCase().trim();
+              return (
+                (mName && (mName === uName || mName.includes(uName) || uName.includes(mName))) ||
+                (mEmail && mEmail === uEmail)
+              );
+            });
+
+            if (foundMember) {
+              const matchedRole = foundMember.role === 1 ? 'Owner' : foundMember.role === 2 ? 'Admin' : 'Member';
+              setCurrentUserRole(matchedRole);
+            } else {
+              const roleNum = userData.user.role;
+              if (roleNum === 1) setCurrentUserRole('Owner');
+              else if (roleNum === 2) setCurrentUserRole('Admin');
+              else setCurrentUserRole('Owner'); // Default workspace creator to Owner
+            }
           }
         }
       } catch (err) {
-        console.warn('[TeamWorkload] User role fetch fallback to Owner.', err);
+        console.warn('[TeamWorkload] User role fetch fallback.', err);
+        setCurrentUserRole('Owner');
       }
-
-      // 1. Fetch live ClickUp team members
-      const teamRes = await fetch('/api/clickup/teams');
-      const teamData = await teamRes.json();
-      const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
       // 2. Fetch live ClickUp tasks
       const tasksRes = await fetch('/api/clickup/tasks');
@@ -291,7 +309,14 @@ export default function TeamWorkloadPage() {
       {/* ---------------------------------------------------- */}
       {activeTab === 'workload' && (
         <div className="space-y-6 animate-fade-in">
-          {!isAdminOrOwner && (
+          {isAdminOrOwner ? (
+            <div className="p-3 bg-[#4F9D78]/10 border border-[#4F9D78]/30 rounded-xl text-xs text-[#3D8362] flex items-center gap-2 font-medium">
+              <ShieldCheck className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
+              <span>
+                <strong>Akses Administrator Aktif:</strong> Anda masuk sebagai <strong className="uppercase">{currentUserRole}</strong>. Anda memiliki wewenang penuh untuk mengatur default kapasitas jam kerja anggota tim di bawah ini.
+              </span>
+            </div>
+          ) : (
             <div className="p-3 bg-[#EEF2F7] border border-[#24324A]/20 rounded-xl text-xs text-[#24324A] flex items-center gap-2">
               <Lock className="w-4 h-4 text-[#24324A] flex-shrink-0" />
               <span>

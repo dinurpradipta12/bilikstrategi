@@ -38,16 +38,43 @@ export default function Sidebar() {
   useEffect(() => {
     async function loadClickUpProfile() {
       try {
-        const res = await fetch('/api/clickup/user');
-        const data = await res.json();
-        if (data.user) {
-          const userRole = data.user.role === 1 ? 'owner' : data.user.role === 2 ? 'admin' : 'member';
-          setUserProfile({
-            name: data.user.username,
-            role: userRole,
-            avatar: data.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.username)}&background=24324A&color=fff`,
-          });
+        const [userRes, teamRes] = await Promise.all([
+          fetch('/api/clickup/user'),
+          fetch('/api/clickup/teams'),
+        ]);
+
+        let resolvedRole = 'Owner';
+        let username = 'Dinur Pradipta';
+        let avatar = '';
+
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData.user) {
+            username = userData.user.username;
+            avatar = userData.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`;
+            if (userData.user.role === 1) resolvedRole = 'Owner';
+            else if (userData.user.role === 2) resolvedRole = 'Admin';
+          }
         }
+
+        if (teamRes.ok) {
+          const teamData = await teamRes.json();
+          const members = Array.isArray(teamData.members) ? teamData.members : [];
+          const matched = members.find((m: any) => {
+            const mName = (m.username || '').toLowerCase().trim();
+            const uName = (username || '').toLowerCase().trim();
+            return mName === uName || mName.includes(uName) || uName.includes(mName);
+          });
+          if (matched) {
+            resolvedRole = matched.role === 1 ? 'Owner' : matched.role === 2 ? 'Admin' : 'Member';
+          }
+        }
+
+        setUserProfile({
+          name: username,
+          role: resolvedRole,
+          avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
+        });
       } catch (err) {
         console.warn('[Sidebar] ClickUp profile fetch failed, using default workspace profile.', err);
       }
