@@ -1022,34 +1022,19 @@ export default function AttendancePage() {
                       </div>
 
                       {/* Online Status & Live Duration Badge */}
-                      <div className="text-right flex-shrink-0 flex items-center gap-1.5">
-                        {isAdminOrOwner && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleAdminToggleMemberCheckIn(m, e)}
-                            title={m.isOnline ? 'Check-Out-kan anggota ini' : 'Check-In-kan anggota ini (Test Admin)'}
-                            className={`px-2 py-1 text-[9px] font-bold rounded-lg transition-colors cursor-pointer border ${
-                              m.isOnline
-                                ? 'bg-[#F26B5E]/10 text-[#F26B5E] border-[#F26B5E]/30 hover:bg-[#F26B5E]/20'
-                                : 'bg-[#4F9D78]/10 text-[#4F9D78] border-[#4F9D78]/30 hover:bg-[#4F9D78]/20'
-                            }`}
-                          >
-                            {m.isOnline ? '🛑 Out' : '🟢 Check-In'}
-                          </button>
-                        )}
-
+                      <div className="text-right flex-shrink-0">
                         {m.isOnline ? (
                           <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded-md font-mono font-bold text-[11px] border border-[#4F9D78]/30">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] animate-ping" />
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] rounded-lg font-mono font-extrabold text-xs border border-[#4F9D78]/30 shadow-2xs">
+                              <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-ping" />
                               {liveMemberDurationStr}
                             </span>
-                            <p className="text-[9px] font-bold text-[#7B68EE] mt-0.5 truncate max-w-[120px]">
-                              {m.project || 'Active Task'}
+                            <p className="text-[10px] font-extrabold text-[#7B68EE] mt-1 truncate max-w-[130px]">
+                              {m.project || 'Bilik Strategi Workspace'}
                             </p>
                           </div>
                         ) : (
-                          <span className="px-2 py-0.5 bg-[#EEF2F7] text-[#737680] rounded-md font-bold text-[10px]">
+                          <span className="px-2.5 py-1 bg-[#F7F7F8] text-[#737680] rounded-lg font-bold text-[11px] border border-[#E8E8EC]">
                             Offline
                           </span>
                         )}
