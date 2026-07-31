@@ -157,6 +157,11 @@ export default function AttendancePage() {
           });
 
           setTeamStatusList(baseTeam);
+
+          // Immediately sync live real-time status with Supabase for all team members
+          setTimeout(() => {
+            syncRealTimeTeamAttendance();
+          }, 100);
         }
       } catch (err) {
         console.warn('[Attendance] User, projects, or team fetch error', err);
@@ -224,19 +229,28 @@ export default function AttendancePage() {
   // Sync current user's live status to teamStatusList & poll shared server API + Supabase DB + local storage store every 2s
   const syncRealTimeTeamAttendance = async () => {
     try {
-      // 1. Direct Supabase DB active_sessions fetch
+      // 1. Direct Supabase DB active_sessions fetch via SDK and REST API
       let supabaseActiveList: any[] = [];
       try {
-        const { data: dbSessions } = await supabase.from('active_sessions').select('*');
-        if (dbSessions && dbSessions.length > 0) {
-          supabaseActiveList = dbSessions.map((row) => ({
-            user_name: row.user_name,
-            user_avatar: row.user_avatar,
-            checkInTime: row.check_in_time,
-            checkInTimestamp: Number(row.check_in_timestamp),
-            selectedProject: row.selected_project,
-            notesInput: row.notes_input || '',
-          }));
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+        const restRes = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+          cache: 'no-store',
+        });
+        if (restRes.ok) {
+          const restData = await restRes.json();
+          if (Array.isArray(restData) && restData.length > 0) {
+            supabaseActiveList = restData.map((row: any) => ({
+              user_name: row.user_name,
+              user_avatar: row.user_avatar,
+              checkInTime: row.check_in_time,
+              checkInTimestamp: Number(row.check_in_timestamp),
+              selectedProject: row.selected_project,
+              notesInput: row.notes_input || '',
+            }));
+          }
         }
       } catch {
         // ignore
@@ -493,6 +507,30 @@ export default function AttendancePage() {
         // ignore
       }
     }
+
+    // Write directly to Supabase REST API (100% reliable cross-browser/device)
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+      fetch(`${url}/rest/v1/active_sessions`, {
+        method: 'POST',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          user_name: currentUser.username,
+          user_avatar: currentUser.avatar,
+          check_in_time: startTimeStr,
+          check_in_timestamp: startTimestamp,
+          selected_project: selectedProject,
+          notes_input: notesInput,
+          updated_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    } catch {}
 
     // Broadcast check-in to shared server API for cross-browser & cross-device sync
     fetch('/api/attendance', {
