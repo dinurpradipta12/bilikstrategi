@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Users,
   Activity,
+  BarChart3,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
@@ -778,22 +779,23 @@ export default function AttendancePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex items-center gap-2.5 self-start md:self-auto flex-nowrap">
           <button
             type="button"
             onClick={() => setShowLeaveModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7] rounded-xl text-xs font-extrabold transition-colors shadow-2xs cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 h-10 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#F7F7F8] hover:border-[#D1D5DB] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap"
           >
-            <FileCheck2 className="w-4 h-4 text-[#7B68EE]" />
-            <span>📝 Form Izin / Sakit / Cuti</span>
+            <FileText className="w-4 h-4 text-[#7B68EE] flex-shrink-0" />
+            <span>Form Izin / Sakit / Cuti</span>
           </button>
 
           <Link
             href="/team?tab=timesheet"
-            className="flex items-center gap-2 px-4 py-2 bg-[#24324A] text-white rounded-xl text-xs font-bold hover:bg-[#1A2536] transition-colors shadow-2xs"
+            className="flex items-center gap-2 px-4 py-2.5 h-10 bg-[#24324A] text-white rounded-xl text-xs font-bold hover:bg-[#1A2536] transition-all shadow-2xs whitespace-nowrap"
           >
-            <span>📊 Rekap Timesheet & Lembur</span>
-            <ArrowRight className="w-3.5 h-3.5 text-[#F26B5E]" />
+            <BarChart3 className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
+            <span>Rekap Timesheet & Lembur</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#F26B5E] flex-shrink-0 ml-0.5" />
           </Link>
         </div>
       </div>
