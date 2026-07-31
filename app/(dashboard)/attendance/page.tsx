@@ -245,10 +245,10 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, [isCheckedIn, checkInTimestamp]);
 
-  // Sync current user's live status to teamStatusList & poll shared server API + Supabase DB + local storage store every 2s
+  // Sync live status directly from Supabase DB (Single Source of Truth)
   const syncRealTimeTeamAttendance = async () => {
     try {
-      // 1. Direct Supabase DB active_sessions fetch via SDK and REST API
+      // 1. Direct Supabase DB active_sessions fetch via REST API
       let supabaseActiveList: any[] = [];
       try {
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
@@ -260,7 +260,7 @@ export default function AttendancePage() {
         });
         if (restRes.ok) {
           const restData = await restRes.json();
-          if (Array.isArray(restData) && restData.length > 0) {
+          if (Array.isArray(restData)) {
             supabaseActiveList = restData.map((row: any) => ({
               user_name: row.user_name,
               user_avatar: row.user_avatar,
@@ -275,36 +275,27 @@ export default function AttendancePage() {
         // ignore
       }
 
-      // 2. Fetch server API active check-ins (no-store)
-      let serverActiveList: any[] = [];
-      try {
-        const res = await fetch('/api/attendance', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          serverActiveList = data.activeCheckIns || [];
-        }
-      } catch {
-        // Fallback to local store if offline
-      }
-
-      // 3. Fetch local storage shared active check-ins store
-      let localStoreMap: Record<string, any> = {};
-      try {
-        const storeStr = localStorage.getItem('bilik_team_active_store');
-        if (storeStr) localStoreMap = JSON.parse(storeStr);
-      } catch {
-        // ignore
-      }
-
-      const localActiveList = Object.values(localStoreMap);
-      const combinedActiveList = [...supabaseActiveList, ...serverActiveList, ...localActiveList];
-
       setTeamStatusList((prev) =>
         prev.map((m) => {
           const mNameClean = (m.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const mEmailPrefix = (m.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+          const currentClean = (currentUser.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-          const active = combinedActiveList.find((a: any) => {
+          const isMe = mNameClean.length > 2 && (mNameClean === currentClean || mNameClean.includes(currentClean) || currentClean.includes(mNameClean));
+
+          // If current user is checked out locally, FORCE OFFLINE on panel
+          if (isMe && !isCheckedIn) {
+            return {
+              ...m,
+              isOnline: false,
+              checkInTime: undefined,
+              checkInTimestamp: undefined,
+              project: undefined,
+              statusText: 'Belum Check-In',
+            };
+          }
+
+          const active = supabaseActiveList.find((a: any) => {
             const aNameClean = (a.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             return (
               aNameClean === mNameClean ||
@@ -321,17 +312,6 @@ export default function AttendancePage() {
               checkInTime: active.checkInTime,
               checkInTimestamp: active.checkInTimestamp,
               project: active.selectedProject || 'Bilik Strategi Workspace',
-              statusText: 'Online & Bekerja',
-            };
-          }
-
-          if (m.name.toLowerCase().includes(currentUser.username.toLowerCase()) && isCheckedIn) {
-            return {
-              ...m,
-              isOnline: true,
-              checkInTime: checkInTime || undefined,
-              checkInTimestamp: checkInTimestamp || undefined,
-              project: selectedProject,
               statusText: 'Online & Bekerja',
             };
           }

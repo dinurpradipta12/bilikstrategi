@@ -119,7 +119,7 @@ export async function POST(req: Request) {
 
       // Delete from Supabase DB active_sessions & insert into attendance_logs
       try {
-        await supabase.from('active_sessions').delete().eq('user_name', user_name);
+        await supabase.from('active_sessions').delete().ilike('user_name', user_name);
 
         if (record) {
           await supabase.from('attendance_logs').insert({
