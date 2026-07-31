@@ -32,6 +32,9 @@ export default function Sidebar() {
     avatar: MOCK_USERS[0].avatar_url,
   });
 
+  const [chatUnread, setChatUnread] = useState<number>(0);
+  const [notifUnread, setNotifUnread] = useState<number>(0);
+
   useEffect(() => {
     async function loadClickUpProfile() {
       try {
@@ -50,7 +53,26 @@ export default function Sidebar() {
       }
     }
     loadClickUpProfile();
+
+    // Check if badges were previously read/cleared by user
+    const isChatRead = localStorage.getItem('bilik_chat_read') === 'true';
+    const isNotifRead = localStorage.getItem('bilik_notif_read') === 'true';
+
+    setChatUnread(isChatRead ? 0 : 3);
+    setNotifUnread(isNotifRead ? 0 : 2);
   }, []);
+
+  // Clear unread badge immediately when user visits the respective page
+  useEffect(() => {
+    if (pathname.startsWith('/chat')) {
+      setChatUnread(0);
+      localStorage.setItem('bilik_chat_read', 'true');
+    }
+    if (pathname.startsWith('/notifications')) {
+      setNotifUnread(0);
+      localStorage.setItem('bilik_notif_read', 'true');
+    }
+  }, [pathname]);
 
   const navItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -62,8 +84,8 @@ export default function Sidebar() {
     { name: 'Team Workload', href: '/team', icon: Users },
     { name: 'Presensi Live', href: '/attendance', icon: Clock },
     { name: 'Client Listing', href: '/clients', icon: Building2 },
-    { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: pathname.startsWith('/chat') ? undefined : 3 },
-    { name: 'Notifications', href: '/notifications', icon: Bell, badge: pathname.startsWith('/notifications') ? undefined : 2 },
+    { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
+    { name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { name: 'Activity Log', href: '/activity-logs', icon: History },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
