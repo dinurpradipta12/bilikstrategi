@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase/client';
 
 export interface ActiveCheckIn {
   user_name: string;
@@ -9,30 +10,43 @@ export interface ActiveCheckIn {
   notesInput: string;
 }
 
-export interface SharedAttendanceRecord {
-  id: string;
-  user_name: string;
-  user_avatar: string;
-  date: string;
-  day_name: string;
-  check_in_time: string;
-  check_out_time: string;
-  duration_hours: number;
-  regular_hours: number;
-  overtime_hours: number;
-  status: 'HADIR' | 'ALPHA' | 'LEMBUR' | 'IZIN' | 'SAKIT' | 'CUTI';
-  project_name: string;
-  notes: string;
-}
-
-// In-memory global store across browsers/sessions
+// In-memory global fallback
 const globalActiveCheckIns = new Map<string, ActiveCheckIn>();
-const globalAttendanceHistory: SharedAttendanceRecord[] = [];
+const globalAttendanceHistory: any[] = [];
 
 export async function GET() {
+  try {
+    // 1. Fetch from Supabase DB active_sessions
+    const { data: dbSessions, error } = await supabase
+      .from('active_sessions')
+      .select('*');
+
+    if (!error && dbSessions && dbSessions.length > 0) {
+      const activeList: ActiveCheckIn[] = dbSessions.map((row) => ({
+        user_name: row.user_name,
+        user_avatar: row.user_avatar,
+        checkInTime: row.check_in_time,
+        checkInTimestamp: Number(row.check_in_timestamp),
+        selectedProject: row.selected_project,
+        notesInput: row.notes_input || '',
+      }));
+
+      return NextResponse.json({
+        success: true,
+        source: 'supabase',
+        activeCheckIns: activeList,
+        history: globalAttendanceHistory,
+      });
+    }
+  } catch (e) {
+    console.warn('[Attendance API] Supabase GET fallback to memory', e);
+  }
+
+  // Fallback to memory
   const activeList = Array.from(globalActiveCheckIns.values());
   return NextResponse.json({
     success: true,
+    source: 'memory',
     activeCheckIns: activeList,
     history: globalAttendanceHistory,
   });
@@ -58,7 +72,24 @@ export async function POST(req: Request) {
         selectedProject: selectedProject || 'Bilik Strategi Workspace',
         notesInput: notesInput || '',
       };
+
       globalActiveCheckIns.set(key, activeObj);
+
+      // Write to Supabase DB active_sessions
+      try {
+        await supabase.from('active_sessions').upsert({
+          user_name: user_name,
+          user_avatar: user_avatar || '',
+          check_in_time: activeObj.checkInTime,
+          check_in_timestamp: activeObj.checkInTimestamp,
+          selected_project: activeObj.selectedProject,
+          notes_input: activeObj.notesInput,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (dbErr) {
+        console.warn('[Attendance API] Supabase checkin error', dbErr);
+      }
+
       return NextResponse.json({ success: true, active: activeObj });
     }
 
@@ -67,13 +98,32 @@ export async function POST(req: Request) {
       if (record) {
         globalAttendanceHistory.unshift(record);
       }
-      return NextResponse.json({ success: true });
-    }
 
-    if (action === 'leave') {
-      if (record) {
-        globalAttendanceHistory.unshift(record);
+      // Delete from Supabase DB active_sessions & insert into attendance_logs
+      try {
+        await supabase.from('active_sessions').delete().eq('user_name', user_name);
+
+        if (record) {
+          await supabase.from('attendance_logs').insert({
+            id: record.id || 'att-' + Date.now(),
+            user_name: record.user_name,
+            user_avatar: record.user_avatar,
+            date: record.date,
+            day_name: record.day_name,
+            check_in_time: record.check_in_time,
+            check_out_time: record.check_out_time,
+            duration_hours: record.duration_hours,
+            regular_hours: record.regular_hours,
+            overtime_hours: record.overtime_hours,
+            status: record.status,
+            project_name: record.project_name,
+            notes: record.notes,
+          });
+        }
+      } catch (dbErr) {
+        console.warn('[Attendance API] Supabase checkout error', dbErr);
       }
+
       return NextResponse.json({ success: true });
     }
 
