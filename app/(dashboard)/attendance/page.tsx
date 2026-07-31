@@ -220,23 +220,65 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, [isCheckedIn, checkInTimestamp]);
 
-  // Sync current user's live status to teamStatusList
+  // Sync current user's live status to teamStatusList & poll shared server API every 3s
   useEffect(() => {
-    setTeamStatusList((prev) =>
-      prev.map((m) => {
-        if (m.name.toLowerCase().includes(currentUser.username.toLowerCase())) {
-          return {
-            ...m,
-            isOnline: isCheckedIn,
-            checkInTime: checkInTime || undefined,
-            checkInTimestamp: checkInTimestamp || undefined,
-            project: selectedProject,
-            statusText: isCheckedIn ? 'Online & Bekerja' : 'Belum Check-In',
-          };
+    async function syncRealTimeTeamAttendance() {
+      try {
+        const res = await fetch('/api/attendance');
+        if (res.ok) {
+          const data = await res.json();
+          const activeCheckIns: any[] = data.activeCheckIns || [];
+
+          setTeamStatusList((prev) =>
+            prev.map((m) => {
+              const active = activeCheckIns.find((a: any) => {
+                const aName = (a.user_name || '').toLowerCase().trim();
+                const mName = (m.name || '').toLowerCase().trim();
+                const mEmailPrefix = (m.email || '').split('@')[0].toLowerCase().trim();
+                return aName === mName || aName === mEmailPrefix || mName.includes(aName) || aName.includes(mName);
+              });
+
+              if (active) {
+                return {
+                  ...m,
+                  isOnline: true,
+                  checkInTime: active.checkInTime,
+                  checkInTimestamp: active.checkInTimestamp,
+                  project: active.selectedProject,
+                  statusText: 'Online & Bekerja',
+                };
+              }
+
+              if (m.name.toLowerCase().includes(currentUser.username.toLowerCase()) && isCheckedIn) {
+                return {
+                  ...m,
+                  isOnline: true,
+                  checkInTime: checkInTime || undefined,
+                  checkInTimestamp: checkInTimestamp || undefined,
+                  project: selectedProject,
+                  statusText: 'Online & Bekerja',
+                };
+              }
+
+              return {
+                ...m,
+                isOnline: false,
+                checkInTime: undefined,
+                checkInTimestamp: undefined,
+                project: undefined,
+                statusText: 'Belum Check-In',
+              };
+            })
+          );
         }
-        return m;
-      })
-    );
+      } catch (err) {
+        console.warn('[Attendance] Live sync error', err);
+      }
+    }
+
+    syncRealTimeTeamAttendance();
+    const interval = setInterval(syncRealTimeTeamAttendance, 3000);
+    return () => clearInterval(interval);
   }, [isCheckedIn, checkInTime, checkInTimestamp, selectedProject, currentUser.username]);
 
   // 3. Handle Check-In
@@ -264,6 +306,21 @@ export default function AttendancePage() {
       notesInput,
     };
     localStorage.setItem('bilik_active_attendance', JSON.stringify(activeObj));
+
+    // Broadcast check-in to shared server API for cross-browser & cross-device sync
+    fetch('/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'checkin',
+        user_name: currentUser.username,
+        user_avatar: currentUser.avatar,
+        selectedProject,
+        notesInput,
+        checkInTime: startTimeStr,
+        checkInTimestamp: startTimestamp,
+      }),
+    }).catch(() => {});
   };
 
   // 4. Handle Check-Out (Includes Minimum 1 Hour Threshold + Overtime Logic)
@@ -359,6 +416,17 @@ export default function AttendancePage() {
     setElapsedSeconds(0);
     setNotesInput('');
     localStorage.removeItem('bilik_active_attendance');
+
+    // Broadcast checkout to shared server API
+    fetch('/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'checkout',
+        user_name: currentUser.username,
+        record: newRecord,
+      }),
+    }).catch(() => {});
   };
 
   // 5. Handle Submit Leave Request (Izin / Sakit / Cuti)
