@@ -220,65 +220,111 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, [isCheckedIn, checkInTimestamp]);
 
-  // Sync current user's live status to teamStatusList & poll shared server API every 3s
-  useEffect(() => {
-    async function syncRealTimeTeamAttendance() {
+  // Sync current user's live status to teamStatusList & poll shared server API + local storage store every 2s
+  const syncRealTimeTeamAttendance = async () => {
+    try {
+      // 1. Fetch server API active check-ins
+      let serverActiveList: any[] = [];
       try {
         const res = await fetch('/api/attendance');
         if (res.ok) {
           const data = await res.json();
-          const activeCheckIns: any[] = data.activeCheckIns || [];
-
-          setTeamStatusList((prev) =>
-            prev.map((m) => {
-              const active = activeCheckIns.find((a: any) => {
-                const aName = (a.user_name || '').toLowerCase().trim();
-                const mName = (m.name || '').toLowerCase().trim();
-                const mEmailPrefix = (m.email || '').split('@')[0].toLowerCase().trim();
-                return aName === mName || aName === mEmailPrefix || mName.includes(aName) || aName.includes(mName);
-              });
-
-              if (active) {
-                return {
-                  ...m,
-                  isOnline: true,
-                  checkInTime: active.checkInTime,
-                  checkInTimestamp: active.checkInTimestamp,
-                  project: active.selectedProject,
-                  statusText: 'Online & Bekerja',
-                };
-              }
-
-              if (m.name.toLowerCase().includes(currentUser.username.toLowerCase()) && isCheckedIn) {
-                return {
-                  ...m,
-                  isOnline: true,
-                  checkInTime: checkInTime || undefined,
-                  checkInTimestamp: checkInTimestamp || undefined,
-                  project: selectedProject,
-                  statusText: 'Online & Bekerja',
-                };
-              }
-
-              return {
-                ...m,
-                isOnline: false,
-                checkInTime: undefined,
-                checkInTimestamp: undefined,
-                project: undefined,
-                statusText: 'Belum Check-In',
-              };
-            })
-          );
+          serverActiveList = data.activeCheckIns || [];
         }
-      } catch (err) {
-        console.warn('[Attendance] Live sync error', err);
+      } catch {
+        // Fallback to local store if offline
       }
+
+      // 2. Fetch local storage shared active check-ins store
+      let localStoreMap: Record<string, any> = {};
+      try {
+        const storeStr = localStorage.getItem('bilik_team_active_store');
+        if (storeStr) localStoreMap = JSON.parse(storeStr);
+      } catch {
+        // ignore
+      }
+
+      const localActiveList = Object.values(localStoreMap);
+      const combinedActiveList = [...serverActiveList, ...localActiveList];
+
+      setTeamStatusList((prev) =>
+        prev.map((m) => {
+          const mNameClean = (m.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const mEmailPrefix = (m.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          const active = combinedActiveList.find((a: any) => {
+            const aNameClean = (a.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return (
+              aNameClean === mNameClean ||
+              aNameClean === mEmailPrefix ||
+              (aNameClean.length > 3 && mNameClean.includes(aNameClean)) ||
+              (mNameClean.length > 3 && aNameClean.includes(mNameClean))
+            );
+          });
+
+          if (active) {
+            return {
+              ...m,
+              isOnline: true,
+              checkInTime: active.checkInTime,
+              checkInTimestamp: active.checkInTimestamp,
+              project: active.selectedProject || 'Bilik Strategi Workspace',
+              statusText: 'Online & Bekerja',
+            };
+          }
+
+          if (m.name.toLowerCase().includes(currentUser.username.toLowerCase()) && isCheckedIn) {
+            return {
+              ...m,
+              isOnline: true,
+              checkInTime: checkInTime || undefined,
+              checkInTimestamp: checkInTimestamp || undefined,
+              project: selectedProject,
+              statusText: 'Online & Bekerja',
+            };
+          }
+
+          return {
+            ...m,
+            isOnline: false,
+            checkInTime: undefined,
+            checkInTimestamp: undefined,
+            project: undefined,
+            statusText: 'Belum Check-In',
+          };
+        })
+      );
+    } catch (err) {
+      console.warn('[Attendance] Live sync error', err);
+    }
+  };
+
+  // Listen to BroadcastChannel & Storage events for INSTANT cross-tab / cross-window sync
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      bc = new BroadcastChannel('bilik_attendance_channel');
+      bc.onmessage = () => {
+        syncRealTimeTeamAttendance();
+      };
     }
 
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'bilik_active_attendance' || e.key === 'bilik_team_active_store') {
+        syncRealTimeTeamAttendance();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
     syncRealTimeTeamAttendance();
-    const interval = setInterval(syncRealTimeTeamAttendance, 3000);
-    return () => clearInterval(interval);
+
+    const interval = setInterval(syncRealTimeTeamAttendance, 2000);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, [isCheckedIn, checkInTime, checkInTimestamp, selectedProject, currentUser.username]);
 
   // 3. Handle Check-In
@@ -306,6 +352,26 @@ export default function AttendancePage() {
       notesInput,
     };
     localStorage.setItem('bilik_active_attendance', JSON.stringify(activeObj));
+
+    // Update shared team store for instant cross-tab sync
+    try {
+      const storeStr = localStorage.getItem('bilik_team_active_store');
+      const storeMap = storeStr ? JSON.parse(storeStr) : {};
+      storeMap[currentUser.username.toLowerCase()] = activeObj;
+      localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
+    } catch {
+      // ignore
+    }
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+        bc.close();
+      } catch {
+        // ignore
+      }
+    }
 
     // Broadcast check-in to shared server API for cross-browser & cross-device sync
     fetch('/api/attendance', {
@@ -416,6 +482,27 @@ export default function AttendancePage() {
     setElapsedSeconds(0);
     setNotesInput('');
     localStorage.removeItem('bilik_active_attendance');
+
+    try {
+      const storeStr = localStorage.getItem('bilik_team_active_store');
+      if (storeStr) {
+        const storeMap = JSON.parse(storeStr);
+        delete storeMap[currentUser.username.toLowerCase()];
+        localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
+      }
+    } catch {
+      // ignore
+    }
+
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+        bc.close();
+      } catch {
+        // ignore
+      }
+    }
 
     // Broadcast checkout to shared server API
     fetch('/api/attendance', {
