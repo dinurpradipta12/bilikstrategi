@@ -954,14 +954,16 @@ export default function AttendancePage() {
               Daftar anggota tim yang sedang aktif bekerja beserta durasi online check-in secara real-time.
             </p>
 
-            {/* Member Active Cards List */}
-            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
-              {teamStatusList.map((m) => {
-                let liveMemberDurationStr = '00:00:00';
-                if (m.isOnline && m.checkInTimestamp) {
-                  const sec = Math.max(0, Math.floor((Date.now() - m.checkInTimestamp) / 1000));
-                  liveMemberDurationStr = formatTimer(sec);
-                }
+            {/* Member Active Cards List - Online members always sorted to the top */}
+            <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
+              {[...teamStatusList]
+                .sort((a, b) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0))
+                .map((m) => {
+                  let liveMemberDurationStr = '00:00:00';
+                  if (m.isOnline && m.checkInTimestamp) {
+                    const sec = Math.max(0, Math.floor((Date.now() - m.checkInTimestamp) / 1000));
+                    liveMemberDurationStr = formatTimer(sec);
+                  }
 
                 return (
                   <div
