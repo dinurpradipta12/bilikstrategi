@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export interface ActiveCheckIn {
   user_name: string;
   user_avatar?: string;
@@ -10,18 +13,18 @@ export interface ActiveCheckIn {
   notesInput: string;
 }
 
-// In-memory global fallback
+// In-memory fallback
 const globalActiveCheckIns = new Map<string, ActiveCheckIn>();
 const globalAttendanceHistory: any[] = [];
 
 export async function GET() {
   try {
-    // 1. Fetch from Supabase DB active_sessions
+    // 1. Fetch from Supabase DB active_sessions (Direct live query, no caching)
     const { data: dbSessions, error } = await supabase
       .from('active_sessions')
       .select('*');
 
-    if (!error && dbSessions && dbSessions.length > 0) {
+    if (!error && dbSessions) {
       const activeList: ActiveCheckIn[] = dbSessions.map((row) => ({
         user_name: row.user_name,
         user_avatar: row.user_avatar,
@@ -31,12 +34,19 @@ export async function GET() {
         notesInput: row.notes_input || '',
       }));
 
-      return NextResponse.json({
-        success: true,
-        source: 'supabase',
-        activeCheckIns: activeList,
-        history: globalAttendanceHistory,
-      });
+      return NextResponse.json(
+        {
+          success: true,
+          source: 'supabase',
+          activeCheckIns: activeList,
+          history: globalAttendanceHistory,
+        },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+        }
+      );
     }
   } catch (e) {
     console.warn('[Attendance API] Supabase GET fallback to memory', e);
@@ -44,12 +54,19 @@ export async function GET() {
 
   // Fallback to memory
   const activeList = Array.from(globalActiveCheckIns.values());
-  return NextResponse.json({
-    success: true,
-    source: 'memory',
-    activeCheckIns: activeList,
-    history: globalAttendanceHistory,
-  });
+  return NextResponse.json(
+    {
+      success: true,
+      source: 'memory',
+      activeCheckIns: activeList,
+      history: globalAttendanceHistory,
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    }
+  );
 }
 
 export async function POST(req: Request) {

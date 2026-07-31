@@ -25,6 +25,7 @@ import {
   Users,
   Activity,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
 
 export interface AttendanceRecord {
   id: string;
@@ -220,13 +221,31 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, [isCheckedIn, checkInTimestamp]);
 
-  // Sync current user's live status to teamStatusList & poll shared server API + local storage store every 2s
+  // Sync current user's live status to teamStatusList & poll shared server API + Supabase DB + local storage store every 2s
   const syncRealTimeTeamAttendance = async () => {
     try {
-      // 1. Fetch server API active check-ins
+      // 1. Direct Supabase DB active_sessions fetch
+      let supabaseActiveList: any[] = [];
+      try {
+        const { data: dbSessions } = await supabase.from('active_sessions').select('*');
+        if (dbSessions && dbSessions.length > 0) {
+          supabaseActiveList = dbSessions.map((row) => ({
+            user_name: row.user_name,
+            user_avatar: row.user_avatar,
+            checkInTime: row.check_in_time,
+            checkInTimestamp: Number(row.check_in_timestamp),
+            selectedProject: row.selected_project,
+            notesInput: row.notes_input || '',
+          }));
+        }
+      } catch {
+        // ignore
+      }
+
+      // 2. Fetch server API active check-ins (no-store)
       let serverActiveList: any[] = [];
       try {
-        const res = await fetch('/api/attendance');
+        const res = await fetch('/api/attendance', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           serverActiveList = data.activeCheckIns || [];
@@ -235,7 +254,7 @@ export default function AttendancePage() {
         // Fallback to local store if offline
       }
 
-      // 2. Fetch local storage shared active check-ins store
+      // 3. Fetch local storage shared active check-ins store
       let localStoreMap: Record<string, any> = {};
       try {
         const storeStr = localStorage.getItem('bilik_team_active_store');
@@ -245,7 +264,7 @@ export default function AttendancePage() {
       }
 
       const localActiveList = Object.values(localStoreMap);
-      const combinedActiveList = [...serverActiveList, ...localActiveList];
+      const combinedActiveList = [...supabaseActiveList, ...serverActiveList, ...localActiveList];
 
       setTeamStatusList((prev) =>
         prev.map((m) => {
