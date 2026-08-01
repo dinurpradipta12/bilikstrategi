@@ -68,6 +68,16 @@ interface FeedbackItem {
   rating: number;
 }
 
+interface ActivityLogItem {
+  id: string;
+  user_name: string;
+  user_avatar?: string;
+  action: string;
+  entity_name: string;
+  details?: string;
+  timestamp: string;
+}
+
 interface ProjectMeta {
   description: string;
   milestones: Milestone[];
@@ -80,6 +90,7 @@ interface ProjectMeta {
   teamMembers: TeamMemberItem[];
   files: FileAssetItem[];
   feedback: FeedbackItem[];
+  activityLogs: ActivityLogItem[];
 }
 
 export default function ProjectDetailPage() {
@@ -99,6 +110,8 @@ export default function ProjectDetailPage() {
   const [isEditTeamOpen, setIsEditTeamOpen] = useState(false);
   const [isAddFileOpen, setIsAddFileOpen] = useState(false);
   const [isAddFeedbackOpen, setIsAddFeedbackOpen] = useState(false);
+  const [isAddLogOpen, setIsAddLogOpen] = useState(false);
+  const [filterUser, setFilterUser] = useState<string>('all');
 
   // Project Meta persistent state
   const [meta, setMeta] = useState<ProjectMeta>({
@@ -116,9 +129,9 @@ export default function ProjectDetailPage() {
       email: 'contact@clientcompany.com',
     },
     teamMembers: [
-      { id: 'u1', name: 'Dinur Pradipta', role: 'Project Lead', email: 'dinur@bilikstrategi.id', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' },
-      { id: 'u2', name: 'Syaiful Akhsin', role: 'Senior Designer', email: 'syaiful@bilikstrategi.id', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' },
-      { id: 'u3', name: 'Budi Santoso', role: 'Copywriter & Content', email: 'budi@bilikstrategi.id', avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150' },
+      { id: 'u1', name: 'Dinur Pradipta', role: 'Project Lead', email: 'dinur@bilikstrategi.id', avatar_url: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg' },
+      { id: 'u2', name: 'Dinur mp', role: 'Member', email: 'contact.dinurpradipta@gmail.com', avatar_url: 'https://ui-avatars.com/api/?name=Dinur%20mp&background=24324A&color=F26B5E&font-size=0.4&bold=true' },
+      { id: 'u3', name: 'Syaiful Akhsin', role: 'Senior Designer', email: 'syaiful@bilikstrategi.id', avatar_url: 'https://ui-avatars.com/api/?name=Syaiful%20Akhsin&background=24324A&color=F26B5E&font-size=0.4&bold=true' },
     ],
     files: [
       { id: 'f1', name: 'Brief_Project_Scope_v1.pdf', url: 'https://app.clickup.com', type: 'PDF Document', added_at: '2026-07-10' },
@@ -126,6 +139,35 @@ export default function ProjectDetailPage() {
     ],
     feedback: [
       { id: 'fb1', author: 'Budi Santoso', company: 'Nusantara Retail Group', comment: 'Desain visual awal sangat menarik! Ditunggu hasil render 3D berikutnya.', date: '2026-07-20', rating: 5 },
+    ],
+    activityLogs: [
+      {
+        id: 'act-1',
+        user_name: 'Dinur Pradipta',
+        user_avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+        action: 'BUAT TASK',
+        entity_name: 'contoh task dulu edit 2',
+        details: 'Membuat task baru di ClickUp List',
+        timestamp: '2026-08-02T00:15:00Z',
+      },
+      {
+        id: 'act-2',
+        user_name: 'Dinur mp',
+        user_avatar: 'https://ui-avatars.com/api/?name=Dinur%20mp&background=24324A&color=F26B5E&font-size=0.4&bold=true',
+        action: 'SELESAIKAN MILESTONE',
+        entity_name: 'Kickoff Meeting & Brief Approval',
+        details: 'Mengubah status milestone menjadi Selesai (100%)',
+        timestamp: '2026-08-01T14:30:00Z',
+      },
+      {
+        id: 'act-3',
+        user_name: 'Syaiful Akhsin',
+        user_avatar: 'https://ui-avatars.com/api/?name=Syaiful%20Akhsin&background=24324A&color=F26B5E&font-size=0.4&bold=true',
+        action: 'TAMBAH SUBTASK',
+        entity_name: 'Penyusunan referensi visual moodboard',
+        details: 'Menambahkan subtask baru ke ClickUp Task',
+        timestamp: '2026-07-31T10:00:00Z',
+      },
     ],
   });
 
@@ -841,18 +883,109 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 6: ACTIVITY LOG */}
+      {/* TAB 6: ACTIVITY LOG & AUDIT TRAIL */}
       {activeTab === 'activity' && (
-        <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs space-y-4">
-          <h3 className="text-sm font-bold text-[#24324A]">Riwayat Aktivitas Project</h3>
-          <div className="space-y-3 text-xs">
-            {MOCK_ACTIVITY_LOGS.map((act) => (
-              <div key={act.id} className="p-3.5 border-b border-[#E8E8EC] last:border-0">
-                <p><strong className="text-[#202124]">{act.user_name}:</strong> {act.action} - <span className="font-medium text-[#24324A]">{act.entity_name}</span></p>
-                <span className="text-[10px] text-[#737680]">{act.timestamp}</span>
-              </div>
-            ))}
+        <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E8E8EC] pb-4">
+            <div>
+              <h3 className="text-base font-extrabold text-[#24324A] flex items-center gap-2">
+                <History className="w-5 h-5 text-[#F26B5E]" />
+                <span>Riwayat & Audit Trail Aktivitas Project</span>
+              </h3>
+              <p className="text-xs text-[#737680] mt-0.5">
+                Pencatatan real-time seluruh aktivitas & updates per user di project ini.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Filter per user */}
+              <select
+                value={filterUser}
+                onChange={(e) => setFilterUser(e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold border border-[#E8E8EC] rounded-lg bg-[#F7F7F8] text-[#24324A] outline-none cursor-pointer"
+              >
+                <option value="all">Semua Member Tim</option>
+                {clickupMembers.map((m) => (
+                  <option key={m.id} value={m.name}>
+                    {m.name} ({m.role})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setIsAddLogOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
+                <span>Catat Aktivitas</span>
+              </button>
+            </div>
           </div>
+
+          {/* Activity Log Feed */}
+          {(() => {
+            const logsToDisplay = (meta.activityLogs || []).filter(
+              (act) => filterUser === 'all' || act.user_name.toLowerCase() === filterUser.toLowerCase()
+            );
+
+            if (logsToDisplay.length === 0) {
+              return (
+                <div className="p-8 text-center text-xs text-[#737680] border border-dashed border-[#E8E8EC] rounded-xl">
+                  Belum ada aktivitas tercatat untuk filter ini. Klik &quot;Catat Aktivitas&quot; di atas untuk menambahkan catatan log baru.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                {logsToDisplay.map((act) => (
+                  <div
+                    key={act.id}
+                    className="p-4 border border-[#E8E8EC] rounded-xl bg-[#FFFFFF] hover:bg-[#F7F7F8] transition-colors flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={
+                          act.user_avatar ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(act.user_name)}&background=24324A&color=F26B5E&font-size=0.4&bold=true`
+                        }
+                        alt={act.user_name}
+                        className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC] flex-shrink-0"
+                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-[#24324A]">{act.user_name}</span>
+                          <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded bg-[#EEF2F7] text-[#24324A] border border-[#E8E8EC]">
+                            {act.action}
+                          </span>
+                          <span className="font-semibold text-[#202124]">{act.entity_name}</span>
+                        </div>
+                        {act.details && <p className="text-[#737680] text-[11px] leading-relaxed">{act.details}</p>}
+                        <span className="text-[10px] font-mono text-[#737680] block pt-0.5">
+                          {new Date(act.timestamp).toLocaleString('id-ID', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const updatedLogs = meta.activityLogs.filter((l) => l.id !== act.id);
+                        updateMeta({ ...meta, activityLogs: updatedLogs });
+                      }}
+                      className="p-1 text-[#737680] hover:text-[#D95858] cursor-pointer"
+                      title="Hapus Log"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1327,6 +1460,106 @@ export default function ProjectDetailPage() {
                   </button>
                   <button type="submit" className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs">
                     Simpan Feedback
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* MODAL 6: CATAT AKTIVITAS KUSTOM MODAL */}
+      {isAddLogOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
+                <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
+                  <History className="w-4 h-4 text-[#F26B5E]" />
+                  <span>Catat Aktivitas Project Kustom</span>
+                </h2>
+                <button onClick={() => setIsAddLogOpen(false)} className="p-1 text-[#737680] hover:text-[#202124]">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e: any) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const chosenMember = clickupMembers.find((m) => m.name === form.userSelect.value) || clickupMembers[0];
+
+                  const newLog: ActivityLogItem = {
+                    id: 'act-' + Date.now(),
+                    user_name: chosenMember?.name || form.userSelect.value || 'Dinur Pradipta',
+                    user_avatar: chosenMember?.avatar || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+                    action: form.actionType.value,
+                    entity_name: form.entityName.value,
+                    details: form.details.value,
+                    timestamp: new Date().toISOString(),
+                  };
+
+                  updateMeta({ ...meta, activityLogs: [newLog, ...meta.activityLogs] });
+                  setIsAddLogOpen(false);
+                }}
+                className="p-6 space-y-4 text-xs"
+              >
+                <div>
+                  <label className="block font-semibold text-[#202124] mb-1">Pilih Member / User *</label>
+                  <select name="userSelect" className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg bg-[#FFFFFF]">
+                    {clickupMembers.map((m) => (
+                      <option key={m.id} value={m.name}>
+                        {m.name} ({m.role}) - {m.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#202124] mb-1">Jenis Aktivitas *</label>
+                  <select name="actionType" className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg bg-[#FFFFFF]">
+                    <option value="UPDATE TASK">UPDATE TASK</option>
+                    <option value="CHANGE STATUS">CHANGE STATUS</option>
+                    <option value="TAMBAH SUBTASK">TAMBAH SUBTASK</option>
+                    <option value="SELESAIKAN MILESTONE">SELESAIKAN MILESTONE</option>
+                    <option value="POST COMMENT">POST COMMENT</option>
+                    <option value="UPLOAD FILE">UPLOAD FILE</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#202124] mb-1">Nama Task / Target *</label>
+                  <input
+                    name="entityName"
+                    required
+                    placeholder="Contoh: Finalisasi Design Visual Banner 3D"
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#202124] mb-1">Catatan Detail Update</label>
+                  <textarea
+                    name="details"
+                    rows={3}
+                    placeholder="Tulis rincian perbaikan atau update yang dilakukan..."
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E8EC]">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddLogOpen(false)}
+                    className="px-4 py-2 text-[#737680] hover:bg-[#F7F7F8] rounded-lg cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs cursor-pointer"
+                  >
+                    Simpan Aktivitas
                   </button>
                 </div>
               </form>
