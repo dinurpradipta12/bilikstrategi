@@ -77,7 +77,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const spaceId = process.env.CLICKUP_SPACE_ID || '90182855619';
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const spaceId = process.env.CLICKUP_SPACE_ID || '90182512965';
     const body = await req.json();
     const { name, content, due_date } = body;
 
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
       name,
       content,
       due_date: due_date ? new Date(due_date).getTime() : undefined,
-    });
+    }, token);
 
     return NextResponse.json(newList);
   } catch (error: any) {
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const { searchParams } = new URL(req.url);
     const listId = searchParams.get('listId');
 
@@ -109,7 +111,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'listId wajib diisi' }, { status: 400 });
     }
 
-    await deleteList(listId);
+    await deleteList(listId, token);
     return NextResponse.json({ success: true, listId });
   } catch (error: any) {
     return NextResponse.json(
