@@ -129,6 +129,17 @@ export default function ProjectDetailPage() {
     ],
   });
 
+  interface ClickUpMember {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    avatar: string;
+  }
+
+  const [clickupMembers, setClickupMembers] = useState<ClickUpMember[]>([]);
+  const [selectedClickUpMemberId, setSelectedClickUpMemberId] = useState<string>('');
+
   useEffect(() => {
     setMounted(true);
 
@@ -143,6 +154,33 @@ export default function ProjectDetailPage() {
         }
       }
     }
+
+    // Fetch ClickUp team members
+    async function fetchClickUpMembers() {
+      try {
+        const res = await fetch('/api/clickup/teams');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.members && data.members.length > 0) {
+            const formatted: ClickUpMember[] = data.members.map((m: any) => ({
+              id: String(m.id),
+              name: m.username || (m.email ? m.email.split('@')[0] : 'Team Member'),
+              email: m.email || '',
+              role: m.role_key || (m.role === 1 ? 'owner' : m.role === 2 ? 'admin' : 'member'),
+              avatar: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'TM')}&background=24324A&color=fff`,
+            }));
+            setClickupMembers(formatted);
+            if (formatted[0]?.id) {
+              setSelectedClickUpMemberId(formatted[0].id);
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    fetchClickUpMembers();
   }, [projectId]);
 
   // Save meta to localStorage whenever meta changes
@@ -1053,7 +1091,7 @@ export default function ProjectDetailPage() {
           document.body
         )}
 
-      {/* MODAL 3: EDIT TEAM MEMBERS MODAL */}
+      {/* MODAL 3: EDIT TEAM MEMBERS MODAL (SELECT FROM CLICKUP) */}
       {isEditTeamOpen &&
         createPortal(
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
@@ -1061,7 +1099,7 @@ export default function ProjectDetailPage() {
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#F26B5E]" />
-                  <span>Tambah Anggota Tim Project</span>
+                  <span>Tambah Anggota Tim (Pilih dari ClickUp)</span>
                 </h2>
                 <button onClick={() => setIsEditTeamOpen(false)} className="p-1 text-[#737680] hover:text-[#202124]">
                   <X className="w-4 h-4" />
@@ -1072,37 +1110,68 @@ export default function ProjectDetailPage() {
                 onSubmit={(e: any) => {
                   e.preventDefault();
                   const form = e.target;
+                  const chosenMember = clickupMembers.find((m) => m.id === selectedClickUpMemberId);
+
                   const newMember: TeamMemberItem = {
-                    id: 'tm-' + Date.now(),
-                    name: form.memberName.value,
-                    role: form.memberRole.value,
-                    email: form.memberEmail.value,
-                    avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                    id: chosenMember?.id || 'tm-' + Date.now(),
+                    name: chosenMember?.name || form.memberName?.value || 'Anggota Tim',
+                    role: form.memberRole.value || chosenMember?.role || 'Member',
+                    email: chosenMember?.email || form.memberEmail?.value || '',
+                    avatar_url: chosenMember?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
                   };
-                  updateMeta({ ...meta, teamMembers: [...meta.teamMembers, newMember] });
+
+                  if (!meta.teamMembers.some((tm) => tm.id === newMember.id || tm.name === newMember.name)) {
+                    updateMeta({ ...meta, teamMembers: [...meta.teamMembers, newMember] });
+                  }
                   setIsEditTeamOpen(false);
                 }}
                 className="p-6 space-y-4 text-xs"
               >
                 <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Nama Anggota Tim *</label>
-                  <input name="memberName" required placeholder="Contoh: Dimas Pratama" className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg" />
+                  <label className="block font-semibold text-[#202124] mb-1">
+                    Pilih Anggota Tim ClickUp Workspace *
+                  </label>
+                  <select
+                    value={selectedClickUpMemberId}
+                    onChange={(e) => setSelectedClickUpMemberId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg bg-[#FFFFFF] focus:outline-none focus:border-[#24324A]"
+                  >
+                    {clickupMembers.length === 0 ? (
+                      <option value="">Memuat anggota tim ClickUp...</option>
+                    ) : (
+                      clickupMembers.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.role}) - {u.email}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
+
                 <div>
                   <label className="block font-semibold text-[#202124] mb-1">Peran / Role di Project *</label>
-                  <input name="memberRole" required placeholder="Contoh: Senior UI/UX Designer" className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg" />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Email</label>
-                  <input name="memberEmail" type="email" placeholder="dimas@bilikstrategi.id" className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg" />
+                  <input
+                    name="memberRole"
+                    required
+                    defaultValue="Project Lead & Specialist"
+                    placeholder="Contoh: Senior UI/UX Designer, Creative Lead, Copywriter"
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A]"
+                  />
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E8EC]">
-                  <button type="button" onClick={() => setIsEditTeamOpen(false)} className="px-4 py-2 text-[#737680] hover:bg-[#F7F7F8] rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditTeamOpen(false)}
+                    className="px-4 py-2 text-[#737680] hover:bg-[#F7F7F8] rounded-lg cursor-pointer"
+                  >
                     Batal
                   </button>
-                  <button type="submit" className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs">
-                    Tambah Member
+                  <button
+                    type="submit"
+                    className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs cursor-pointer"
+                  >
+                    Tambah Member ClickUp
                   </button>
                 </div>
               </form>
