@@ -729,7 +729,7 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR GRID WITH TIMELINE BARS) */}
+          {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR WITH ONE CONTINUOUS SPANNING BAR OVERLAY) */}
           {timelineViewMode === 'month' && (
             <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
               <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
@@ -742,63 +742,156 @@ export default function ProjectDetailPage() {
                 <span>SAT</span>
               </div>
 
-              <div className="grid grid-cols-7 border-b border-[#E8E8EC] divide-x divide-y divide-[#E8E8EC] min-h-[440px]">
-                {[26, 27, 28, 29, 30, 31].map((d) => (
-                  <div key={`jul-${d}`} className="p-2 bg-[#F7F7F8]/40 min-h-[85px] text-[10px] text-[#A0A3BD]">
-                    <span>{d} Jul</span>
-                  </div>
-                ))}
-
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
-                  const isToday = d === 2;
-                  const dayMilestones = meta.milestones.filter((m) => {
-                    const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
-                    const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : 15;
-                    return d >= startD && d <= endD;
-                  });
-
-                  return (
-                    <div
-                      key={`aug-${d}`}
-                      className={`p-2 min-h-[85px] flex flex-col justify-between transition-colors hover:bg-[#F7F7F8]/60 ${
-                        isToday ? 'bg-[#EEF2F7]/50' : 'bg-[#FFFFFF]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-extrabold ${
-                            isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+              <div className="divide-y divide-[#E8E8EC]">
+                {[
+                  {
+                    weekIndex: 0,
+                    days: [
+                      { dateNum: 26, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 27, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 28, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 29, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 30, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 31, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 1, isCurrentMonth: true, monthDay: 1 },
+                    ],
+                  },
+                  {
+                    weekIndex: 1,
+                    days: [
+                      { dateNum: 2, isCurrentMonth: true, isToday: true, monthDay: 2 },
+                      { dateNum: 3, isCurrentMonth: true, monthDay: 3 },
+                      { dateNum: 4, isCurrentMonth: true, monthDay: 4 },
+                      { dateNum: 5, isCurrentMonth: true, monthDay: 5 },
+                      { dateNum: 6, isCurrentMonth: true, monthDay: 6 },
+                      { dateNum: 7, isCurrentMonth: true, monthDay: 7 },
+                      { dateNum: 8, isCurrentMonth: true, monthDay: 8 },
+                    ],
+                  },
+                  {
+                    weekIndex: 2,
+                    days: [
+                      { dateNum: 9, isCurrentMonth: true, monthDay: 9 },
+                      { dateNum: 10, isCurrentMonth: true, monthDay: 10 },
+                      { dateNum: 11, isCurrentMonth: true, monthDay: 11 },
+                      { dateNum: 12, isCurrentMonth: true, monthDay: 12 },
+                      { dateNum: 13, isCurrentMonth: true, monthDay: 13 },
+                      { dateNum: 14, isCurrentMonth: true, monthDay: 14 },
+                      { dateNum: 15, isCurrentMonth: true, monthDay: 15 },
+                    ],
+                  },
+                  {
+                    weekIndex: 3,
+                    days: [
+                      { dateNum: 16, isCurrentMonth: true, monthDay: 16 },
+                      { dateNum: 17, isCurrentMonth: true, monthDay: 17 },
+                      { dateNum: 18, isCurrentMonth: true, monthDay: 18 },
+                      { dateNum: 19, isCurrentMonth: true, monthDay: 19 },
+                      { dateNum: 20, isCurrentMonth: true, monthDay: 20 },
+                      { dateNum: 21, isCurrentMonth: true, monthDay: 21 },
+                      { dateNum: 22, isCurrentMonth: true, monthDay: 22 },
+                    ],
+                  },
+                  {
+                    weekIndex: 4,
+                    days: [
+                      { dateNum: 23, isCurrentMonth: true, monthDay: 23 },
+                      { dateNum: 24, isCurrentMonth: true, monthDay: 24 },
+                      { dateNum: 25, isCurrentMonth: true, monthDay: 25 },
+                      { dateNum: 26, isCurrentMonth: true, monthDay: 26 },
+                      { dateNum: 27, isCurrentMonth: true, monthDay: 27 },
+                      { dateNum: 28, isCurrentMonth: true, monthDay: 28 },
+                      { dateNum: 29, isCurrentMonth: true, monthDay: 29 },
+                    ],
+                  },
+                  {
+                    weekIndex: 5,
+                    days: [
+                      { dateNum: 30, isCurrentMonth: true, monthDay: 30 },
+                      { dateNum: 31, isCurrentMonth: true, monthDay: 31 },
+                      { dateNum: 1, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 2, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 3, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 4, isCurrentMonth: false, monthDay: 0 },
+                      { dateNum: 5, isCurrentMonth: false, monthDay: 0 },
+                    ],
+                  },
+                ].map((week) => (
+                  <div key={week.weekIndex} className="relative min-h-[100px]">
+                    <div className="grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
+                      {week.days.map((day, dIdx) => (
+                        <div
+                          key={dIdx}
+                          className={`p-2 flex flex-col justify-between ${
+                            !day.isCurrentMonth
+                              ? 'bg-[#F7F7F8]/40 text-[#A0A3BD]'
+                              : day.isToday
+                              ? 'bg-[#EEF2F7]/50'
+                              : 'bg-[#FFFFFF]'
                           }`}
                         >
-                          {d}
-                        </span>
-                      </div>
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-extrabold ${
+                                day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                              }`}
+                            >
+                              {day.dateNum}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-                      <div className="space-y-1 mt-1 flex-1">
-                        {dayMilestones.slice(0, 2).map((m, idx) => {
-                          const themes = [
-                            { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
-                            { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
-                            { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
-                            { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
-                          ];
-                          const theme = themes[idx % themes.length];
-                          return (
+                    <div className="relative z-10 pt-8 pb-2 px-1 space-y-1.5">
+                      {meta.milestones.map((m, mIdx) => {
+                        const themes = [
+                          { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                          { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                          { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                          { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                        ];
+                        const theme = themes[mIdx % themes.length];
+
+                        const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
+                        const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : 15;
+
+                        const activeColsInWeek: number[] = [];
+                        week.days.forEach((day, colIdx) => {
+                          if (day.isCurrentMonth && day.monthDay >= startD && day.monthDay <= endD) {
+                            activeColsInWeek.push(colIdx);
+                          }
+                        });
+
+                        if (activeColsInWeek.length === 0) return null;
+
+                        const startCol = activeColsInWeek[0];
+                        const endCol = activeColsInWeek[activeColsInWeek.length - 1];
+                        const colSpan = endCol - startCol + 1;
+
+                        return (
+                          <div key={m.id} className="grid grid-cols-7 gap-1">
                             <div
-                              key={m.id}
+                              style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
                               onClick={() => toggleMilestoneStatus(m.id)}
-                              className={`${theme.bg} ${theme.text} ${theme.border} border text-[9px] font-bold p-1 rounded-md truncate cursor-pointer hover:opacity-90 flex items-center gap-1 shadow-2xs`}
+                              className={`${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-2.5 py-1 text-[10px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
                               title={m.name}
                             >
-                              <span className="text-[10px]">{theme.icon}</span>
-                              <span className="truncate">{m.name}</span>
+                              <div className="flex items-center gap-1 min-w-0 truncate">
+                                <span className="text-xs flex-shrink-0">{theme.icon}</span>
+                                <span className="truncate">{m.name}</span>
+                              </div>
+
+                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${theme.border} ${theme.bg} flex-shrink-0 ml-1`}>
+                                {colSpan} Hari
+                              </span>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           )}

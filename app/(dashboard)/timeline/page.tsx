@@ -40,6 +40,82 @@ const PASTEL_THEMES = [
   { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
 ];
 
+// Full Month Weeks Structure for August 2026
+const MONTH_WEEKS = [
+  {
+    weekIndex: 0,
+    days: [
+      { dateNum: 26, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 27, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 28, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 29, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 30, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 31, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 1, isCurrentMonth: true, monthDay: 1 },
+    ],
+  },
+  {
+    weekIndex: 1,
+    days: [
+      { dateNum: 2, isCurrentMonth: true, isToday: true, monthDay: 2 },
+      { dateNum: 3, isCurrentMonth: true, monthDay: 3 },
+      { dateNum: 4, isCurrentMonth: true, monthDay: 4 },
+      { dateNum: 5, isCurrentMonth: true, monthDay: 5 },
+      { dateNum: 6, isCurrentMonth: true, monthDay: 6 },
+      { dateNum: 7, isCurrentMonth: true, monthDay: 7 },
+      { dateNum: 8, isCurrentMonth: true, monthDay: 8 },
+    ],
+  },
+  {
+    weekIndex: 2,
+    days: [
+      { dateNum: 9, isCurrentMonth: true, monthDay: 9 },
+      { dateNum: 10, isCurrentMonth: true, monthDay: 10 },
+      { dateNum: 11, isCurrentMonth: true, monthDay: 11 },
+      { dateNum: 12, isCurrentMonth: true, monthDay: 12 },
+      { dateNum: 13, isCurrentMonth: true, monthDay: 13 },
+      { dateNum: 14, isCurrentMonth: true, monthDay: 14 },
+      { dateNum: 15, isCurrentMonth: true, monthDay: 15 },
+    ],
+  },
+  {
+    weekIndex: 3,
+    days: [
+      { dateNum: 16, isCurrentMonth: true, monthDay: 16 },
+      { dateNum: 17, isCurrentMonth: true, monthDay: 17 },
+      { dateNum: 18, isCurrentMonth: true, monthDay: 18 },
+      { dateNum: 19, isCurrentMonth: true, monthDay: 19 },
+      { dateNum: 20, isCurrentMonth: true, monthDay: 20 },
+      { dateNum: 21, isCurrentMonth: true, monthDay: 21 },
+      { dateNum: 22, isCurrentMonth: true, monthDay: 22 },
+    ],
+  },
+  {
+    weekIndex: 4,
+    days: [
+      { dateNum: 23, isCurrentMonth: true, monthDay: 23 },
+      { dateNum: 24, isCurrentMonth: true, monthDay: 24 },
+      { dateNum: 25, isCurrentMonth: true, monthDay: 25 },
+      { dateNum: 26, isCurrentMonth: true, monthDay: 26 },
+      { dateNum: 27, isCurrentMonth: true, monthDay: 27 },
+      { dateNum: 28, isCurrentMonth: true, monthDay: 28 },
+      { dateNum: 29, isCurrentMonth: true, monthDay: 29 },
+    ],
+  },
+  {
+    weekIndex: 5,
+    days: [
+      { dateNum: 30, isCurrentMonth: true, monthDay: 30 },
+      { dateNum: 31, isCurrentMonth: true, monthDay: 31 },
+      { dateNum: 1, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 2, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 3, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 4, isCurrentMonth: false, monthDay: 0 },
+      { dateNum: 5, isCurrentMonth: false, monthDay: 0 },
+    ],
+  },
+];
+
 export default function TimelinePage() {
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
   const [projects, setProjects] = useState<AgencyProject[]>([]);
@@ -48,11 +124,11 @@ export default function TimelinePage() {
   const [selectedTask, setSelectedTask] = useState<AgencyTask | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Filters & Controls state (ONLY 'week' and 'month' modes)
+  // Controls state (ONLY 'week' and 'month' modes)
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('month');
 
   const fetchData = async () => {
     setLoading(true);
@@ -93,19 +169,15 @@ export default function TimelinePage() {
     return matchesProject && matchesStatus && matchesSearch;
   });
 
-  // Calculate task status counts
+  // Task status counts
   const totalCount = tasks.length;
   const inProgressCount = tasks.filter((t) => t.status === 'in_progress').length;
   const toDoCount = tasks.filter((t) => t.status === 'to_do').length;
   const completedCount = tasks.filter((t) => t.status === 'completed' || (t as any).status?.type === 'closed').length;
 
-  // Full Month Calendar Days (August 2026)
-  // Aug 1 = Saturday (col 6). So Jul 26-31 fill cols 0-5.
-  const augustDays = Array.from({ length: 31 }, (_, i) => i + 1);
-
   return (
     <div className="space-y-6 animate-fade-in pb-12">
-      {/* Top Header Controls Bar */}
+      {/* Header Controls Bar */}
       <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl p-5 shadow-2xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Left Month Selector & Search */}
@@ -310,9 +382,9 @@ export default function TimelinePage() {
         </div>
       )}
 
-      {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR GRID WITH TIMELINE BARS) */}
+      {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR WITH ONE CONTINUOUS SPANNING BAR OVERLAY) */}
       {viewMode === 'month' && (
-        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden space-y-0">
+        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
           {/* Day of Week Header Row */}
           <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
             <span>SUN</span>
@@ -324,74 +396,87 @@ export default function TimelinePage() {
             <span>SAT</span>
           </div>
 
-          {/* 31-Day Full Calendar Grid (5 Weeks) */}
-          <div className="grid grid-cols-7 border-b border-[#E8E8EC] divide-x divide-y divide-[#E8E8EC] min-h-[520px]">
-            {/* Blank offset days (Jul 26..31) */}
-            {[26, 27, 28, 29, 30, 31].map((d) => (
-              <div key={`jul-${d}`} className="p-2 bg-[#F7F7F8]/40 min-h-[90px] text-[10px] text-[#A0A3BD]">
-                <span>{d} Jul</span>
-              </div>
-            ))}
-
-            {/* August Days 1..31 */}
-            {augustDays.map((d) => {
-              const isToday = d === 2;
-              const dayTasks = filteredTasks.filter((t) => {
-                const dueD = t.due_date ? new Date(t.due_date).getDate() : 5;
-                const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(1, dueD - 3);
-                return d >= startD && d <= dueD;
-              });
-
-              return (
-                <div
-                  key={`aug-${d}`}
-                  className={`p-2 min-h-[95px] flex flex-col justify-between transition-colors hover:bg-[#F7F7F8]/60 ${
-                    isToday ? 'bg-[#EEF2F7]/50' : 'bg-[#FFFFFF]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-extrabold ${
-                        isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+          {/* 6 Week Rows Container */}
+          <div className="divide-y divide-[#E8E8EC]">
+            {MONTH_WEEKS.map((week) => (
+              <div key={week.weekIndex} className="relative min-h-[105px]">
+                {/* Background Date Cells Grid (7 Columns) */}
+                <div className="grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
+                  {week.days.map((day, dIdx) => (
+                    <div
+                      key={dIdx}
+                      className={`p-2 flex flex-col justify-between ${
+                        !day.isCurrentMonth
+                          ? 'bg-[#F7F7F8]/40 text-[#A0A3BD]'
+                          : day.isToday
+                          ? 'bg-[#EEF2F7]/50'
+                          : 'bg-[#FFFFFF]'
                       }`}
                     >
-                      {d}
-                    </span>
-                    {dayTasks.length > 0 && (
-                      <span className="text-[9px] font-bold text-[#F26B5E] bg-[#FFF0ED] px-1.5 py-0.2 rounded-full">
-                        {dayTasks.length} task
-                      </span>
-                    )}
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-extrabold ${
+                            day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                          }`}
+                        >
+                          {day.dateNum}
+                        </span>
+                        {!day.isCurrentMonth && <span className="text-[9px] text-[#A0A3BD]">Jul/Sep</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                  {/* Task Timeline Pill Bars rendered in Date Cell */}
-                  <div className="space-y-1 mt-1 flex-1">
-                    {dayTasks.slice(0, 2).map((t, idx) => {
-                      const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
-                      return (
+                {/* Foreground Task Timeline Spanning Overlay (MENYATU OVERLAY) */}
+                <div className="relative z-10 pt-9 pb-2 px-1 space-y-1.5">
+                  {filteredTasks.map((task, tIdx) => {
+                    const theme = PASTEL_THEMES[tIdx % PASTEL_THEMES.length];
+                    const dueD = task.due_date ? new Date(task.due_date).getDate() : 5;
+                    const startD = task.start_date ? new Date(task.start_date).getDate() : Math.max(1, dueD - 3);
+
+                    // Find which columns in THIS week row fall inside [startD, dueD]
+                    const activeColsInWeek: number[] = [];
+                    week.days.forEach((day, colIdx) => {
+                      if (day.isCurrentMonth && day.monthDay >= startD && day.monthDay <= dueD) {
+                        activeColsInWeek.push(colIdx);
+                      }
+                    });
+
+                    if (activeColsInWeek.length === 0) return null;
+
+                    const startCol = activeColsInWeek[0];
+                    const endCol = activeColsInWeek[activeColsInWeek.length - 1];
+                    const colSpan = endCol - startCol + 1;
+
+                    return (
+                      <div key={task.id} className="grid grid-cols-7 gap-1">
                         <div
-                          key={t.id}
+                          style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
                           onClick={() => {
-                            setSelectedTask(t);
+                            setSelectedTask(task);
                             setDrawerOpen(true);
                           }}
-                          className={`${theme.bg} ${theme.text} ${theme.border} border text-[9px] font-bold p-1 rounded-md truncate cursor-pointer hover:opacity-90 flex items-center gap-1 shadow-2xs`}
-                          title={`${t.task_name} (${t.project_name})`}
+                          className={`${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-3 py-1 text-[11px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
+                          title={`${task.task_name} (${task.project_name})`}
                         >
-                          <span className="text-[10px]">{theme.icon}</span>
-                          <span className="truncate">{t.task_name}</span>
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            <span className="text-xs flex-shrink-0">{theme.icon}</span>
+                            <span className="truncate">{task.task_name}</span>
+                            <span className="text-[10px] opacity-75 font-normal truncate hidden sm:inline">
+                              ({task.project_name})
+                            </span>
+                          </div>
+
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${theme.border} ${theme.bg} flex-shrink-0 ml-1`}>
+                            {colSpan} Hari
+                          </span>
                         </div>
-                      );
-                    })}
-                    {dayTasks.length > 2 && (
-                      <span className="text-[9px] text-[#737680] font-semibold block text-right">
-                        +{dayTasks.length - 2} lagi...
-                      </span>
-                    )}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
