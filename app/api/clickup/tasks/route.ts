@@ -94,10 +94,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const body = await req.json();
     const { listId, name, description, priority, assignees, due_date } = body;
 
-    const targetListId = listId || process.env.CLICKUP_DEFAULT_LIST_ID || '901819386455';
+    const targetListId = listId || process.env.CLICKUP_DEFAULT_LIST_ID || '901811771867';
 
     let numericPriority: number | undefined;
     if (priority === 'urgent') numericPriority = 1;
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
       priority: numericPriority,
       assignees: assignees ? assignees.map(Number) : undefined,
       due_date: due_date ? new Date(due_date).getTime() : undefined,
-    });
+    }, token);
 
     return NextResponse.json({ task: mapClickUpTaskToAgencyTask(newTaskData), raw: newTaskData });
   } catch (error: any) {

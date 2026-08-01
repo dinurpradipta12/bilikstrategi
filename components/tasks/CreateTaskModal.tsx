@@ -3,83 +3,146 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
-import { X, Calendar, Tag, AlertCircle, CheckCircle2, UserCheck, Briefcase } from 'lucide-react';
-import { MOCK_PROJECTS, MOCK_USERS, MOCK_TASKS, AgencyTask } from '@/lib/mock/data';
+import { X, AlertCircle, CheckCircle2, Briefcase, RefreshCw } from 'lucide-react';
+import { MOCK_USERS, AgencyTask } from '@/lib/mock/data';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultListId?: string;
   onTaskCreated?: (task: AgencyTask) => void;
 }
 
-export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: CreateTaskModalProps) {
+export default function CreateTaskModal({
+  isOpen,
+  onClose,
+  defaultListId,
+  onTaskCreated,
+}: CreateTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; client_name: string }>>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm({
     defaultValues: {
       task_name: '',
-      project_id: MOCK_PROJECTS[0]?.id || '',
+      project_id: defaultListId || '',
       description: '',
       priority: 'normal',
-      assignee_id: MOCK_USERS[2]?.id || '',
+      assignee_id: '276885530',
       due_date: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
       tags: 'Design, Urgent',
     },
   });
 
+  // Fetch real ClickUp lists/projects
+  useEffect(() => {
+    if (isOpen) {
+      async function fetchProjects() {
+        setLoadingProjects(true);
+        try {
+          const res = await fetch('/api/clickup/projects');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.projects && data.projects.length > 0) {
+              setProjects(data.projects);
+              // Set default selection if not already set
+              if (defaultListId) {
+                setValue('project_id', defaultListId);
+              } else if (data.projects[0]?.id) {
+                setValue('project_id', data.projects[0].id);
+              }
+            }
+          }
+        } catch {
+          // ignore
+        } finally {
+          setLoadingProjects(false);
+        }
+      }
+      fetchProjects();
+    }
+  }, [isOpen, defaultListId, setValue]);
+
   if (!isOpen || !mounted) return null;
 
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    try {
+      const selectedProject = projects.find((p) => p.id === data.project_id);
 
-    const selectedProject = MOCK_PROJECTS.find((p) => p.id === data.project_id) || MOCK_PROJECTS[0];
-    const selectedUser = MOCK_USERS.find((u) => u.id === data.assignee_id) || MOCK_USERS[2];
+      const res = await fetch('/api/clickup/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listId: data.project_id,
+          name: data.task_name,
+          description: data.description,
+          priority: data.priority,
+          due_date: data.due_date,
+        }),
+      });
 
-    const newTask: AgencyTask = {
-      id: `tsk-${Date.now()}`,
-      clickup_task_id: `cu-${Math.floor(100000 + Math.random() * 900000)}`,
-      project_id: selectedProject.id,
-      project_name: selectedProject.name,
-      task_name: data.task_name,
-      description: data.description,
-      status: 'to_do',
-      priority: data.priority,
-      assignee_ids: [selectedUser.id],
-      assignee_names: [selectedUser.full_name],
-      assignee_avatars: [selectedUser.avatar_url],
-      start_date: new Date().toISOString(),
-      due_date: new Date(data.due_date).toISOString(),
-      tags: data.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
-      custom_fields: [{ name: 'Source', value: 'Bilik Workspace App' }],
-      time_estimate_hours: 8,
-      time_tracked_hours: 0,
-      subtask_count: 0,
-      comments_count: 0,
-      clickup_url: 'https://app.clickup.com',
-      clickup_updated_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Gagal membuat task di ClickUp: ${errData.error || res.statusText}`);
+        setIsSubmitting(false);
+        return;
+      }
 
-    MOCK_TASKS.unshift(newTask);
+      const resData = await res.json();
+      const createdTask: AgencyTask = resData.task || {
+        id: `tsk-${Date.now()}`,
+        clickup_task_id: resData.raw?.id || `cu-${Date.now()}`,
+        project_id: data.project_id,
+        project_name: selectedProject?.name || 'ClickUp Project',
+        task_name: data.task_name,
+        description: data.description,
+        status: 'to_do',
+        priority: data.priority,
+        assignee_ids: ['276885530'],
+        assignee_names: ['Dinur Pradipta'],
+        assignee_avatars: ['https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'],
+        start_date: new Date().toISOString(),
+        due_date: new Date(data.due_date).toISOString(),
+        tags: data.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
+        custom_fields: [],
+        time_estimate_hours: 8,
+        time_tracked_hours: 0,
+        subtask_count: 0,
+        comments_count: 0,
+        clickup_url: 'https://app.clickup.com',
+        clickup_updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
 
-    if (onTaskCreated) {
-      onTaskCreated(newTask);
+      if (onTaskCreated) {
+        onTaskCreated(createdTask);
+      }
+
+      setSuccessToast(true);
+      setTimeout(() => {
+        setSuccessToast(false);
+        reset();
+        onClose();
+      }, 1000);
+    } catch {
+      alert('Terjadi kesalahan jaringan saat membuat task di ClickUp');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
-    setSuccessToast(true);
-    setTimeout(() => {
-      setSuccessToast(false);
-      reset();
-      onClose();
-    }, 1000);
   };
 
   return createPortal(
@@ -91,7 +154,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
             <Briefcase className="w-4 h-4 text-[#F26B5E] mr-2" />
             Buat Task ClickUp Baru
           </h2>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-[#EEF2F7] text-[#737680]">
+          <button onClick={onClose} className="p-1 rounded-md hover:bg-[#EEF2F7] text-[#737680] cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -100,7 +163,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
         {successToast && (
           <div className="m-4 p-3 bg-[#EEF2F7] border border-[#4F9D78] text-[#4F9D78] text-sm rounded-lg flex items-center">
             <CheckCircle2 className="w-4 h-4 mr-2" />
-            Task berhasil dibuat dan disinkronkan ke ClickUp!
+            Task berhasil dibuat dan disinkronkan langsung ke ClickUp Workspace!
           </div>
         )}
 
@@ -124,16 +187,22 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-[#202124] mb-1">Project & List *</label>
+              <label className="block text-xs font-semibold text-[#202124] mb-1">
+                Project & List ClickUp * {loadingProjects && <RefreshCw className="w-3 h-3 inline animate-spin text-[#F26B5E] ml-1" />}
+              </label>
               <select
-                {...register('project_id')}
+                {...register('project_id', { required: 'Pilih project / list ClickUp' })}
                 className="w-full px-3 py-2 text-sm border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A] bg-[#FFFFFF]"
               >
-                {MOCK_PROJECTS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.client_name})
-                  </option>
-                ))}
+                {projects.length === 0 ? (
+                  <option value={defaultListId || ''}>{loadingProjects ? 'Memuat project ClickUp...' : 'Tidak ada project ClickUp'}</option>
+                ) : (
+                  projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.client_name || 'ClickUp Space'})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -201,16 +270,16 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-[#737680] hover:bg-[#F7F7F8] rounded-lg transition-colors"
+              className="px-4 py-2 text-xs font-medium text-[#737680] hover:bg-[#F7F7F8] rounded-lg transition-colors cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 text-xs font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg transition-colors shadow-xs"
+              className="px-5 py-2 text-xs font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg transition-colors shadow-xs cursor-pointer"
             >
-              {isSubmitting ? 'Menyimpan...' : 'Simpan & Sync Task'}
+              {isSubmitting ? 'Menyimpan ke ClickUp...' : 'Simpan & Sync Task'}
             </button>
           </div>
         </form>

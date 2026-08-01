@@ -668,6 +668,7 @@ export default function ProjectDetailPage() {
       <CreateTaskModal
         isOpen={isTaskModalOpen}
         onClose={() => setIsTaskModalOpen(false)}
+        defaultListId={projectId}
         onTaskCreated={(newTask) => {
           setRealTasks((prev) => [newTask, ...prev]);
         }}
