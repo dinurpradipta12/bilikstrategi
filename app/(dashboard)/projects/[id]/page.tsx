@@ -207,17 +207,45 @@ export default function ProjectDetailPage() {
       }
     }
 
-    // Load Client Listing for client selection
-    function loadClients() {
+    // Load REAL Client Listing from ClickUp API & Custom Saved Clients (NO MOCK DATA)
+    async function loadRealClients() {
       const map = new Map<string, any>();
-      MOCK_CLIENTS.forEach((c) => map.set(c.company_name.toLowerCase(), c));
 
+      // 1. Fetch real ClickUp projects / client groups
+      try {
+        const res = await fetch('/api/clickup/projects');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.projects)) {
+            data.projects.forEach((p: any, idx: number) => {
+              const cName = p.client_name || p.name;
+              if (cName && !map.has(cName.toLowerCase())) {
+                map.set(cName.toLowerCase(), {
+                  id: `c_cu_${p.id || idx}`,
+                  name: cName === 'Agency Client Group' ? 'Client Partner' : `PIC ${cName}`,
+                  company_name: cName,
+                  industry: 'Brand & Creative',
+                  email: `contact@${cName.toLowerCase().replace(/\s+/g, '')}.com`,
+                });
+              }
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // 2. Merge custom clients created by user from localStorage
       const savedCustomStr = localStorage.getItem('bilik_custom_clients');
       if (savedCustomStr) {
         try {
           const customList = JSON.parse(savedCustomStr);
           if (Array.isArray(customList)) {
-            customList.forEach((c) => map.set(c.company_name.toLowerCase(), c));
+            customList.forEach((c) => {
+              if (c.company_name) {
+                map.set(c.company_name.toLowerCase(), c);
+              }
+            });
           }
         } catch {
           // ignore
@@ -226,11 +254,11 @@ export default function ProjectDetailPage() {
 
       const all = Array.from(map.values());
       setExistingClientsList(all);
-      if (all.length > 0 && !selectedListingClientId) {
+      if (all.length > 0) {
         setSelectedListingClientId(all[0].id || all[0].company_name);
       }
     }
-    loadClients();
+    loadRealClients();
 
     // Fetch ClickUp team members & sync profile pictures
     async function fetchClickUpMembers() {
