@@ -48,11 +48,11 @@ export default function TimelinePage() {
   const [selectedTask, setSelectedTask] = useState<AgencyTask | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Filters & Controls state
+  // Filters & Controls state (ONLY 'week' and 'month' modes)
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'year'>('week');
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
 
   const fetchData = async () => {
     setLoading(true);
@@ -99,9 +99,13 @@ export default function TimelinePage() {
   const toDoCount = tasks.filter((t) => t.status === 'to_do').length;
   const completedCount = tasks.filter((t) => t.status === 'completed' || (t as any).status?.type === 'closed').length;
 
+  // Full Month Calendar Days (August 2026)
+  // Aug 1 = Saturday (col 6). So Jul 26-31 fill cols 0-5.
+  const augustDays = Array.from({ length: 31 }, (_, i) => i + 1);
+
   return (
     <div className="space-y-6 animate-fade-in pb-12">
-      {/* Top Header Controls Bar (Reference Style) */}
+      {/* Top Header Controls Bar */}
       <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl p-5 shadow-2xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* Left Month Selector & Search */}
@@ -131,21 +135,26 @@ export default function TimelinePage() {
             </div>
           </div>
 
-          {/* Right Controls: View Switcher, Today, Project Filter */}
+          {/* Right Controls: ONLY Minggu & Bulan Switcher */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* View Mode Switcher */}
+            {/* View Mode Switcher: ONLY 'Minggu' and 'Bulan' */}
             <div className="flex items-center bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl p-1 text-xs font-semibold text-[#737680]">
-              {(['day', 'week', 'month', 'year'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1 rounded-lg capitalize transition-all cursor-pointer ${
-                    viewMode === mode ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold' : 'hover:text-[#202124]'
-                  }`}
-                >
-                  {mode === 'day' ? 'Hari' : mode === 'week' ? 'Minggu' : mode === 'month' ? 'Bulan' : 'Tahun'}
-                </button>
-              ))}
+              <button
+                onClick={() => setViewMode('week')}
+                className={`px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'week' ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold' : 'hover:text-[#202124]'
+                }`}
+              >
+                Minggu
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-3.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  viewMode === 'month' ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold' : 'hover:text-[#202124]'
+                }`}
+              >
+                Bulan
+              </button>
             </div>
 
             {/* Today Button */}
@@ -172,7 +181,7 @@ export default function TimelinePage() {
           </div>
         </div>
 
-        {/* Filter Status Tabs (Reference Style Pill Badges) */}
+        {/* Filter Status Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-[#E8E8EC] text-xs">
           <button
             onClick={() => setStatusFilter('all')}
@@ -216,91 +225,176 @@ export default function TimelinePage() {
         </div>
       </div>
 
-      {/* MAIN CALENDAR TIMELINE SCHEDULE BOARD (IDENTICAL TO REFERENCE) */}
-      <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
-        {/* Days Header Columns */}
-        <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
-          {WEEK_DAYS.map((day) => (
-            <div
-              key={day.fullDate}
-              className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
-                day.isToday ? 'bg-[#EEF2F7]/60' : ''
-              }`}
-            >
-              <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
-              <span
-                className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-extrabold ${
-                  day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+      {/* VIEW MODE 1: MINGGU (WEEK VIEW) */}
+      {viewMode === 'week' && (
+        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
+          {/* Days Header Columns */}
+          <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
+            {WEEK_DAYS.map((day) => (
+              <div
+                key={day.fullDate}
+                className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
+                  day.isToday ? 'bg-[#EEF2F7]/60' : ''
                 }`}
               >
-                {day.dateNum}
-              </span>
-            </div>
-          ))}
-        </div>
+                <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
+                <span
+                  className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-extrabold ${
+                    day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                  }`}
+                >
+                  {day.dateNum}
+                </span>
+              </div>
+            ))}
+          </div>
 
-        {/* Schedule Board Body with Vertical Column Grid Lines */}
-        <div className="relative min-h-[480px] p-4 bg-[#FFFFFF]">
-          {/* Vertical Grid Column Lines */}
-          <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
+          {/* Schedule Board Body */}
+          <div className="relative min-h-[440px] p-4 bg-[#FFFFFF]">
+            <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
 
-          {/* Schedule Bar Rows Container */}
-          {loading ? (
-            <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#F26B5E] mb-2" />
-              <span>Memuat kalender timeline schedule ClickUp...</span>
-            </div>
-          ) : filteredTasks.length === 0 ? (
-            <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
-              Tidak ada schedule task yang sesuai dengan filter.
-            </div>
-          ) : (
-            <div className="relative z-10 space-y-3">
-              {filteredTasks.map((task, idx) => {
-                const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
-                const dueD = task.due_date ? new Date(task.due_date).getDate() : 5;
-                const startD = task.start_date ? new Date(task.start_date).getDate() : Math.max(2, dueD - 3);
+            {loading ? (
+              <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
+                <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#F26B5E] mb-2" />
+                <span>Memuat kalender timeline schedule ClickUp...</span>
+              </div>
+            ) : filteredTasks.length === 0 ? (
+              <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
+                Tidak ada schedule task yang sesuai dengan filter.
+              </div>
+            ) : (
+              <div className="relative z-10 space-y-3">
+                {filteredTasks.map((task, idx) => {
+                  const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
+                  const dueD = task.due_date ? new Date(task.due_date).getDate() : 5;
+                  const startD = task.start_date ? new Date(task.start_date).getDate() : Math.max(2, dueD - 3);
 
-                // Map day number 2-8 to col index 0-6
-                const startCol = Math.max(0, Math.min(6, startD - 2));
-                const endCol = Math.max(startCol, Math.min(6, dueD - 2));
-                const colSpan = Math.max(1, endCol - startCol + 1);
+                  const startCol = Math.max(0, Math.min(6, startD - 2));
+                  const endCol = Math.max(startCol, Math.min(6, dueD - 2));
+                  const colSpan = Math.max(1, endCol - startCol + 1);
 
-                return (
-                  <div key={task.id} className="grid grid-cols-7 gap-2">
-                    <div
-                      style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
-                      onClick={() => {
-                        setSelectedTask(task);
-                        setDrawerOpen(true);
-                      }}
-                      className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-sm flex-shrink-0">{theme.icon}</span>
-                        <div className="truncate">
-                          <span className={`text-xs font-bold block truncate ${theme.text}`}>
-                            {task.task_name}
-                          </span>
-                          <span className="text-[10px] opacity-80 block truncate">
-                            {task.project_name} • {task.assignee_names[0] || 'Member'}
+                  return (
+                    <div key={task.id} className="grid grid-cols-7 gap-2">
+                      <div
+                        style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                        onClick={() => {
+                          setSelectedTask(task);
+                          setDrawerOpen(true);
+                        }}
+                        className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm flex-shrink-0">{theme.icon}</span>
+                          <div className="truncate">
+                            <span className={`text-xs font-bold block truncate ${theme.text}`}>
+                              {task.task_name}
+                            </span>
+                            <span className="text-[10px] opacity-80 block truncate">
+                              {task.project_name} • {task.assignee_names[0] || 'Member'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.bg} ${theme.text} border ${theme.border}`}>
+                            {colSpan} Hari
                           </span>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.bg} ${theme.text} border ${theme.border}`}>
-                          {colSpan} Hari
-                        </span>
-                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR GRID WITH TIMELINE BARS) */}
+      {viewMode === 'month' && (
+        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden space-y-0">
+          {/* Day of Week Header Row */}
+          <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
+            <span>SUN</span>
+            <span>MON</span>
+            <span>TUE</span>
+            <span>WED</span>
+            <span>THU</span>
+            <span>FRI</span>
+            <span>SAT</span>
+          </div>
+
+          {/* 31-Day Full Calendar Grid (5 Weeks) */}
+          <div className="grid grid-cols-7 border-b border-[#E8E8EC] divide-x divide-y divide-[#E8E8EC] min-h-[520px]">
+            {/* Blank offset days (Jul 26..31) */}
+            {[26, 27, 28, 29, 30, 31].map((d) => (
+              <div key={`jul-${d}`} className="p-2 bg-[#F7F7F8]/40 min-h-[90px] text-[10px] text-[#A0A3BD]">
+                <span>{d} Jul</span>
+              </div>
+            ))}
+
+            {/* August Days 1..31 */}
+            {augustDays.map((d) => {
+              const isToday = d === 2;
+              const dayTasks = filteredTasks.filter((t) => {
+                const dueD = t.due_date ? new Date(t.due_date).getDate() : 5;
+                const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(1, dueD - 3);
+                return d >= startD && d <= dueD;
+              });
+
+              return (
+                <div
+                  key={`aug-${d}`}
+                  className={`p-2 min-h-[95px] flex flex-col justify-between transition-colors hover:bg-[#F7F7F8]/60 ${
+                    isToday ? 'bg-[#EEF2F7]/50' : 'bg-[#FFFFFF]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-extrabold ${
+                        isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                      }`}
+                    >
+                      {d}
+                    </span>
+                    {dayTasks.length > 0 && (
+                      <span className="text-[9px] font-bold text-[#F26B5E] bg-[#FFF0ED] px-1.5 py-0.2 rounded-full">
+                        {dayTasks.length} task
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Task Timeline Pill Bars rendered in Date Cell */}
+                  <div className="space-y-1 mt-1 flex-1">
+                    {dayTasks.slice(0, 2).map((t, idx) => {
+                      const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            setSelectedTask(t);
+                            setDrawerOpen(true);
+                          }}
+                          className={`${theme.bg} ${theme.text} ${theme.border} border text-[9px] font-bold p-1 rounded-md truncate cursor-pointer hover:opacity-90 flex items-center gap-1 shadow-2xs`}
+                          title={`${t.task_name} (${t.project_name})`}
+                        >
+                          <span className="text-[10px]">{theme.icon}</span>
+                          <span className="truncate">{t.task_name}</span>
+                        </div>
+                      );
+                    })}
+                    {dayTasks.length > 2 && (
+                      <span className="text-[9px] text-[#737680] font-semibold block text-right">
+                        +{dayTasks.length - 2} lagi...
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Task Detail Drawer */}
       <TaskDetailDrawer

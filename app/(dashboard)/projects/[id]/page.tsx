@@ -106,6 +106,7 @@ export default function ProjectDetailPage() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+  const [timelineViewMode, setTimelineViewMode] = useState<'week' | 'month'>('week');
 
   // Modals state
   const [isEditOverviewOpen, setIsEditOverviewOpen] = useState(false);
@@ -605,7 +606,27 @@ export default function ProjectDetailPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* View Mode Switcher: ONLY 'Minggu' and 'Bulan' */}
+              <div className="flex items-center bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl p-1 text-xs font-semibold text-[#737680]">
+                <button
+                  onClick={() => setTimelineViewMode('week')}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    timelineViewMode === 'week' ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold' : 'hover:text-[#202124]'
+                  }`}
+                >
+                  Minggu
+                </button>
+                <button
+                  onClick={() => setTimelineViewMode('month')}
+                  className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                    timelineViewMode === 'month' ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold' : 'hover:text-[#202124]'
+                  }`}
+                >
+                  Bulan
+                </button>
+              </div>
+
               <button
                 onClick={() => setIsEditOverviewOpen(true)}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-xl hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
@@ -616,97 +637,171 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* CALENDAR SCHEDULE BOARD (MATCHING REFERENCE DESIGN) */}
-          <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
-            {/* Days Header Row */}
-            <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
-              {[
-                { dayName: 'SUN', dateNum: '02', isToday: true },
-                { dayName: 'MON', dateNum: '03', isToday: false },
-                { dayName: 'TUE', dateNum: '04', isToday: false },
-                { dayName: 'WED', dateNum: '05', isToday: false },
-                { dayName: 'THU', dateNum: '06', isToday: false },
-                { dayName: 'FRI', dateNum: '07', isToday: false },
-                { dayName: 'SAT', dateNum: '08', isToday: false },
-              ].map((day) => (
-                <div
-                  key={day.dayName}
-                  className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
-                    day.isToday ? 'bg-[#EEF2F7]/60' : ''
-                  }`}
-                >
-                  <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
-                  <span
-                    className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-extrabold ${
-                      day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+          {/* VIEW MODE 1: MINGGU (WEEK VIEW BOARD) */}
+          {timelineViewMode === 'week' && (
+            <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
+              {/* Days Header Row */}
+              <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
+                {[
+                  { dayName: 'SUN', dateNum: '02', isToday: true },
+                  { dayName: 'MON', dateNum: '03', isToday: false },
+                  { dayName: 'TUE', dateNum: '04', isToday: false },
+                  { dayName: 'WED', dateNum: '05', isToday: false },
+                  { dayName: 'THU', dateNum: '06', isToday: false },
+                  { dayName: 'FRI', dateNum: '07', isToday: false },
+                  { dayName: 'SAT', dateNum: '08', isToday: false },
+                ].map((day) => (
+                  <div
+                    key={day.dayName}
+                    className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
+                      day.isToday ? 'bg-[#EEF2F7]/60' : ''
                     }`}
                   >
-                    {day.dateNum}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Schedule Board Body with Vertical Grid Lines */}
-            <div className="relative min-h-[380px] p-4 bg-[#FFFFFF]">
-              {/* Vertical Grid Column Lines */}
-              <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
-
-              {/* Schedule Bars */}
-              <div className="relative z-10 space-y-3">
-                {meta.milestones.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-[#737680]">
-                    Belum ada milestone roadmap. Klik &quot;Kelola / Tambah Milestone&quot; untuk menambahkan.
+                    <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
+                    <span
+                      className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-extrabold ${
+                        day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                      }`}
+                    >
+                      {day.dateNum}
+                    </span>
                   </div>
-                ) : (
-                  meta.milestones.map((m, idx) => {
-                    const themes = [
-                      { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
-                      { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
-                      { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
-                      { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
-                    ];
-                    const theme = themes[idx % themes.length];
+                ))}
+              </div>
 
-                    const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
-                    const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
+              {/* Schedule Board Body */}
+              <div className="relative min-h-[380px] p-4 bg-[#FFFFFF]">
+                <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
 
-                    const startCol = Math.max(0, Math.min(6, startD - 2));
-                    const endCol = Math.max(startCol, Math.min(6, endD - 2));
-                    const colSpan = Math.max(1, endCol - startCol + 1);
+                <div className="relative z-10 space-y-3">
+                  {meta.milestones.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-[#737680]">
+                      Belum ada milestone roadmap. Klik &quot;Kelola / Tambah Milestone&quot; untuk menambahkan.
+                    </div>
+                  ) : (
+                    meta.milestones.map((m, idx) => {
+                      const themes = [
+                        { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                        { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                        { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                        { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                      ];
+                      const theme = themes[idx % themes.length];
 
-                    return (
-                      <div key={m.id} className="grid grid-cols-7 gap-2">
-                        <div
-                          style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
-                          onClick={() => toggleMilestoneStatus(m.id)}
-                          className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm flex-shrink-0">{theme.icon}</span>
-                            <div className="truncate">
-                              <span className={`text-xs font-bold block truncate ${theme.text}`}>
-                                {m.name}
-                              </span>
-                              <span className="text-[10px] opacity-80 block truncate">
-                                {m.start_date || m.date} s/d {m.due_date || m.date}
+                      const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
+                      const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
+
+                      const startCol = Math.max(0, Math.min(6, startD - 2));
+                      const endCol = Math.max(startCol, Math.min(6, endD - 2));
+                      const colSpan = Math.max(1, endCol - startCol + 1);
+
+                      return (
+                        <div key={m.id} className="grid grid-cols-7 gap-2">
+                          <div
+                            style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                            onClick={() => toggleMilestoneStatus(m.id)}
+                            className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm flex-shrink-0">{theme.icon}</span>
+                              <div className="truncate">
+                                <span className={`text-xs font-bold block truncate ${theme.text}`}>
+                                  {m.name}
+                                </span>
+                                <span className="text-[10px] opacity-80 block truncate">
+                                  {m.start_date || m.date} s/d {m.due_date || m.date}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${theme.bg} ${theme.text} border ${theme.border}`}>
+                                {m.status === 'completed' ? '🟢 Selesai' : m.status === 'in_progress' ? '🔵 In Progress' : '⚪ Pending'}
                               </span>
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${theme.bg} ${theme.text} border ${theme.border}`}>
-                              {m.status === 'completed' ? '🟢 Selesai' : m.status === 'in_progress' ? '🔵 In Progress' : '⚪ Pending'}
-                            </span>
-                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR GRID WITH TIMELINE BARS) */}
+          {timelineViewMode === 'month' && (
+            <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
+              <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
+                <span>SUN</span>
+                <span>MON</span>
+                <span>TUE</span>
+                <span>WED</span>
+                <span>THU</span>
+                <span>FRI</span>
+                <span>SAT</span>
+              </div>
+
+              <div className="grid grid-cols-7 border-b border-[#E8E8EC] divide-x divide-y divide-[#E8E8EC] min-h-[440px]">
+                {[26, 27, 28, 29, 30, 31].map((d) => (
+                  <div key={`jul-${d}`} className="p-2 bg-[#F7F7F8]/40 min-h-[85px] text-[10px] text-[#A0A3BD]">
+                    <span>{d} Jul</span>
+                  </div>
+                ))}
+
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
+                  const isToday = d === 2;
+                  const dayMilestones = meta.milestones.filter((m) => {
+                    const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
+                    const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : 15;
+                    return d >= startD && d <= endD;
+                  });
+
+                  return (
+                    <div
+                      key={`aug-${d}`}
+                      className={`p-2 min-h-[85px] flex flex-col justify-between transition-colors hover:bg-[#F7F7F8]/60 ${
+                        isToday ? 'bg-[#EEF2F7]/50' : 'bg-[#FFFFFF]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-extrabold ${
+                            isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                          }`}
+                        >
+                          {d}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 mt-1 flex-1">
+                        {dayMilestones.slice(0, 2).map((m, idx) => {
+                          const themes = [
+                            { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                            { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                            { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                            { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                          ];
+                          const theme = themes[idx % themes.length];
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={() => toggleMilestoneStatus(m.id)}
+                              className={`${theme.bg} ${theme.text} ${theme.border} border text-[9px] font-bold p-1 rounded-md truncate cursor-pointer hover:opacity-90 flex items-center gap-1 shadow-2xs`}
+                              title={m.name}
+                            >
+                              <span className="text-[10px]">{theme.icon}</span>
+                              <span className="truncate">{m.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Real ClickUp Tasks Timeline Section */}
           {realTasks.length > 0 && (
@@ -719,7 +814,7 @@ export default function ProjectDetailPage() {
               <div className="border border-[#E8E8EC] rounded-2xl p-4 bg-[#FFFFFF] relative min-h-[160px]">
                 <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/40 pointer-events-none" />
                 <div className="relative z-10 space-y-2.5">
-                  {realTasks.map((t, idx) => {
+                  {realTasks.map((t) => {
                     const dueD = t.due_date ? new Date(t.due_date).getDate() : 5;
                     const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(2, dueD - 3);
 
