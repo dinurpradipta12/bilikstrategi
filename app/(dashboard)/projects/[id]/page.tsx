@@ -38,6 +38,8 @@ interface Milestone {
   id: string;
   name: string;
   date: string;
+  start_date?: string;
+  due_date?: string;
   status: 'completed' | 'in_progress' | 'pending';
 }
 
@@ -102,10 +104,10 @@ export default function ProjectDetailPage() {
   const [meta, setMeta] = useState<ProjectMeta>({
     description: 'Deskripsi deliverable & scope pekerjaan project ini belum diatur. Gunakan tombol Edit untuk memperbarui.',
     milestones: [
-      { id: 'm1', name: 'Kickoff Meeting & Brief Approval', date: '2026-06-15', status: 'completed' },
-      { id: 'm2', name: 'Konsep Visual & Key Visual Approval', date: '2026-07-01', status: 'completed' },
-      { id: 'm3', name: 'Produksi Asset 3D & Deliverables', date: '2026-08-15', status: 'in_progress' },
-      { id: 'm4', name: 'Final Launch & Handover Ke Klien', date: '2026-08-31', status: 'pending' },
+      { id: 'm1', name: 'Kickoff Meeting & Brief Approval', date: '2026-08-05', start_date: '2026-08-01', due_date: '2026-08-05', status: 'completed' },
+      { id: 'm2', name: 'Konsep Visual & Key Visual Approval', date: '2026-08-12', start_date: '2026-08-06', due_date: '2026-08-12', status: 'completed' },
+      { id: 'm3', name: 'Produksi Asset 3D & Deliverables', date: '2026-08-24', start_date: '2026-08-13', due_date: '2026-08-24', status: 'in_progress' },
+      { id: 'm4', name: 'Final Launch & Handover Ke Klien', date: '2026-08-31', start_date: '2026-08-25', due_date: '2026-08-31', status: 'pending' },
     ],
     clientInfo: {
       name: 'Client Partner',
@@ -482,20 +484,199 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: TIMELINE */}
+      {/* TAB 3: TIMELINE / GANTT ROADMAP */}
       {activeTab === 'timeline' && (
-        <div className="p-8 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs text-center py-12 space-y-3">
-          <Calendar className="w-8 h-8 text-[#F26B5E] mx-auto" />
-          <h3 className="text-sm font-bold text-[#24324A]">Project Timeline & Schedule</h3>
-          <p className="text-xs text-[#737680]">Periode Estimasi Project: {currentProject.start_date} s/d {currentProject.due_date}</p>
-          <div className="max-w-xl mx-auto pt-4 text-xs space-y-2 text-left bg-[#F7F7F8] p-4 rounded-xl border border-[#E8E8EC]">
-            {meta.milestones.map((m) => (
-              <div key={m.id} className="flex items-center justify-between border-b border-[#E8E8EC] pb-2 last:border-0 last:pb-0">
-                <span className="font-semibold text-[#202124]">{m.name}</span>
-                <span className="text-[#737680] text-[11px] font-mono">{m.date}</span>
-              </div>
-            ))}
+        <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-6">
+          {/* Timeline Header & Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
+            <div>
+              <h3 className="text-base font-extrabold text-[#24324A] flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-[#F26B5E]" />
+                <span>Project Timeline & Schedule Roadmap</span>
+              </h3>
+              <p className="text-xs text-[#737680] mt-0.5">
+                Estimasi Roadmap: <span className="font-semibold text-[#202124]">{currentProject.start_date}</span> s/d <span className="font-semibold text-[#202124]">{currentProject.due_date}</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditOverviewOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
+                <span>Kelola / Tambah Milestone</span>
+              </button>
+            </div>
           </div>
+
+          {/* GANTT CHART MAIN CONTAINER */}
+          <div className="border border-[#E8E8EC] rounded-xl overflow-hidden bg-[#FFFFFF]">
+            {/* Gantt Header Columns */}
+            <div className="grid grid-cols-12 bg-[#F7F7F8] border-b border-[#E8E8EC] text-[11px] font-bold text-[#737680] py-3 px-4 uppercase tracking-wider">
+              <div className="col-span-5 sm:col-span-4 border-r border-[#E8E8EC] pr-2">
+                Milestone & Deliverable Task
+              </div>
+              <div className="col-span-7 sm:col-span-8 grid grid-cols-4 text-center">
+                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 1 (1-7 Ags)</span>
+                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 2 (8-14 Ags)</span>
+                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 3 (15-21 Ags)</span>
+                <span className="px-1">Minggu 4 (22-31 Ags)</span>
+              </div>
+            </div>
+
+            {/* Gantt Body Rows */}
+            <div className="divide-y divide-[#E8E8EC] relative">
+              {/* Today Accent Marker Line */}
+              <div
+                className="absolute top-0 bottom-0 z-10 border-l-2 border-dashed border-[#F26B5E] pointer-events-none"
+                style={{ left: 'calc(33.33% + 4%)' }}
+              >
+                <span className="absolute -top-2.5 -left-6 px-1.5 py-0.5 bg-[#F26B5E] text-white text-[9px] font-bold rounded shadow-xs">
+                  HARI INI
+                </span>
+              </div>
+
+              {meta.milestones.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#737680]">
+                  Belum ada milestone pada project ini. Klik tombol &quot;Kelola / Tambah Milestone&quot; di atas untuk membuat schedule roadmap pertama.
+                </div>
+              ) : (
+                meta.milestones.map((m) => {
+                  const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
+                  const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
+                  const startDay = Math.max(1, Math.min(31, startD));
+                  const endDay = Math.max(startDay, Math.min(31, endD));
+
+                  const leftPct = ((startDay - 1) / 31) * 100;
+                  const widthPct = Math.max(8, ((endDay - startDay + 1) / 31) * 100);
+
+                  const isComplete = m.status === 'completed';
+                  const isInProgress = m.status === 'in_progress';
+
+                  return (
+                    <div key={m.id} className="grid grid-cols-12 items-center py-3.5 px-4 hover:bg-[#F7F7F8]/80 transition-colors group">
+                      {/* Left Info Column */}
+                      <div className="col-span-5 sm:col-span-4 pr-3 border-r border-[#E8E8EC] space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-[#24324A] truncate max-w-[180px]" title={m.name}>
+                            {m.name}
+                          </span>
+                          <button
+                            onClick={() => toggleMilestoneStatus(m.id)}
+                            className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full transition-all cursor-pointer ${
+                              isComplete
+                                ? 'bg-[#EEF2F7] text-[#4F9D78] border border-[#4F9D78]/30'
+                                : isInProgress
+                                ? 'bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30'
+                                : 'bg-[#EEF2F7] text-[#737680] border border-[#E8E8EC]'
+                            }`}
+                            title="Klik untuk mengubah status milestone"
+                          >
+                            {isComplete ? '🟢 Selesai' : isInProgress ? '🔵 In Progress' : '⚪ Pending'}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-[#737680]">
+                          <span className="font-mono">
+                            {m.start_date || m.date} {m.due_date ? `s/d ${m.due_date}` : ''}
+                          </span>
+                          <span className="font-semibold text-[#202124]">{endDay - startDay + 1} Hari</span>
+                        </div>
+                      </div>
+
+                      {/* Right Gantt Bar Area */}
+                      <div className="col-span-7 sm:col-span-8 pl-4 relative py-1 flex items-center">
+                        <div className="w-full h-8 bg-[#F7F7F8] rounded-lg relative overflow-hidden border border-[#E8E8EC]/60">
+                          {/* Grid background lines */}
+                          <div className="absolute inset-0 grid grid-cols-4 divide-x divide-[#E8E8EC]/40 pointer-events-none" />
+
+                          {/* Gantt Bar Element */}
+                          <div
+                            className={`absolute top-1 bottom-1 rounded-md px-2.5 flex items-center justify-between text-white text-[11px] font-bold transition-all shadow-xs ${
+                              isComplete
+                                ? 'bg-gradient-to-r from-[#4F9D78] to-[#3B7A5C]'
+                                : isInProgress
+                                ? 'bg-gradient-to-r from-[#24324A] via-[#354868] to-[#F26B5E]'
+                                : 'bg-[#E8E8EC] text-[#24324A] border border-[#D0D0D5]'
+                            }`}
+                            style={{
+                              left: `${leftPct}%`,
+                              width: `${widthPct}%`,
+                            }}
+                            title={`${m.name} (${m.start_date || m.date} - ${m.due_date || m.date})`}
+                          >
+                            <span className="truncate mr-1 text-[10px]">{m.name}</span>
+                            <span className="text-[9px] opacity-90 font-mono whitespace-nowrap">
+                              {isComplete ? '100%' : isInProgress ? '50%' : '0%'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Real ClickUp Tasks Timeline Section */}
+          {realTasks.length > 0 && (
+            <div className="pt-4 border-t border-[#E8E8EC] space-y-3">
+              <h4 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
+                <CheckSquare className="w-4 h-4 text-[#F26B5E]" />
+                <span>Task Live ClickUp Schedule Roadmap ({realTasks.length})</span>
+              </h4>
+
+              <div className="border border-[#E8E8EC] rounded-xl overflow-hidden bg-[#FFFFFF] divide-y divide-[#E8E8EC]">
+                {realTasks.map((t) => {
+                  const dueD = t.due_date ? new Date(t.due_date).getDate() : 25;
+                  const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(1, dueD - 5);
+
+                  const startDay = Math.max(1, Math.min(31, startD));
+                  const endDay = Math.max(startDay, Math.min(31, dueD));
+
+                  const leftPct = ((startDay - 1) / 31) * 100;
+                  const widthPct = Math.max(8, ((endDay - startDay + 1) / 31) * 100);
+
+                  const isComplete = t.status === 'completed' || (t as any).status?.type === 'closed';
+                  const isInProgress = t.status === 'in_progress';
+
+                  return (
+                    <div key={t.id} className="grid grid-cols-12 items-center py-2.5 px-4 hover:bg-[#F7F7F8]/80 text-xs">
+                      <div className="col-span-5 sm:col-span-4 pr-3 border-r border-[#E8E8EC] flex items-center justify-between">
+                        <span className="font-semibold text-[#202124] truncate" title={t.task_name}>
+                          {t.task_name}
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEF2F7] text-[#24324A] font-mono capitalize">
+                          {t.status}
+                        </span>
+                      </div>
+
+                      <div className="col-span-7 sm:col-span-8 pl-4 relative py-1 flex items-center">
+                        <div className="w-full h-6 bg-[#F7F7F8] rounded-md relative overflow-hidden border border-[#E8E8EC]/40">
+                          <div
+                            className={`absolute top-0.5 bottom-0.5 rounded px-2 flex items-center justify-between text-white text-[9px] font-bold shadow-2xs ${
+                              isComplete
+                                ? 'bg-[#4F9D78]'
+                                : isInProgress
+                                ? 'bg-[#24324A]'
+                                : 'bg-[#F26B5E]'
+                            }`}
+                            style={{
+                              left: `${leftPct}%`,
+                              width: `${widthPct}%`,
+                            }}
+                          >
+                            <span className="truncate">{t.task_name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
