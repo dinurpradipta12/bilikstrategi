@@ -28,6 +28,7 @@ import {
   Link as LinkIcon,
   Download,
   Star,
+  Building2,
 } from 'lucide-react';
 import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ACTIVITY_LOGS } from '@/lib/mock/data';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
@@ -107,6 +108,11 @@ export default function ProjectDetailPage() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
   const [timelineViewMode, setTimelineViewMode] = useState<'week' | 'month'>('week');
+
+  // Client Edit Options State
+  const [clientMode, setClientMode] = useState<'select' | 'manual'>('select');
+  const [existingClientsList, setExistingClientsList] = useState<any[]>([]);
+  const [selectedListingClientId, setSelectedListingClientId] = useState<string>('');
 
   // Modals state
   const [isEditOverviewOpen, setIsEditOverviewOpen] = useState(false);
@@ -200,6 +206,31 @@ export default function ProjectDetailPage() {
         }
       }
     }
+
+    // Load Client Listing for client selection
+    function loadClients() {
+      const map = new Map<string, any>();
+      MOCK_CLIENTS.forEach((c) => map.set(c.company_name.toLowerCase(), c));
+
+      const savedCustomStr = localStorage.getItem('bilik_custom_clients');
+      if (savedCustomStr) {
+        try {
+          const customList = JSON.parse(savedCustomStr);
+          if (Array.isArray(customList)) {
+            customList.forEach((c) => map.set(c.company_name.toLowerCase(), c));
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const all = Array.from(map.values());
+      setExistingClientsList(all);
+      if (all.length > 0 && !selectedListingClientId) {
+        setSelectedListingClientId(all[0].id || all[0].company_name);
+      }
+    }
+    loadClients();
 
     // Fetch ClickUp team members & sync profile pictures
     async function fetchClickUpMembers() {
@@ -1341,11 +1372,11 @@ export default function ProjectDetailPage() {
       {isEditClientOpen &&
         createPortal(
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+            <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
-                  <Edit3 className="w-4 h-4 text-[#F26B5E]" />
-                  <span>Edit Informasi Klien Project</span>
+                  <Building2 className="w-4 h-4 text-[#F26B5E]" />
+                  <span>Atur Informasi Klien Project</span>
                 </h2>
                 <button onClick={() => setIsEditClientOpen(false)} className="p-1 text-[#737680] hover:text-[#202124]">
                   <X className="w-4 h-4" />
@@ -1353,53 +1384,180 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="p-6 space-y-4 text-xs">
-                <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Nama Klien PIC</label>
-                  <input
-                    type="text"
-                    value={meta.clientInfo.name}
-                    onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, name: e.target.value } })}
-                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Perusahaan / Brand</label>
-                  <input
-                    type="text"
-                    value={meta.clientInfo.company_name}
-                    onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, company_name: e.target.value } })}
-                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Industri</label>
-                  <input
-                    type="text"
-                    value={meta.clientInfo.industry}
-                    onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, industry: e.target.value } })}
-                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#202124] mb-1">Email Kontak</label>
-                  <input
-                    type="email"
-                    value={meta.clientInfo.email}
-                    onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, email: e.target.value } })}
-                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg"
-                  />
+                {/* 2 Clear Options Tab Buttons */}
+                <div className="grid grid-cols-2 p-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setClientMode('select')}
+                    className={`py-2 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+                      clientMode === 'select'
+                        ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold'
+                        : 'text-[#737680] hover:text-[#202124]'
+                    }`}
+                  >
+                    1. Pilih dari Daftar Klien
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientMode('manual')}
+                    className={`py-2 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+                      clientMode === 'manual'
+                        ? 'bg-[#FFFFFF] text-[#24324A] shadow-2xs font-extrabold'
+                        : 'text-[#737680] hover:text-[#202124]'
+                    }`}
+                  >
+                    2. Input Manual Klien Baru
+                  </button>
                 </div>
 
+                {/* OPTION 1: PILIH DARI DAFTAR KLIEN */}
+                {clientMode === 'select' && (
+                  <div className="space-y-4 pt-1">
+                    <div>
+                      <label className="block font-bold text-[#24324A] mb-1">
+                        Pilih Klien dari Client Listing *
+                      </label>
+                      <select
+                        value={selectedListingClientId}
+                        onChange={(e) => {
+                          const cId = e.target.value;
+                          setSelectedListingClientId(cId);
+                          const chosen = existingClientsList.find((c) => c.id === cId || c.company_name === cId);
+                          if (chosen) {
+                            setMeta({
+                              ...meta,
+                              clientInfo: {
+                                name: chosen.name || `PIC ${chosen.company_name}`,
+                                company_name: chosen.company_name,
+                                industry: chosen.industry || 'Digital Agency',
+                                email: chosen.email || 'contact@clientcompany.com',
+                              },
+                            });
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 border border-[#E8E8EC] rounded-xl bg-[#FFFFFF] font-semibold text-[#24324A] focus:outline-none focus:border-[#24324A]"
+                      >
+                        {existingClientsList.length === 0 ? (
+                          <option value="">Belum ada klien terdaftar</option>
+                        ) : (
+                          existingClientsList.map((c) => (
+                            <option key={c.id || c.company_name} value={c.id || c.company_name}>
+                              {c.company_name} ({c.name}) - {c.industry}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-1.5">
+                      <p className="text-[11px] font-bold text-[#24324A]">Preview Data Klien Terpilih:</p>
+                      <p className="text-[11px] text-[#737680]">PIC: <strong className="text-[#202124]">{meta.clientInfo.name}</strong></p>
+                      <p className="text-[11px] text-[#737680]">Perusahaan: <strong className="text-[#202124]">{meta.clientInfo.company_name}</strong></p>
+                      <p className="text-[11px] text-[#737680]">Industri: <strong className="text-[#202124]">{meta.clientInfo.industry}</strong></p>
+                      <p className="text-[11px] text-[#737680]">Email: <strong className="text-[#F26B5E]">{meta.clientInfo.email}</strong></p>
+                    </div>
+                  </div>
+                )}
+
+                {/* OPTION 2: INPUT MANUAL KLIEN BARU (AUTO-SAVE TO CLIENT LISTING) */}
+                {clientMode === 'manual' && (
+                  <div className="space-y-3 pt-1">
+                    <p className="text-[11px] text-[#737680]">
+                      * Data klien baru yang dimasukkan akan <strong>otomatis tersimpan ke Client Listing (`/clients`)</strong> secara permanen.
+                    </p>
+                    <div>
+                      <label className="block font-semibold text-[#202124] mb-1">Nama Klien PIC *</label>
+                      <input
+                        type="text"
+                        required
+                        value={meta.clientInfo.name}
+                        onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, name: e.target.value } })}
+                        placeholder="Contoh: Budi Santoso"
+                        className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#202124] mb-1">Perusahaan / Brand *</label>
+                      <input
+                        type="text"
+                        required
+                        value={meta.clientInfo.company_name}
+                        onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, company_name: e.target.value } })}
+                        placeholder="Contoh: PT Tokopedia Indonesia"
+                        className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#202124] mb-1">Industri</label>
+                      <input
+                        type="text"
+                        value={meta.clientInfo.industry}
+                        onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, industry: e.target.value } })}
+                        placeholder="Contoh: E-Commerce / FMCG"
+                        className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-[#202124] mb-1">Email Kontak</label>
+                      <input
+                        type="email"
+                        value={meta.clientInfo.email}
+                        onChange={(e) => setMeta({ ...meta, clientInfo: { ...meta.clientInfo, email: e.target.value } })}
+                        placeholder="contact@brand.com"
+                        className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E8E8EC]">
-                  <button onClick={() => setIsEditClientOpen(false)} className="px-4 py-2 text-[#737680] hover:bg-[#F7F7F8] rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditClientOpen(false)}
+                    className="px-4 py-2 text-[#737680] hover:bg-[#F7F7F8] rounded-xl cursor-pointer font-semibold"
+                  >
                     Batal
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
+                      // Save meta to project
                       updateMeta(meta);
+
+                      // If manual mode, automatically push to Client Listing (localStorage)
+                      if (clientMode === 'manual' && meta.clientInfo.company_name) {
+                        const newCustomClient = {
+                          id: 'c_custom_' + Date.now(),
+                          name: meta.clientInfo.name || `PIC ${meta.clientInfo.company_name}`,
+                          company_name: meta.clientInfo.company_name,
+                          email: meta.clientInfo.email || `contact@${meta.clientInfo.company_name.toLowerCase().replace(/\s+/g, '')}.id`,
+                          phone: '+62 812-0000-0000',
+                          logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.clientInfo.company_name)}&background=24324A&color=fff`,
+                          status: 'active',
+                          industry: meta.clientInfo.industry || 'Digital Agency',
+                          clickup_folder_id: 'folder_custom_' + Date.now(),
+                          overall_progress: 0,
+                          notes: `Didaftarkan otomatis dari Project ${realProject?.name || ''}`,
+                          start_date: new Date().toISOString().split('T')[0],
+                          account_manager_id: 'u1',
+                          active_projects_count: 1,
+                          completed_projects_count: 0,
+                          total_tasks_count: 0,
+                        };
+
+                        const savedCustomStr = localStorage.getItem('bilik_custom_clients');
+                        let customList = [];
+                        if (savedCustomStr) {
+                          try { customList = JSON.parse(savedCustomStr); } catch {}
+                        }
+                        if (!customList.some((c: any) => c.company_name.toLowerCase() === meta.clientInfo.company_name.toLowerCase())) {
+                          localStorage.setItem('bilik_custom_clients', JSON.stringify([newCustomClient, ...customList]));
+                        }
+                      }
+
                       setIsEditClientOpen(false);
                     }}
-                    className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs"
+                    className="px-5 py-2 font-bold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-xl shadow-xs cursor-pointer"
                   >
                     Simpan Info Klien
                   </button>
