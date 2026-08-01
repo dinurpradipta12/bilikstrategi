@@ -4,13 +4,21 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { X, AlertCircle, CheckCircle2, Briefcase, RefreshCw } from 'lucide-react';
-import { MOCK_USERS, AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/mock/data';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultListId?: string;
   onTaskCreated?: (task: AgencyTask) => void;
+}
+
+interface ClickUpMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatar: string;
 }
 
 export default function CreateTaskModal({
@@ -23,7 +31,9 @@ export default function CreateTaskModal({
   const [successToast, setSuccessToast] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<Array<{ id: string; name: string; client_name: string }>>([]);
+  const [members, setMembers] = useState<ClickUpMember[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -47,7 +57,7 @@ export default function CreateTaskModal({
     },
   });
 
-  // Fetch real ClickUp lists/projects
+  // Fetch real ClickUp lists/projects & workspace members
   useEffect(() => {
     if (isOpen) {
       async function fetchProjects() {
@@ -58,7 +68,6 @@ export default function CreateTaskModal({
             const data = await res.json();
             if (data.projects && data.projects.length > 0) {
               setProjects(data.projects);
-              // Set default selection if not already set
               if (defaultListId) {
                 setValue('project_id', defaultListId);
               } else if (data.projects[0]?.id) {
@@ -72,7 +81,36 @@ export default function CreateTaskModal({
           setLoadingProjects(false);
         }
       }
+
+      async function fetchMembers() {
+        setLoadingMembers(true);
+        try {
+          const res = await fetch('/api/clickup/teams');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.members && data.members.length > 0) {
+              const formatted: ClickUpMember[] = data.members.map((m: any) => ({
+                id: String(m.id),
+                name: m.username || (m.email ? m.email.split('@')[0] : 'Team Member'),
+                email: m.email || '',
+                role: m.role_key || (m.role === 1 ? 'owner' : m.role === 2 ? 'admin' : 'member'),
+                avatar: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'TM')}&background=24324A&color=fff`,
+              }));
+              setMembers(formatted);
+              if (formatted[0]?.id) {
+                setValue('assignee_id', formatted[0].id);
+              }
+            }
+          }
+        } catch {
+          // ignore
+        } finally {
+          setLoadingMembers(false);
+        }
+      }
+
       fetchProjects();
+      fetchMembers();
     }
   }, [isOpen, defaultListId, setValue]);
 
@@ -82,6 +120,7 @@ export default function CreateTaskModal({
     setIsSubmitting(true);
     try {
       const selectedProject = projects.find((p) => p.id === data.project_id);
+      const selectedMember = members.find((m) => m.id === String(data.assignee_id));
 
       const res = await fetch('/api/clickup/tasks', {
         method: 'POST',
@@ -91,6 +130,7 @@ export default function CreateTaskModal({
           name: data.task_name,
           description: data.description,
           priority: data.priority,
+          assignees: data.assignee_id ? [data.assignee_id] : undefined,
           due_date: data.due_date,
         }),
       });
@@ -104,7 +144,7 @@ export default function CreateTaskModal({
 
       const resData = await res.json();
       const createdTask: AgencyTask = resData.task || {
-        id: `tsk-${Date.now()}`,
+        id: resData.raw?.id || `tsk-${Date.now()}`,
         clickup_task_id: resData.raw?.id || `cu-${Date.now()}`,
         project_id: data.project_id,
         project_name: selectedProject?.name || 'ClickUp Project',
@@ -112,12 +152,12 @@ export default function CreateTaskModal({
         description: data.description,
         status: 'to_do',
         priority: data.priority,
-        assignee_ids: ['276885530'],
-        assignee_names: ['Dinur Pradipta'],
-        assignee_avatars: ['https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'],
+        assignee_ids: selectedMember ? [selectedMember.id] : ['276885530'],
+        assignee_names: selectedMember ? [selectedMember.name] : ['Dinur Pradipta'],
+        assignee_avatars: selectedMember ? [selectedMember.avatar] : ['https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'],
         start_date: new Date().toISOString(),
         due_date: new Date(data.due_date).toISOString(),
-        tags: data.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
+        tags: data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
         custom_fields: [],
         time_estimate_hours: 8,
         time_tracked_hours: 0,
@@ -207,16 +247,22 @@ export default function CreateTaskModal({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#202124] mb-1">PIC / Assignee</label>
+              <label className="block text-xs font-semibold text-[#202124] mb-1">
+                PIC / Assignee ClickUp * {loadingMembers && <RefreshCw className="w-3 h-3 inline animate-spin text-[#F26B5E] ml-1" />}
+              </label>
               <select
                 {...register('assignee_id')}
                 className="w-full px-3 py-2 text-sm border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A] bg-[#FFFFFF]"
               >
-                {MOCK_USERS.filter((u) => u.role !== 'client').map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.full_name} ({u.role})
-                  </option>
-                ))}
+                {members.length === 0 ? (
+                  <option value="276885530">Dinur Pradipta (owner)</option>
+                ) : (
+                  members.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>
