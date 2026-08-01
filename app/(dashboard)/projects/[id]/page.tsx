@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ACTIVITY_LOGS } from '@/lib/mock/data';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
+import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
 type ProjectTab = 'overview' | 'tasks' | 'timeline' | 'team' | 'files' | 'activity' | 'feedback';
 
@@ -103,6 +104,8 @@ export default function ProjectDetailPage() {
   const [realTasks, setRealTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
 
   // Modals state
   const [isEditOverviewOpen, setIsEditOverviewOpen] = useState(false);
@@ -587,7 +590,7 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* TAB 3: TIMELINE / GANTT ROADMAP */}
+      {/* TAB 3: TIMELINE / CALENDAR SCHEDULE ROADMAP */}
       {activeTab === 'timeline' && (
         <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-6">
           {/* Timeline Header & Controls */}
@@ -595,17 +598,17 @@ export default function ProjectDetailPage() {
             <div>
               <h3 className="text-base font-extrabold text-[#24324A] flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#F26B5E]" />
-                <span>Project Timeline & Schedule Roadmap</span>
+                <span>Project Timeline & Schedule Calendar</span>
               </h3>
               <p className="text-xs text-[#737680] mt-0.5">
-                Estimasi Roadmap: <span className="font-semibold text-[#202124]">{currentProject.start_date}</span> s/d <span className="font-semibold text-[#202124]">{currentProject.due_date}</span>
+                Jadwal Roadmap: <span className="font-semibold text-[#202124]">{currentProject.start_date}</span> s/d <span className="font-semibold text-[#202124]">{currentProject.due_date}</span>
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsEditOverviewOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-xl hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
                 <span>Kelola / Tambah Milestone</span>
@@ -613,112 +616,95 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* GANTT CHART MAIN CONTAINER */}
-          <div className="border border-[#E8E8EC] rounded-xl overflow-hidden bg-[#FFFFFF]">
-            {/* Gantt Header Columns */}
-            <div className="grid grid-cols-12 bg-[#F7F7F8] border-b border-[#E8E8EC] text-[11px] font-bold text-[#737680] py-3 px-4 uppercase tracking-wider">
-              <div className="col-span-5 sm:col-span-4 border-r border-[#E8E8EC] pr-2">
-                Milestone & Deliverable Task
-              </div>
-              <div className="col-span-7 sm:col-span-8 grid grid-cols-4 text-center">
-                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 1 (1-7 Ags)</span>
-                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 2 (8-14 Ags)</span>
-                <span className="border-r border-[#E8E8EC]/60 px-1">Minggu 3 (15-21 Ags)</span>
-                <span className="px-1">Minggu 4 (22-31 Ags)</span>
-              </div>
+          {/* CALENDAR SCHEDULE BOARD (MATCHING REFERENCE DESIGN) */}
+          <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
+            {/* Days Header Row */}
+            <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
+              {[
+                { dayName: 'SUN', dateNum: '02', isToday: true },
+                { dayName: 'MON', dateNum: '03', isToday: false },
+                { dayName: 'TUE', dateNum: '04', isToday: false },
+                { dayName: 'WED', dateNum: '05', isToday: false },
+                { dayName: 'THU', dateNum: '06', isToday: false },
+                { dayName: 'FRI', dateNum: '07', isToday: false },
+                { dayName: 'SAT', dateNum: '08', isToday: false },
+              ].map((day) => (
+                <div
+                  key={day.dayName}
+                  className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
+                    day.isToday ? 'bg-[#EEF2F7]/60' : ''
+                  }`}
+                >
+                  <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
+                  <span
+                    className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-extrabold ${
+                      day.isToday ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#202124]'
+                    }`}
+                  >
+                    {day.dateNum}
+                  </span>
+                </div>
+              ))}
             </div>
 
-            {/* Gantt Body Rows */}
-            <div className="divide-y divide-[#E8E8EC] relative">
-              {/* Today Accent Marker Line */}
-              <div
-                className="absolute top-0 bottom-0 z-10 border-l-2 border-dashed border-[#F26B5E] pointer-events-none"
-                style={{ left: 'calc(33.33% + 4%)' }}
-              >
-                <span className="absolute -top-2.5 -left-6 px-1.5 py-0.5 bg-[#F26B5E] text-white text-[9px] font-bold rounded shadow-xs">
-                  HARI INI
-                </span>
-              </div>
+            {/* Schedule Board Body with Vertical Grid Lines */}
+            <div className="relative min-h-[380px] p-4 bg-[#FFFFFF]">
+              {/* Vertical Grid Column Lines */}
+              <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
 
-              {meta.milestones.length === 0 ? (
-                <div className="p-8 text-center text-xs text-[#737680]">
-                  Belum ada milestone pada project ini. Klik tombol &quot;Kelola / Tambah Milestone&quot; di atas untuk membuat schedule roadmap pertama.
-                </div>
-              ) : (
-                meta.milestones.map((m) => {
-                  const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
-                  const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
-                  const startDay = Math.max(1, Math.min(31, startD));
-                  const endDay = Math.max(startDay, Math.min(31, endD));
+              {/* Schedule Bars */}
+              <div className="relative z-10 space-y-3">
+                {meta.milestones.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-[#737680]">
+                    Belum ada milestone roadmap. Klik &quot;Kelola / Tambah Milestone&quot; untuk menambahkan.
+                  </div>
+                ) : (
+                  meta.milestones.map((m, idx) => {
+                    const themes = [
+                      { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                      { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                      { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                      { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                    ];
+                    const theme = themes[idx % themes.length];
 
-                  const leftPct = ((startDay - 1) / 31) * 100;
-                  const widthPct = Math.max(8, ((endDay - startDay + 1) / 31) * 100);
+                    const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
+                    const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
 
-                  const isComplete = m.status === 'completed';
-                  const isInProgress = m.status === 'in_progress';
+                    const startCol = Math.max(0, Math.min(6, startD - 2));
+                    const endCol = Math.max(startCol, Math.min(6, endD - 2));
+                    const colSpan = Math.max(1, endCol - startCol + 1);
 
-                  return (
-                    <div key={m.id} className="grid grid-cols-12 items-center py-3.5 px-4 hover:bg-[#F7F7F8]/80 transition-colors group">
-                      {/* Left Info Column */}
-                      <div className="col-span-5 sm:col-span-4 pr-3 border-r border-[#E8E8EC] space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-[#24324A] truncate max-w-[180px]" title={m.name}>
-                            {m.name}
-                          </span>
-                          <button
-                            onClick={() => toggleMilestoneStatus(m.id)}
-                            className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full transition-all cursor-pointer ${
-                              isComplete
-                                ? 'bg-[#EEF2F7] text-[#4F9D78] border border-[#4F9D78]/30'
-                                : isInProgress
-                                ? 'bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30'
-                                : 'bg-[#EEF2F7] text-[#737680] border border-[#E8E8EC]'
-                            }`}
-                            title="Klik untuk mengubah status milestone"
-                          >
-                            {isComplete ? '🟢 Selesai' : isInProgress ? '🔵 In Progress' : '⚪ Pending'}
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between text-[10px] text-[#737680]">
-                          <span className="font-mono">
-                            {m.start_date || m.date} {m.due_date ? `s/d ${m.due_date}` : ''}
-                          </span>
-                          <span className="font-semibold text-[#202124]">{endDay - startDay + 1} Hari</span>
-                        </div>
-                      </div>
+                    return (
+                      <div key={m.id} className="grid grid-cols-7 gap-2">
+                        <div
+                          style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                          onClick={() => toggleMilestoneStatus(m.id)}
+                          className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm flex-shrink-0">{theme.icon}</span>
+                            <div className="truncate">
+                              <span className={`text-xs font-bold block truncate ${theme.text}`}>
+                                {m.name}
+                              </span>
+                              <span className="text-[10px] opacity-80 block truncate">
+                                {m.start_date || m.date} s/d {m.due_date || m.date}
+                              </span>
+                            </div>
+                          </div>
 
-                      {/* Right Gantt Bar Area */}
-                      <div className="col-span-7 sm:col-span-8 pl-4 relative py-1 flex items-center">
-                        <div className="w-full h-8 bg-[#F7F7F8] rounded-lg relative overflow-hidden border border-[#E8E8EC]/60">
-                          {/* Grid background lines */}
-                          <div className="absolute inset-0 grid grid-cols-4 divide-x divide-[#E8E8EC]/40 pointer-events-none" />
-
-                          {/* Gantt Bar Element */}
-                          <div
-                            className={`absolute top-1 bottom-1 rounded-md px-2.5 flex items-center justify-between text-white text-[11px] font-bold transition-all shadow-xs ${
-                              isComplete
-                                ? 'bg-gradient-to-r from-[#4F9D78] to-[#3B7A5C]'
-                                : isInProgress
-                                ? 'bg-gradient-to-r from-[#24324A] via-[#354868] to-[#F26B5E]'
-                                : 'bg-[#E8E8EC] text-[#24324A] border border-[#D0D0D5]'
-                            }`}
-                            style={{
-                              left: `${leftPct}%`,
-                              width: `${widthPct}%`,
-                            }}
-                            title={`${m.name} (${m.start_date || m.date} - ${m.due_date || m.date})`}
-                          >
-                            <span className="truncate mr-1 text-[10px]">{m.name}</span>
-                            <span className="text-[9px] opacity-90 font-mono whitespace-nowrap">
-                              {isComplete ? '100%' : isInProgress ? '50%' : '0%'}
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${theme.bg} ${theme.text} border ${theme.border}`}>
+                              {m.status === 'completed' ? '🟢 Selesai' : m.status === 'in_progress' ? '🔵 In Progress' : '⚪ Pending'}
                             </span>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 
@@ -727,56 +713,45 @@ export default function ProjectDetailPage() {
             <div className="pt-4 border-t border-[#E8E8EC] space-y-3">
               <h4 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
                 <CheckSquare className="w-4 h-4 text-[#F26B5E]" />
-                <span>Task Live ClickUp Schedule Roadmap ({realTasks.length})</span>
+                <span>Task Live ClickUp Schedule ({realTasks.length})</span>
               </h4>
 
-              <div className="border border-[#E8E8EC] rounded-xl overflow-hidden bg-[#FFFFFF] divide-y divide-[#E8E8EC]">
-                {realTasks.map((t) => {
-                  const dueD = t.due_date ? new Date(t.due_date).getDate() : 25;
-                  const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(1, dueD - 5);
+              <div className="border border-[#E8E8EC] rounded-2xl p-4 bg-[#FFFFFF] relative min-h-[160px]">
+                <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/40 pointer-events-none" />
+                <div className="relative z-10 space-y-2.5">
+                  {realTasks.map((t, idx) => {
+                    const dueD = t.due_date ? new Date(t.due_date).getDate() : 5;
+                    const startD = t.start_date ? new Date(t.start_date).getDate() : Math.max(2, dueD - 3);
 
-                  const startDay = Math.max(1, Math.min(31, startD));
-                  const endDay = Math.max(startDay, Math.min(31, dueD));
+                    const startCol = Math.max(0, Math.min(6, startD - 2));
+                    const endCol = Math.max(startCol, Math.min(6, dueD - 2));
+                    const colSpan = Math.max(1, endCol - startCol + 1);
 
-                  const leftPct = ((startDay - 1) / 31) * 100;
-                  const widthPct = Math.max(8, ((endDay - startDay + 1) / 31) * 100);
+                    const isComplete = t.status === 'completed' || (t as any).status?.type === 'closed';
 
-                  const isComplete = t.status === 'completed' || (t as any).status?.type === 'closed';
-                  const isInProgress = t.status === 'in_progress';
-
-                  return (
-                    <div key={t.id} className="grid grid-cols-12 items-center py-2.5 px-4 hover:bg-[#F7F7F8]/80 text-xs">
-                      <div className="col-span-5 sm:col-span-4 pr-3 border-r border-[#E8E8EC] flex items-center justify-between">
-                        <span className="font-semibold text-[#202124] truncate" title={t.task_name}>
-                          {t.task_name}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EEF2F7] text-[#24324A] font-mono capitalize">
-                          {t.status}
-                        </span>
-                      </div>
-
-                      <div className="col-span-7 sm:col-span-8 pl-4 relative py-1 flex items-center">
-                        <div className="w-full h-6 bg-[#F7F7F8] rounded-md relative overflow-hidden border border-[#E8E8EC]/40">
-                          <div
-                            className={`absolute top-0.5 bottom-0.5 rounded px-2 flex items-center justify-between text-white text-[9px] font-bold shadow-2xs ${
-                              isComplete
-                                ? 'bg-[#4F9D78]'
-                                : isInProgress
-                                ? 'bg-[#24324A]'
-                                : 'bg-[#F26B5E]'
-                            }`}
-                            style={{
-                              left: `${leftPct}%`,
-                              width: `${widthPct}%`,
-                            }}
-                          >
-                            <span className="truncate">{t.task_name}</span>
-                          </div>
+                    return (
+                      <div key={t.id} className="grid grid-cols-7 gap-2">
+                        <div
+                          style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                          onClick={() => {
+                            setSelectedTask(t);
+                            setIsTaskDrawerOpen(true);
+                          }}
+                          className={`p-2 rounded-xl text-xs font-bold flex items-center justify-between shadow-2xs border cursor-pointer ${
+                            isComplete
+                              ? 'bg-[#E3F8E9] text-[#1D7434] border-[#B4ECC2]'
+                              : 'bg-[#E8F1FF] text-[#1E56B3] border-[#BDD7FF]'
+                          }`}
+                        >
+                          <span className="truncate mr-2">{t.task_name}</span>
+                          <span className="text-[10px] opacity-80 font-mono flex-shrink-0">
+                            Due: {new Date(t.due_date).getDate()} Ags
+                          </span>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1567,6 +1542,12 @@ export default function ProjectDetailPage() {
           </div>,
           document.body
         )}
+      {/* TASK DETAIL DRAWER */}
+      <TaskDetailDrawer
+        task={selectedTask}
+        isOpen={isTaskDrawerOpen}
+        onClose={() => setIsTaskDrawerOpen(false)}
+      />
     </div>
   );
 }
