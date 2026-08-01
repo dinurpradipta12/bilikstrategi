@@ -155,24 +155,47 @@ export default function ProjectDetailPage() {
       }
     }
 
-    // Fetch ClickUp team members
+    // Fetch ClickUp team members & sync profile pictures
     async function fetchClickUpMembers() {
       try {
         const res = await fetch('/api/clickup/teams');
         if (res.ok) {
           const data = await res.json();
           if (data.members && data.members.length > 0) {
-            const formatted: ClickUpMember[] = data.members.map((m: any) => ({
-              id: String(m.id),
-              name: m.username || (m.email ? m.email.split('@')[0] : 'Team Member'),
-              email: m.email || '',
-              role: m.role_key || (m.role === 1 ? 'owner' : m.role === 2 ? 'admin' : 'member'),
-              avatar: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'TM')}&background=24324A&color=fff`,
-            }));
+            const formatted: ClickUpMember[] = data.members.map((m: any) => {
+              const name = m.username || (m.email ? m.email.split('@')[0] : 'Team Member');
+              const avatar = m.profilePicture
+                ? m.profilePicture
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=24324A&color=F26B5E&font-size=0.4&bold=true`;
+              return {
+                id: String(m.id),
+                name,
+                email: m.email || '',
+                role: m.role_key || (m.role === 1 ? 'owner' : m.role === 2 ? 'admin' : 'member'),
+                avatar,
+              };
+            });
             setClickupMembers(formatted);
             if (formatted[0]?.id) {
               setSelectedClickUpMemberId(formatted[0].id);
             }
+
+            // Sync existing meta.teamMembers avatar_url with live ClickUp profile picture
+            setMeta((prev) => {
+              const updatedTeam = prev.teamMembers.map((tm) => {
+                const match = formatted.find(
+                  (f) =>
+                    f.id === tm.id ||
+                    (f.email && tm.email && f.email.toLowerCase() === tm.email.toLowerCase()) ||
+                    f.name.toLowerCase() === tm.name.toLowerCase()
+                );
+                if (match) {
+                  return { ...tm, avatar_url: match.avatar, email: match.email || tm.email };
+                }
+                return tm;
+              });
+              return { ...prev, teamMembers: updatedTeam };
+            });
           }
         }
       } catch {
