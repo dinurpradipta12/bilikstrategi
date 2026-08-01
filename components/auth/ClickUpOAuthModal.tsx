@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Shield, Lock, ArrowRight, ExternalLink, ChevronDown, User } from 'lucide-react';
 
 interface ClickUpOAuthModalProps {
@@ -22,6 +23,11 @@ export default function ClickUpOAuthModal({ isOpen, onClose, onSuccess }: ClickU
   const [members, setMembers] = useState<MemberAccount[]>([]);
   const [selectedMember, setSelectedMember] = useState<MemberAccount | null>(null);
   const [loadingMembers, setLoadingMembers] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -57,7 +63,7 @@ export default function ClickUpOAuthModal({ isOpen, onClose, onSuccess }: ClickU
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleAuthorize = () => {
     setAuthorizing(true);
@@ -67,9 +73,9 @@ export default function ClickUpOAuthModal({ isOpen, onClose, onSuccess }: ClickU
     }, 800);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden relative z-[101]">
         {/* Popup Header */}
         <div className="p-6 bg-[#7B68EE] text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -186,6 +192,7 @@ export default function ClickUpOAuthModal({ isOpen, onClose, onSuccess }: ClickU
           Authorized by ClickUp API OAuth 2.0 Engine
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

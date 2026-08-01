@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { X, Calendar, Tag, AlertCircle, CheckCircle2, UserCheck, Briefcase } from 'lucide-react';
 import { MOCK_PROJECTS, MOCK_USERS, MOCK_TASKS, AgencyTask } from '@/lib/mock/data';
@@ -14,6 +15,11 @@ interface CreateTaskModalProps {
 export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: CreateTaskModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm({
     defaultValues: {
@@ -27,7 +33,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     },
   });
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
@@ -76,9 +82,9 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
     }, 1000);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden relative z-[101]">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
           <h2 className="text-base font-semibold text-[#24324A] flex items-center">
@@ -209,6 +215,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: Crea
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

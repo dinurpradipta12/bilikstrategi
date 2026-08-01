@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckSquare,
   Search,
@@ -18,7 +19,6 @@ import {
 import { MOCK_TASKS, MOCK_PROJECTS, MOCK_USERS, AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
-import { useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -48,6 +48,11 @@ export default function TasksPage() {
   const [newTaskDesc, setNewTaskDesc] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'urgent' | 'high' | 'normal' | 'low'>('normal');
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -475,9 +480,9 @@ export default function TasksPage() {
       />
 
       {/* Modal Tambah Task Baru */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+      {isModalOpen && mounted && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 relative z-[101]">
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
               <h3 className="text-sm font-extrabold text-[#24324A]">Buat Task Baru di ClickUp</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A]">
@@ -541,7 +546,8 @@ export default function TasksPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Confirm Delete Task */}

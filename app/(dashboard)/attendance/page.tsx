@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
   Clock,
@@ -1139,9 +1140,9 @@ export default function AttendancePage() {
       </div>
 
       {/* Modal Form Pengajuan Izin / Sakit / Cuti */}
-      {showLeaveModal && (
-        <div className="fixed inset-0 bg-[#24324A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
+      {showLeaveModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
             <button
               onClick={() => setShowLeaveModal(false)}
               className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer"
@@ -1224,7 +1225,8 @@ export default function AttendancePage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

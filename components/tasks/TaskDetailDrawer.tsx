@@ -76,7 +76,7 @@ export default function TaskDetailDrawer({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-35 flex justify-end bg-black/50 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-xs">
       {/* Backdrop overlay click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 

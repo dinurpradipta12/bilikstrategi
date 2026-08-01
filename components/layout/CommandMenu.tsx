@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Search, PlusCircle, CheckSquare, Briefcase, Users, MessageSquare, Settings, X, ArrowRight } from 'lucide-react';
 import { MOCK_PROJECTS, MOCK_TASKS, MOCK_CLIENTS } from '@/lib/mock/data';
@@ -14,6 +15,11 @@ interface CommandMenuProps {
 export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: CommandMenuProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -33,7 +39,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const filteredTasks = MOCK_TASKS.filter(t => t.task_name.toLowerCase().includes(query.toLowerCase()));
   const filteredProjects = MOCK_PROJECTS.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
@@ -44,9 +50,9 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/40 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden text-[#202124]">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden text-[#202124] relative z-[101]">
         {/* Header Search Input */}
         <div className="flex items-center px-4 border-b border-[#E8E8EC]">
           <Search className="w-5 h-5 text-[#737680] mr-3" />
@@ -183,6 +189,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
           <span>Bilik Strategi Workspace v1.0</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
