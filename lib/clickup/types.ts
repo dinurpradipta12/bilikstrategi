@@ -111,6 +111,7 @@ export interface ClickUpTask {
   checklists?: unknown[];
   tags: ClickUpTag[];
   parent?: string | null;
+  subtasks?: ClickUpTask[];
   priority?: ClickUpPriority | null;
   due_date?: string | null;
   start_date?: string | null;

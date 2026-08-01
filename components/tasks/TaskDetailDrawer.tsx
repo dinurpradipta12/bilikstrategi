@@ -19,6 +19,8 @@ import {
   Edit3,
   Save,
   RefreshCw,
+  Plus,
+  UserPlus,
 } from 'lucide-react';
 import { AgencyTask } from '@/lib/mock/data';
 import ConfirmModal from '@/components/ui/ConfirmModal';
@@ -68,6 +70,16 @@ export default function TaskDetailDrawer({
   // Real ClickUp Team members for PIC dropdown
   const [members, setMembers] = useState<ClickUpMember[]>([]);
 
+  // Subtasks State (ClickUp Live Synced)
+  const [subtasks, setSubtasks] = useState<Array<{ id: string; name: string; status: 'completed' | 'to_do' }>>([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  const [newSubtaskName, setNewSubtaskName] = useState('');
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
+
+  // Tags State
+  const [tagInput, setTagInput] = useState('');
+  const [showAddTagInput, setShowAddTagInput] = useState(false);
+
   // Real ClickUp Comments state
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<Array<{ id: string; user: string; text: string; time: string; avatar?: string }>>([]);
@@ -97,7 +109,7 @@ export default function TaskDetailDrawer({
     }
   }, [task]);
 
-  // Fetch real team members & ClickUp comments when drawer opens
+  // Fetch real team members, ClickUp comments & subtasks when drawer opens
   useEffect(() => {
     if (isOpen && task) {
       async function fetchMembers() {
@@ -141,17 +153,59 @@ export default function TaskDetailDrawer({
             }
           }
         } catch {
-          // fallback
           setComments([
-            { id: 'c1', user: 'Dinur Pradipta', text: 'Task ini sudah disinkronkan langsung dengan ClickUp Workspace.', time: 'Hari ini' },
+            { id: 'c1', user: 'Dinur Pradipta', text: 'Task ini disinkronkan langsung dengan ClickUp Workspace.', time: 'Hari ini' },
           ]);
         } finally {
           setLoadingComments(false);
         }
       }
 
+      async function fetchSubtasks() {
+        if (!task?.id) return;
+        setLoadingSubtasks(true);
+        try {
+          const res = await fetch(`/api/clickup/subtasks?taskId=${task.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.subtasks) && data.subtasks.length > 0) {
+              const formatted = data.subtasks.map((st: any) => ({
+                id: String(st.id),
+                name: st.name || 'Subtask',
+                status: st.status?.status?.toLowerCase() === 'complete' || st.status?.status?.toLowerCase() === 'completed' || st.status?.type === 'closed' ? ('completed' as const) : ('to_do' as const),
+              }));
+              setSubtasks(formatted);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`bilik_subtasks_${task.id}`, JSON.stringify(formatted));
+              }
+              setLoadingSubtasks(false);
+              return;
+            }
+          }
+        } catch {
+          // ignore
+        } finally {
+          setLoadingSubtasks(false);
+        }
+
+        // Fallback to localStorage cache
+        if (typeof window !== 'undefined') {
+          const cached = localStorage.getItem(`bilik_subtasks_${task.id}`);
+          if (cached) {
+            try {
+              setSubtasks(JSON.parse(cached));
+            } catch {
+              setSubtasks([]);
+            }
+          } else {
+            setSubtasks([]);
+          }
+        }
+      }
+
       fetchMembers();
       fetchComments();
+      fetchSubtasks();
     }
   }, [isOpen, task]);
 
@@ -171,7 +225,7 @@ export default function TaskDetailDrawer({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskId: task.id,
+          taskId: activeTask.id,
           name: taskName,
           description: taskDesc,
           status: taskStatus,
@@ -189,15 +243,15 @@ export default function TaskDetailDrawer({
       }
 
       const updatedTask: AgencyTask = {
-        ...(localTask || task),
+        ...activeTask,
         task_name: taskName,
         description: taskDesc,
         status: taskStatus,
         priority: taskPriority,
         due_date: new Date(taskDueDate).toISOString(),
-        assignee_ids: selectedMember ? [selectedMember.id] : (localTask || task).assignee_ids,
-        assignee_names: selectedMember ? [selectedMember.name] : (localTask || task).assignee_names,
-        assignee_avatars: selectedMember ? [selectedMember.avatar] : (localTask || task).assignee_avatars,
+        assignee_ids: selectedMember ? [selectedMember.id] : activeTask.assignee_ids,
+        assignee_names: selectedMember ? [selectedMember.name] : activeTask.assignee_names,
+        assignee_avatars: selectedMember ? [selectedMember.avatar] : activeTask.assignee_avatars,
         clickup_updated_at: new Date().toISOString(),
       };
 
@@ -206,11 +260,11 @@ export default function TaskDetailDrawer({
       if (onTaskUpdated) {
         onTaskUpdated(updatedTask);
       }
-      if (onStatusChange && taskStatus !== (localTask || task).status) {
-        onStatusChange(task.id, taskStatus);
+      if (onStatusChange && taskStatus !== activeTask.status) {
+        onStatusChange(activeTask.id, taskStatus);
       }
-      if (onPriorityChange && taskPriority !== (localTask || task).priority) {
-        onPriorityChange(task.id, taskPriority);
+      if (onPriorityChange && taskPriority !== activeTask.priority) {
+        onPriorityChange(activeTask.id, taskPriority);
       }
 
       setIsEditing(false);
@@ -221,6 +275,175 @@ export default function TaskDetailDrawer({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Subtask Handlers
+  const handleAddSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtaskName.trim() || !activeTask) return;
+
+    setIsCreatingSubtask(true);
+    const subtaskText = newSubtaskName.trim();
+    setNewSubtaskName('');
+
+    const tempId = `st_${Date.now()}`;
+    const newStItem = { id: tempId, name: subtaskText, status: 'to_do' as const };
+    const updatedSubtasks = [...subtasks, newStItem];
+    setSubtasks(updatedSubtasks);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updatedSubtasks));
+    }
+
+    try {
+      const res = await fetch('/api/clickup/subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listId: activeTask.project_id,
+          parentId: activeTask.id,
+          name: subtaskText,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.subtask?.id) {
+          const finalSubtasks = updatedSubtasks.map((s) => (s.id === tempId ? { ...s, id: String(data.subtask.id) } : s));
+          setSubtasks(finalSubtasks);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(finalSubtasks));
+          }
+        }
+      }
+    } catch {
+      // Keep optimistic subtask item
+    } finally {
+      setIsCreatingSubtask(false);
+    }
+  };
+
+  const handleToggleSubtask = async (subtaskId: string, currentStatus: 'completed' | 'to_do') => {
+    const nextStatus = currentStatus === 'completed' ? ('to_do' as const) : ('completed' as const);
+    const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, status: nextStatus } : s));
+    setSubtasks(updated);
+
+    if (activeTask && typeof window !== 'undefined') {
+      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updated));
+    }
+
+    try {
+      await fetch('/api/clickup/subtasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtaskId,
+          status: nextStatus === 'completed' ? 'complete' : 'to do',
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteSubtask = async (subtaskId: string) => {
+    const updated = subtasks.filter((s) => s.id !== subtaskId);
+    setSubtasks(updated);
+
+    if (activeTask && typeof window !== 'undefined') {
+      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updated));
+    }
+
+    try {
+      await fetch(`/api/clickup/subtasks?subtaskId=${subtaskId}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Tag Handlers
+  const handleAddTag = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tagInput.trim()) return;
+    const newTag = tagInput.trim().replace(/^#/, '');
+    const currentTags = activeTask.tags || [];
+    if (!currentTags.includes(newTag)) {
+      const updatedTags = [...currentTags, newTag];
+      const updatedTask = { ...activeTask, tags: updatedTags };
+      setLocalTask(updatedTask);
+      if (onTaskUpdated) onTaskUpdated(updatedTask);
+    }
+    setTagInput('');
+    setShowAddTagInput(false);
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const updatedTags = (activeTask.tags || []).filter((t) => t !== tagToRemove);
+    const updatedTask = { ...activeTask, tags: updatedTags };
+    setLocalTask(updatedTask);
+    if (onTaskUpdated) onTaskUpdated(updatedTask);
+  };
+
+  // Assignee Handlers
+  const handleAddAssignee = (memberId: string) => {
+    const selectedMember = members.find((m) => m.id === memberId);
+    if (!selectedMember) return;
+
+    const currentNames = activeTask.assignee_names || [];
+    const currentIds = activeTask.assignee_ids || [];
+    const currentAvatars = activeTask.assignee_avatars || [];
+
+    if (!currentIds.includes(memberId)) {
+      const updatedTask = {
+        ...activeTask,
+        assignee_ids: [...currentIds, selectedMember.id],
+        assignee_names: [...currentNames, selectedMember.name],
+        assignee_avatars: [...currentAvatars, selectedMember.avatar],
+      };
+      setLocalTask(updatedTask);
+      if (onTaskUpdated) onTaskUpdated(updatedTask);
+
+      // Sync to ClickUp API
+      fetch('/api/clickup/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: activeTask.id,
+          assignees: updatedTask.assignee_ids,
+        }),
+      }).catch(() => {});
+    }
+  };
+
+  const handleRemoveAssignee = (index: number) => {
+    const currentNames = [...(activeTask.assignee_names || [])];
+    const currentIds = [...(activeTask.assignee_ids || [])];
+    const currentAvatars = [...(activeTask.assignee_avatars || [])];
+
+    currentNames.splice(index, 1);
+    currentIds.splice(index, 1);
+    currentAvatars.splice(index, 1);
+
+    const updatedTask = {
+      ...activeTask,
+      assignee_ids: currentIds,
+      assignee_names: currentNames,
+      assignee_avatars: currentAvatars,
+    };
+    setLocalTask(updatedTask);
+    if (onTaskUpdated) onTaskUpdated(updatedTask);
+
+    // Sync to ClickUp API
+    fetch('/api/clickup/tasks', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        taskId: activeTask.id,
+        assignees: currentIds,
+      }),
+    }).catch(() => {});
   };
 
   // Handle sending comment to ClickUp API
@@ -237,7 +460,7 @@ export default function TaskDetailDrawer({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskId: task.id,
+          taskId: activeTask.id,
           commentText: textToSend,
         }),
       });
@@ -253,7 +476,6 @@ export default function TaskDetailDrawer({
         };
         setComments((prev) => [...prev, newC]);
       } else {
-        // Optimistic fallback
         setComments((prev) => [
           ...prev,
           {
@@ -266,7 +488,6 @@ export default function TaskDetailDrawer({
         ]);
       }
     } catch {
-      // Optimistic fallback
       setComments((prev) => [
         ...prev,
         {
@@ -283,7 +504,7 @@ export default function TaskDetailDrawer({
   };
 
   const copyUrl = () => {
-    navigator.clipboard.writeText(task.clickup_url);
+    navigator.clipboard.writeText(activeTask.clickup_url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -407,7 +628,7 @@ export default function TaskDetailDrawer({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-[#202124] mb-1">PIC / Assignee</label>
+                  <label className="block text-[11px] font-bold text-[#202124] mb-1">PIC / Assignee Utama</label>
                   <select
                     value={taskAssigneeId}
                     onChange={(e) => setTaskAssigneeId(e.target.value)}
@@ -528,14 +749,51 @@ export default function TaskDetailDrawer({
 
           {/* Tags */}
           <div>
-            <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider mb-2 flex items-center">
-              <Tag className="w-3.5 h-3.5 mr-1 text-[#F26B5E]" /> Tags
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider flex items-center">
+                <Tag className="w-3.5 h-3.5 mr-1 text-[#F26B5E]" /> Tags
+              </h3>
+              <button
+                onClick={() => setShowAddTagInput(!showAddTagInput)}
+                className="text-[11px] font-semibold text-[#24324A] hover:underline flex items-center gap-0.5 cursor-pointer"
+              >
+                <Plus className="w-3 h-3 text-[#F26B5E]" /> Tambah Tag
+              </button>
+            </div>
+
+            {showAddTagInput && (
+              <form onSubmit={handleAddTag} className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder="Ketik tag baru (e.g. Design)..."
+                  className="flex-1 px-3 py-1.5 text-xs border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A]"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] cursor-pointer"
+                >
+                  Tambah
+                </button>
+              </form>
+            )}
+
             <div className="flex flex-wrap gap-1.5">
               {activeTask.tags && activeTask.tags.length > 0 ? (
                 activeTask.tags.map((tag) => (
-                  <span key={tag} className="px-2.5 py-1 bg-[#EEF2F7] text-[#24324A] text-[11px] font-semibold rounded-md border border-[#E8E8EC]">
-                    #{tag}
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#EEF2F7] text-[#24324A] text-[11px] font-semibold rounded-md border border-[#E8E8EC]"
+                  >
+                    <span>#{tag}</span>
+                    <button
+                      onClick={() => handleRemoveTag(tag)}
+                      className="text-[#737680] hover:text-[#D95858] cursor-pointer"
+                      title="Hapus Tag"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </span>
                 ))
               ) : (
@@ -544,20 +802,46 @@ export default function TaskDetailDrawer({
             </div>
           </div>
 
-          {/* Assignees */}
+          {/* Assignees / PIC ClickUp */}
           <div>
-            <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider mb-2 flex items-center justify-between">
-              <span className="flex items-center">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider flex items-center">
                 <User className="w-3.5 h-3.5 mr-1 text-[#24324A]" /> Assignees / PIC ClickUp
-              </span>
-            </h3>
+              </h3>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleAddAssignee(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+                className="text-[11px] font-semibold text-[#24324A] bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg px-2 py-1 outline-none cursor-pointer"
+              >
+                <option value="">+ Tambah PIC...</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-center gap-2 flex-wrap">
               {activeTask.assignee_names && activeTask.assignee_names.length > 0 ? (
                 activeTask.assignee_names.map((name, idx) => (
-                  <div key={name + idx} className="flex items-center gap-1.5 bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC] text-xs">
+                  <div key={name + idx} className="flex items-center gap-2 bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC] text-xs">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={activeTask.assignee_avatars?.[idx] || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'} alt={name} className="w-5 h-5 rounded-full object-cover" />
                     <span className="font-semibold text-[#202124]">{name}</span>
+                    {activeTask.assignee_names.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveAssignee(idx)}
+                        className="text-[#737680] hover:text-[#D95858] cursor-pointer ml-1"
+                        title="Hapus PIC"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -566,22 +850,68 @@ export default function TaskDetailDrawer({
             </div>
           </div>
 
-          {/* Subtasks */}
+          {/* DYNAMIC SUBTASKS (CLICKUP SYNCHRONIZED) */}
           <div>
-            <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider mb-2 flex items-center justify-between">
-              <span className="flex items-center">
-                <CheckSquare className="w-3.5 h-3.5 mr-1 text-[#4F9D78]" /> Subtasks ({task.subtask_count || 0})
-              </span>
-            </h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider flex items-center">
+                <CheckSquare className="w-3.5 h-3.5 mr-1 text-[#4F9D78]" />
+                Subtasks ({subtasks.length})
+                {loadingSubtasks && <RefreshCw className="w-3 h-3 animate-spin text-[#4F9D78] ml-1.5" />}
+              </h3>
+            </div>
+
+            {/* List of Subtasks */}
             <div className="space-y-1.5 text-xs">
-              <div className="p-2.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg flex items-center gap-2 text-[#202124]">
-                <input type="checkbox" defaultChecked className="rounded border-[#E8E8EC] text-[#4F9D78]" />
-                <span className="line-through text-[#737680]">Penyusunan referensi visual moodboard</span>
-              </div>
-              <div className="p-2.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg flex items-center gap-2 text-[#202124]">
-                <input type="checkbox" className="rounded border-[#E8E8EC] text-[#4F9D78]" />
-                <span>Export format 4K PNG & PDF High-Res</span>
-              </div>
+              {subtasks.length === 0 ? (
+                <div className="p-3 bg-[#F7F7F8] border border-dashed border-[#E8E8EC] rounded-lg text-center text-[#737680] text-xs">
+                  Belum ada subtask. Tambahkan subtask baru di bawah untuk memecah pekerjaan ini.
+                </div>
+              ) : (
+                subtasks.map((st) => (
+                  <div
+                    key={st.id}
+                    className="p-2.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg flex items-center justify-between gap-2 text-[#202124]"
+                  >
+                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={st.status === 'completed'}
+                        onChange={() => handleToggleSubtask(st.id, st.status)}
+                        className="rounded border-[#E8E8EC] text-[#4F9D78] focus:ring-0 cursor-pointer"
+                      />
+                      <span className={st.status === 'completed' ? 'line-through text-[#737680] truncate' : 'font-medium truncate'}>
+                        {st.name}
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => handleDeleteSubtask(st.id)}
+                      className="text-[#737680] hover:text-[#D95858] p-1 rounded hover:bg-[#EEF2F7] cursor-pointer"
+                      title="Hapus Subtask"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+
+              {/* Add New Subtask Form */}
+              <form onSubmit={handleAddSubtask} className="flex gap-2 pt-2">
+                <input
+                  type="text"
+                  value={newSubtaskName}
+                  onChange={(e) => setNewSubtaskName(e.target.value)}
+                  placeholder="+ Tambah subtask baru..."
+                  className="flex-1 px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A] bg-[#FFFFFF]"
+                />
+                <button
+                  type="submit"
+                  disabled={isCreatingSubtask}
+                  className="px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] flex items-center gap-1 shadow-2xs cursor-pointer"
+                >
+                  {isCreatingSubtask ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />}
+                  <span>Tambah</span>
+                </button>
+              </form>
             </div>
           </div>
 
@@ -645,13 +975,13 @@ export default function TaskDetailDrawer({
       <ConfirmModal
         isOpen={showConfirmDelete}
         title="Hapus Task dari ClickUp"
-        message={`Apakah Anda yakin ingin menghapus task "${task.task_name}"? Tindakan ini akan menghapus task secara permanen dari ClickUp Workspace.`}
+        message={`Apakah Anda yakin ingin menghapus task "${activeTask.task_name}"? Tindakan ini akan menghapus task secara permanen dari ClickUp Workspace.`}
         confirmText="Hapus Task"
         cancelText="Batal"
         confirmVariant="danger"
         onConfirm={() => {
           setShowConfirmDelete(false);
-          if (onDeleteTask) onDeleteTask(task.id);
+          if (onDeleteTask) onDeleteTask(activeTask.id);
           onClose();
         }}
         onCancel={() => setShowConfirmDelete(false)}
