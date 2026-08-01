@@ -129,9 +129,9 @@ export default function Sidebar() {
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logobilik-hitam.png"
+              src="/landscape.png"
               alt="Bilik Strategi Workspace"
-              className="h-8 max-w-[170px] object-contain"
+              className="h-9 max-w-[180px] object-contain"
             />
           </Link>
         )}
@@ -141,7 +141,7 @@ export default function Sidebar() {
             <img
               src="/logobilik-hitam.png"
               alt="Bilik Strategi Workspace"
-              className="h-7 w-auto object-contain"
+              className="h-8 w-auto object-contain"
             />
           </Link>
         )}
