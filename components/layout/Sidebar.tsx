@@ -107,7 +107,6 @@ export default function Sidebar() {
     { name: 'ClickUp Tasks', href: '/tasks', icon: CheckSquare },
     { name: 'My Tasks', href: '/my-tasks', icon: ListTodo },
     { name: 'Timeline', href: '/timeline', icon: GanttChartSquare },
-    { name: 'Calendar', href: '/calendar', icon: CalendarDays },
     { name: 'Team Workload', href: '/team', icon: Users },
     { name: 'Presensi Live', href: '/attendance', icon: Clock },
     { name: 'Client Listing', href: '/clients', icon: Building2 },
