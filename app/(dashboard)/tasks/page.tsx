@@ -477,6 +477,10 @@ export default function TasksPage() {
         onStatusChange={handleStatusChange}
         onPriorityChange={handlePriorityChange}
         onDeleteTask={handleDeleteTask}
+        onTaskUpdated={(updated) => {
+          setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+          setSelectedTask(updated);
+        }}
       />
 
       {/* Modal Tambah Task Baru */}
