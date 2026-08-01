@@ -8,7 +8,7 @@ import { getTasks } from '@/lib/clickup/tasks';
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
-    const spaceId = process.env.CLICKUP_SPACE_ID || '90182512965';
+    const spaceId = process.env.CLICKUP_SPACE_ID || '901811771867';
     
     // Fetch folderless lists and folders in space
     const [folderless, foldersRes] = await Promise.all([
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
-    const spaceId = process.env.CLICKUP_SPACE_ID || '90182512965';
+    const spaceId = process.env.CLICKUP_SPACE_ID || '901811771867';
     const body = await req.json();
     const { name, content, due_date } = body;
 

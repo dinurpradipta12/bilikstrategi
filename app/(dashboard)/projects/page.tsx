@@ -84,7 +84,8 @@ export default function ProjectsPage() {
         setIsModalOpen(false);
         await fetchProjects();
       } else {
-        alert('Gagal membuat project di ClickUp');
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Gagal membuat project di ClickUp: ${errorData.error || res.statusText}`);
       }
     } catch {
       alert('Terjadi kesalahan jaringan saat membuat project');
