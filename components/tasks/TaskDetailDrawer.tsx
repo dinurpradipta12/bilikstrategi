@@ -74,6 +74,8 @@ export default function TaskDetailDrawer({
   const [loadingComments, setLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
 
+  const [localTask, setLocalTask] = useState<AgencyTask | null>(task);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -81,6 +83,7 @@ export default function TaskDetailDrawer({
   // Initialize form states when task changes
   useEffect(() => {
     if (task) {
+      setLocalTask(task);
       setTaskName(task.task_name || '');
       setTaskDesc(task.description || '');
       setTaskStatus(task.status || 'to_do');
@@ -154,6 +157,8 @@ export default function TaskDetailDrawer({
 
   if (!isOpen || !task || !mounted) return null;
 
+  const activeTask = localTask || task;
+
   // Handle saving task edits to ClickUp API
   const handleSaveTaskEdits = async () => {
     setIsSaving(true);
@@ -184,25 +189,27 @@ export default function TaskDetailDrawer({
       }
 
       const updatedTask: AgencyTask = {
-        ...task,
+        ...(localTask || task),
         task_name: taskName,
         description: taskDesc,
         status: taskStatus,
         priority: taskPriority,
         due_date: new Date(taskDueDate).toISOString(),
-        assignee_ids: selectedMember ? [selectedMember.id] : task.assignee_ids,
-        assignee_names: selectedMember ? [selectedMember.name] : task.assignee_names,
-        assignee_avatars: selectedMember ? [selectedMember.avatar] : task.assignee_avatars,
+        assignee_ids: selectedMember ? [selectedMember.id] : (localTask || task).assignee_ids,
+        assignee_names: selectedMember ? [selectedMember.name] : (localTask || task).assignee_names,
+        assignee_avatars: selectedMember ? [selectedMember.avatar] : (localTask || task).assignee_avatars,
         clickup_updated_at: new Date().toISOString(),
       };
+
+      setLocalTask(updatedTask);
 
       if (onTaskUpdated) {
         onTaskUpdated(updatedTask);
       }
-      if (onStatusChange && taskStatus !== task.status) {
+      if (onStatusChange && taskStatus !== (localTask || task).status) {
         onStatusChange(task.id, taskStatus);
       }
-      if (onPriorityChange && taskPriority !== task.priority) {
+      if (onPriorityChange && taskPriority !== (localTask || task).priority) {
         onPriorityChange(task.id, taskPriority);
       }
 
@@ -291,9 +298,9 @@ export default function TaskDetailDrawer({
         <div className="p-5 border-b border-[#E8E8EC] bg-[#F7F7F8] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 text-[10px] font-mono font-bold bg-[#EEF2F7] text-[#24324A] rounded">
-              {task.clickup_task_id}
+              {activeTask.clickup_task_id}
             </span>
-            <span className="text-xs text-[#737680] truncate max-w-[180px]">{task.project_name}</span>
+            <span className="text-xs text-[#737680] truncate max-w-[180px]">{activeTask.project_name}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -320,7 +327,7 @@ export default function TaskDetailDrawer({
             </button>
 
             <a
-              href={task.clickup_url}
+              href={activeTask.clickup_url}
               target="_blank"
               rel="noreferrer"
               className="p-1.5 rounded-lg bg-[#24324A] text-white text-xs flex items-center gap-1 hover:bg-[#1A2536]"
@@ -448,7 +455,7 @@ export default function TaskDetailDrawer({
           ) : (
             <div>
               <div className="flex items-start justify-between gap-2 group">
-                <h2 className="text-xl font-extrabold text-[#24324A] leading-snug">{task.task_name}</h2>
+                <h2 className="text-xl font-extrabold text-[#24324A] leading-snug">{activeTask.task_name}</h2>
                 <button
                   onClick={() => setIsEditing(true)}
                   className="opacity-0 group-hover:opacity-100 p-1 text-[#737680] hover:text-[#24324A] transition-opacity cursor-pointer"
@@ -458,7 +465,7 @@ export default function TaskDetailDrawer({
                 </button>
               </div>
               <p className="text-xs text-[#737680] mt-2 leading-relaxed bg-[#F7F7F8] p-3 rounded-lg border border-[#E8E8EC] whitespace-pre-line">
-                {task.description || 'Tidak ada deskripsi detail tambahan.'}
+                {activeTask.description || 'Tidak ada deskripsi detail tambahan.'}
               </p>
             </div>
           )}
@@ -468,11 +475,12 @@ export default function TaskDetailDrawer({
             <div>
               <span className="text-[#737680] block text-[10px] uppercase font-bold">Status</span>
               <select
-                value={task.status}
+                value={activeTask.status}
                 onChange={(e) => {
                   const newSt = e.target.value as any;
                   setTaskStatus(newSt);
-                  if (onStatusChange) onStatusChange(task.id, newSt);
+                  setLocalTask((prev) => (prev ? { ...prev, status: newSt } : null));
+                  if (onStatusChange) onStatusChange(activeTask.id, newSt);
                 }}
                 className="mt-1 font-semibold text-[#24324A] bg-transparent border-none outline-none cursor-pointer capitalize"
               >
@@ -487,11 +495,12 @@ export default function TaskDetailDrawer({
             <div>
               <span className="text-[#737680] block text-[10px] uppercase font-bold">Priority</span>
               <select
-                value={task.priority}
+                value={activeTask.priority}
                 onChange={(e) => {
                   const newPr = e.target.value as any;
                   setTaskPriority(newPr);
-                  if (onPriorityChange) onPriorityChange(task.id, newPr);
+                  setLocalTask((prev) => (prev ? { ...prev, priority: newPr } : null));
+                  if (onPriorityChange) onPriorityChange(activeTask.id, newPr);
                 }}
                 className="mt-1 font-semibold text-[#24324A] bg-transparent border-none outline-none cursor-pointer uppercase"
               >
@@ -505,14 +514,14 @@ export default function TaskDetailDrawer({
             <div>
               <span className="text-[#737680] block text-[10px] uppercase font-bold">Due Date</span>
               <span className="mt-1 font-semibold text-[#202124] block">
-                {new Date(task.due_date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {new Date(activeTask.due_date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
 
             <div>
               <span className="text-[#737680] block text-[10px] uppercase font-bold">Time Tracked</span>
               <span className="mt-1 font-semibold text-[#4F9D78] block">
-                {task.time_tracked_hours} jam / {task.time_estimate_hours}h est
+                {activeTask.time_tracked_hours} jam / {activeTask.time_estimate_hours}h est
               </span>
             </div>
           </div>
@@ -523,8 +532,8 @@ export default function TaskDetailDrawer({
               <Tag className="w-3.5 h-3.5 mr-1 text-[#F26B5E]" /> Tags
             </h3>
             <div className="flex flex-wrap gap-1.5">
-              {task.tags && task.tags.length > 0 ? (
-                task.tags.map((tag) => (
+              {activeTask.tags && activeTask.tags.length > 0 ? (
+                activeTask.tags.map((tag) => (
                   <span key={tag} className="px-2.5 py-1 bg-[#EEF2F7] text-[#24324A] text-[11px] font-semibold rounded-md border border-[#E8E8EC]">
                     #{tag}
                   </span>
@@ -543,11 +552,11 @@ export default function TaskDetailDrawer({
               </span>
             </h3>
             <div className="flex items-center gap-2 flex-wrap">
-              {task.assignee_names && task.assignee_names.length > 0 ? (
-                task.assignee_names.map((name, idx) => (
+              {activeTask.assignee_names && activeTask.assignee_names.length > 0 ? (
+                activeTask.assignee_names.map((name, idx) => (
                   <div key={name + idx} className="flex items-center gap-1.5 bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC] text-xs">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={task.assignee_avatars?.[idx] || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'} alt={name} className="w-5 h-5 rounded-full object-cover" />
+                    <img src={activeTask.assignee_avatars?.[idx] || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'} alt={name} className="w-5 h-5 rounded-full object-cover" />
                     <span className="font-semibold text-[#202124]">{name}</span>
                   </div>
                 ))
