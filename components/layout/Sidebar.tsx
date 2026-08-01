@@ -126,19 +126,23 @@ export default function Sidebar() {
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-[#E8E8EC]">
         {!collapsed && (
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#24324A] flex items-center justify-center text-white font-bold text-sm tracking-wider">
-              BS
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-[#24324A] leading-tight">Bilik Strategi</span>
-              <span className="text-[10px] text-[#737680] font-medium tracking-wide">WORKSPACE</span>
-            </div>
+          <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logobilik-hitam.png"
+              alt="Bilik Strategi Workspace"
+              className="h-8 max-w-[170px] object-contain"
+            />
           </Link>
         )}
         {collapsed && (
-          <Link href="/dashboard" className="w-8 h-8 rounded-lg bg-[#24324A] flex items-center justify-center text-white font-bold text-sm mx-auto">
-            BS
+          <Link href="/dashboard" className="flex items-center justify-center mx-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logobilik-hitam.png"
+              alt="Bilik Strategi Workspace"
+              className="h-7 w-auto object-contain"
+            />
           </Link>
         )}
         <button
