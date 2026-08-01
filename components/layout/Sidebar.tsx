@@ -124,30 +124,29 @@ export default function Sidebar() {
       }`}
     >
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-[#E8E8EC]">
-        {!collapsed && (
+      <div className={`h-16 flex items-center justify-between border-b border-[#E8E8EC] ${collapsed ? 'px-2' : 'px-4'}`}>
+        {!collapsed ? (
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/landscape.png"
               alt="Bilik Strategi Workspace"
-              className="h-9 max-w-[180px] object-contain"
+              className="h-9 max-w-[170px] object-contain"
             />
           </Link>
-        )}
-        {collapsed && (
-          <Link href="/dashboard" className="flex items-center justify-center mx-auto">
+        ) : (
+          <Link href="/dashboard" className="flex items-center justify-center p-1 rounded-lg hover:bg-[#F7F7F8] transition-colors flex-shrink-0" title="Bilik Strategi Workspace">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logobilik-hitam.png"
               alt="Bilik Strategi Workspace"
-              className="h-8 w-auto object-contain"
+              className="w-7 h-7 object-contain"
             />
           </Link>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded-md text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] transition-colors"
+          className="p-1 rounded-md text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] transition-colors flex-shrink-0"
           title={collapsed ? 'Perluas Sidebar' : 'Perkecil Sidebar'}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
