@@ -66,6 +66,178 @@ export default function DashboardPage() {
 
   const [activeSessionTime, setActiveSessionTime] = useState<string | null>(null);
 
+  // Real-time Active Sessions & Timesheet Recap State
+  const [activeSessions, setActiveSessions] = useState<Record<string, { checkInTimestamp: number; project_name?: string }>>({});
+  const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
+
+  const loadRealTimeAttendanceData = async () => {
+    const sessionsMap: Record<string, { checkInTimestamp: number; project_name?: string }> = {};
+
+    const storeStr = localStorage.getItem('bilik_team_active_store');
+    if (storeStr) {
+      try {
+        const parsed = JSON.parse(storeStr);
+        Object.keys(parsed).forEach((key) => {
+          sessionsMap[key.toLowerCase()] = parsed[key];
+        });
+      } catch {}
+    }
+
+    const activeStr = localStorage.getItem('bilik_active_attendance');
+    if (activeStr) {
+      try {
+        const parsed = JSON.parse(activeStr);
+        if (parsed.userName) {
+          sessionsMap[parsed.userName.toLowerCase()] = { checkInTimestamp: parsed.timestamp, project_name: parsed.project };
+        }
+      } catch {}
+    }
+
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+      const res = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) {
+          rows.forEach((r: any) => {
+            if (r.user_name) {
+              sessionsMap[r.user_name.toLowerCase()] = {
+                checkInTimestamp: r.check_in_timestamp || Date.now(),
+                project_name: r.project_name,
+              };
+            }
+          });
+        }
+      }
+    } catch {}
+
+    setActiveSessions(sessionsMap);
+
+    // Load timesheetRecap
+    const recapMap: Record<string, Record<string, any>> = {};
+    const recapStr = localStorage.getItem('bilik_timesheet_recap');
+    if (recapStr) {
+      try {
+        Object.assign(recapMap, JSON.parse(recapStr));
+      } catch {}
+    }
+
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+      const res = await fetch(`${url}/rest/v1/attendance_logs?select=*`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const logs = await res.json();
+        if (Array.isArray(logs)) {
+          logs.forEach((log: any) => {
+            const userName = log.user_name;
+            const dayName = log.day_name;
+            const dateStr = log.date;
+            if (userName) {
+              if (!recapMap[userName]) recapMap[userName] = {};
+              if (dateStr) {
+                const existing = recapMap[userName][dateStr] || { regular: 0, overtime: 0 };
+                recapMap[userName][dateStr] = {
+                  regular: Math.max(Number(existing.regular || 0), Number(log.regular_hours || 0)),
+                  overtime: Math.max(Number(existing.overtime || 0), Number(log.overtime_hours || 0)),
+                };
+              }
+              if (dayName) {
+                const existing = recapMap[userName][dayName] || { regular: 0, overtime: 0 };
+                recapMap[userName][dayName] = {
+                  regular: Math.max(Number(existing.regular || 0), Number(log.regular_hours || 0)),
+                  overtime: Math.max(Number(existing.overtime || 0), Number(log.overtime_hours || 0)),
+                };
+              }
+            }
+          });
+        }
+      }
+    } catch {}
+
+    setTimesheetRecap(recapMap);
+  };
+
+  useEffect(() => {
+    loadRealTimeAttendanceData();
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.onmessage = () => {
+          loadRealTimeAttendanceData();
+        };
+      } catch {}
+    }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'bilik_timesheet_recap' || e.key === 'bilik_active_attendance' || e.key === 'bilik_team_active_store') {
+        loadRealTimeAttendanceData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    const interval = setInterval(loadRealTimeAttendanceData, 2000);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const getMemberOnlineTime = (memberName: string) => {
+    const mName = memberName.toLowerCase().trim();
+    const sessionKey = Object.keys(activeSessions).find(
+      (k) => k === mName || mName.includes(k) || k.includes(mName)
+    );
+
+    if (!sessionKey || !activeSessions[sessionKey]) return null;
+
+    const startMs = activeSessions[sessionKey].checkInTimestamp;
+    const diffSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const hrs = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const getMemberTotalHours = (memberName: string, memberEmail?: string) => {
+    const mName = memberName.toLowerCase().trim();
+    const mEmail = (memberEmail || '').toLowerCase().trim();
+
+    let totalReg = 0;
+    let totalOT = 0;
+
+    Object.keys(timesheetRecap).forEach((key) => {
+      const kLower = key.toLowerCase().trim();
+      if (kLower === mName || mName.includes(kLower) || kLower.includes(mName) || (mEmail && kLower.includes(mEmail.split('@')[0]))) {
+        const userDays = timesheetRecap[key];
+        Object.keys(userDays).forEach((dayKey) => {
+          const entry = userDays[dayKey];
+          if (typeof entry === 'number') {
+            totalReg += entry;
+          } else if (entry) {
+            totalReg += entry.regular || 0;
+            totalOT += entry.overtime || 0;
+          }
+        });
+      }
+    });
+
+    return parseFloat((totalReg + totalOT).toFixed(2));
+  };
+
   useEffect(() => {
     // Resolve logged in user from localStorage
     const savedUserStr = localStorage.getItem('bilik_current_user');
@@ -650,6 +822,9 @@ export default function DashboardPage() {
         /* ---------------------------------------------------- */
         /* PERSONAL DASHBOARD VIEW (DASHBOARD SAYA)              */
         /* ---------------------------------------------------- */
+        /* ---------------------------------------------------- */
+        /* PERSONAL DASHBOARD VIEW (DASHBOARD SAYA)              */
+        /* ---------------------------------------------------- */
         (() => {
           const isAdminOrOwner =
             currentUser.role === 'Owner' ||
@@ -661,13 +836,19 @@ export default function DashboardPage() {
           const hour = new Date().getHours();
           const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-          // Team status breakdown for Admin/Lead
-          const onlineCount = teamMembers.filter((_, idx) => idx % 2 === 0).length || 3;
-          const offlineCount = Math.max(0, teamMembers.length - onlineCount) || 3;
+          // Real-time team online & offline breakdown
+          const realOnlineCount = teamMembers.filter((m) => !!getMemberOnlineTime(m.name)).length;
+          const realOfflineCount = Math.max(0, teamMembers.length - realOnlineCount);
+
           const teamGaugeData = [
-            { name: 'Online Team', value: onlineCount, color: '#4F9D78' },
-            { name: 'Offline Team', value: offlineCount, color: '#24324A' },
+            { name: 'Online Team', value: realOnlineCount || 0.1, color: '#4F9D78' },
+            { name: 'Offline Team', value: realOfflineCount || 0.1, color: '#24324A' },
           ];
+
+          // Current logged in user's total hours
+          const myTotalHours = getMemberTotalHours(currentUser.username, currentUser.email);
+          const myRemainingHours = Math.max(0, parseFloat((40 - myTotalHours).toFixed(2)));
+          const myCapacityPercent = Math.min(100, Math.round((myTotalHours / 40) * 100));
 
           return (
             <div className="space-y-6 animate-fade-in">
@@ -775,7 +956,7 @@ export default function DashboardPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider text-[#737680]">Track Your Team</span>
                           <span className="px-2 py-0.5 bg-[#24324A]/10 text-[#24324A] rounded text-[10px] font-extrabold">
-                            +2.6% Active
+                            Realtime Active
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
@@ -804,11 +985,11 @@ export default function DashboardPage() {
                         <div className="pt-2 border-t border-[#E8E8EC] grid grid-cols-2 gap-2 text-[11px]">
                           <span className="text-[#4F9D78] font-bold flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-[#4F9D78]" />
-                            {onlineCount} Member Online
+                            {realOnlineCount} Member Online
                           </span>
                           <span className="text-[#737680] font-semibold flex items-center gap-1">
                             <span className="w-2 h-2 rounded-full bg-[#24324A]" />
-                            {offlineCount} Member Offline
+                            {realOfflineCount} Member Offline
                           </span>
                         </div>
                       </div>
@@ -822,11 +1003,11 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <div className="flex items-baseline justify-between pt-1">
-                          <span className="text-3xl font-black text-[#24324A]">1,41h</span>
-                          <span className="text-xs text-[#737680]">38.59h tersisa</span>
+                          <span className="text-3xl font-black text-[#24324A]">{myTotalHours}h</span>
+                          <span className="text-xs text-[#737680]">{myRemainingHours}h tersisa</span>
                         </div>
                         <div className="w-full bg-[#E8E8EC] h-2 rounded-full overflow-hidden">
-                          <div className="bg-[#4F9D78] h-full rounded-full" style={{ width: '15%' }} />
+                          <div className="bg-[#4F9D78] h-full rounded-full" style={{ width: `${myCapacityPercent}%` }} />
                         </div>
                         <span className="text-[11px] text-[#737680] block">Status Kapasitas: <strong className="text-[#4F9D78]">Sangat Seimbang (Balanced)</strong></span>
                       </div>
@@ -835,7 +1016,7 @@ export default function DashboardPage() {
 
                   {/* FOR ADMIN/LEAD: TEAM PERFORMANCE & WORKLOAD TABLE vs MEMBER ASSIGNED TASKS */}
                   {isAdminOrOwner ? (
-                    /* 👑 ADMIN/LEAD VIEW: MEMANTAU PERFORMA TIM */
+                    /* 👑 ADMIN/LEAD VIEW: MEMANTAU PERFORMA TIM REAL-TIME */
                     <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
                       <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
                         <div>
@@ -854,15 +1035,18 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="space-y-3">
-                        {teamMembers.map((m, idx) => {
-                          const isMemberOnline = idx % 2 === 0;
+                        {teamMembers.map((m) => {
+                          const onlineTime = getMemberOnlineTime(m.name);
+                          const isOnline = !!onlineTime;
+                          const realTrackedHours = getMemberTotalHours(m.name, (m as any).email);
+
                           return (
                             <div key={m.id} className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between gap-4 hover:border-[#24324A] transition-colors">
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className="relative flex-shrink-0">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={m.avatar} alt={m.name} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
-                                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${isMemberOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'}`} />
+                                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${isOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'}`} />
                                 </div>
                                 <div className="min-w-0">
                                   <span className="font-extrabold text-[#24324A] block truncate">{m.name}</span>
@@ -872,11 +1056,11 @@ export default function DashboardPage() {
 
                               <div className="flex items-center gap-3 flex-shrink-0">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
-                                  isMemberOnline ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#F7F7F8] text-[#737680] border-[#E8E8EC]'
+                                  isOnline ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#F7F7F8] text-[#737680] border-[#E8E8EC]'
                                 }`}>
-                                  {isMemberOnline ? '🟢 Online Check-In' : '⚪ Offline'}
+                                  {isOnline ? `🟢 Online Check-In (${onlineTime})` : '⚪ Offline'}
                                 </span>
-                                <span className="font-extrabold text-[#24324A]">{m.hoursTracked}h</span>
+                                <span className="font-extrabold text-[#24324A]">{realTrackedHours}h</span>
                               </div>
                             </div>
                           );
@@ -922,9 +1106,9 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* RIGHT COLUMN (1 COL): SALARIES / TEAM LIST / QUICK ACTIONS (Inspired by Reference Right Panel) */}
+                {/* RIGHT COLUMN (1 COL): REALTIME TEAM PRESENCE & WORK HOURS PANEL */}
                 <div className="space-y-6">
-                  {/* FOR ADMIN/LEAD: SALARIES & INCENTIVE / TEAM MONITOR PANEL */}
+                  {/* FOR ADMIN/LEAD: REAL-TIME TEAM PRESENCE & WORK HOURS */}
                   {isAdminOrOwner ? (
                     <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
                       <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
@@ -932,26 +1116,39 @@ export default function DashboardPage() {
                           <span className="text-[10px] font-bold text-[#737680] uppercase tracking-wider block">Insentif & Work Hours</span>
                           <h3 className="text-sm font-extrabold text-[#24324A]">Status Presensi Tim</h3>
                         </div>
-                        <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded text-[10px] font-extrabold">
+                        <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded text-[10px] font-extrabold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] animate-pulse" />
                           Live Active
                         </span>
                       </div>
 
                       <div className="space-y-3">
-                        {teamMembers.slice(0, 5).map((m, idx) => {
-                          const statusState = idx === 0 ? 'Done' : idx === 1 ? 'Waiting' : 'Done';
-                          const statusColor = statusState === 'Done' ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#FEF3D6] text-[#E6A23C] border-[#E6A23C]/30';
+                        {teamMembers.map((m) => {
+                          const onlineTime = getMemberOnlineTime(m.name);
+                          const isOnline = !!onlineTime;
+                          const realTrackedHours = getMemberTotalHours(m.name, (m as any).email);
+
+                          const statusState = isOnline ? 'Online' : realTrackedHours > 0 ? 'Done' : 'Offline';
+                          const statusColor = isOnline
+                            ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/40'
+                            : realTrackedHours > 0
+                            ? 'bg-[#FEF3D6] text-[#E6A23C] border-[#E6A23C]/40'
+                            : 'bg-[#F7F7F8] text-[#737680] border-[#E8E8EC]';
+
                           return (
-                            <div key={m.id} className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between">
-                              <div className="flex items-center gap-2.5 truncate">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={m.avatar} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC]" />
+                            <div key={m.id} className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between gap-2 hover:border-[#24324A] transition-colors">
+                              <div className="flex items-center gap-2.5 truncate min-w-0">
+                                <div className="relative flex-shrink-0">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={m.avatar} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC]" />
+                                  <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${isOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'}`} />
+                                </div>
                                 <div className="truncate">
                                   <span className="font-bold text-[#24324A] block truncate">{m.name}</span>
-                                  <span className="text-[10px] text-[#737680]">{m.hoursTracked} jam terpakai</span>
+                                  <span className="text-[10px] text-[#737680]">{realTrackedHours} jam terpakai</span>
                                 </div>
                               </div>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusColor}`}>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex-shrink-0 ${statusColor}`}>
                                 • {statusState}
                               </span>
                             </div>
