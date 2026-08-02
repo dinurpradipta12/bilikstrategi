@@ -25,23 +25,67 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
 
   useEffect(() => {
     async function loadClickUpProfile() {
+      let currentEmail = MOCK_USERS[0].email;
+      let currentName = MOCK_USERS[0].full_name;
+      let currentAvatar = MOCK_USERS[0].avatar_url;
+
+      const savedUserStr = localStorage.getItem('bilik_current_user');
+      if (savedUserStr) {
+        try {
+          const u = JSON.parse(savedUserStr);
+          if (u.email) currentEmail = u.email;
+          if (u.username) currentName = u.username;
+          if (u.avatar) currentAvatar = u.avatar;
+        } catch {}
+      }
+
       try {
         const res = await fetch('/api/clickup/user');
         const data = await res.json();
         if (data.user) {
-          const userRole = data.user.role === 1 ? 'owner' : data.user.role === 2 ? 'admin' : 'member';
-          setUserProfile({
-            name: data.user.username,
-            email: data.user.email,
-            role: userRole,
-            avatar: data.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user.username)}&background=24324A&color=fff`,
-          });
+          currentName = data.user.username || currentName;
+          currentEmail = data.user.email || currentEmail;
+          if (data.user.profilePicture) currentAvatar = data.user.profilePicture;
         }
       } catch (err) {
         console.warn('[Header] ClickUp profile fetch failed, using default workspace profile.', err);
       }
+
+      const isSuperOwner = currentEmail.toLowerCase().trim() === 'snllabsarchive@gmail.com';
+      let finalRole = isSuperOwner ? 'Owner' : 'Member';
+
+      if (!isSuperOwner) {
+        const savedTeamStr = localStorage.getItem('bilik_team_members');
+        if (savedTeamStr) {
+          try {
+            const parsed = JSON.parse(savedTeamStr);
+            if (Array.isArray(parsed)) {
+              const found = parsed.find(
+                (m: any) =>
+                  (m.email && m.email.toLowerCase().trim() === currentEmail.toLowerCase().trim()) ||
+                  (m.name && m.name.toLowerCase().trim() === currentName.toLowerCase().trim())
+              );
+              if (found && found.role) {
+                finalRole = found.role;
+              }
+            }
+          } catch {}
+        }
+      }
+
+      setUserProfile({
+        name: currentName,
+        email: currentEmail,
+        role: finalRole,
+        avatar: currentAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentName)}&background=24324A&color=fff`,
+      });
     }
+
     loadClickUpProfile();
+
+    const handleStorage = () => loadClickUpProfile();
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   return (

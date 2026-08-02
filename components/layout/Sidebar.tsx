@@ -37,49 +37,67 @@ export default function Sidebar() {
 
   useEffect(() => {
     async function loadClickUpProfile() {
+      let username = 'Dinur Pradipta';
+      let email = 'snllabsarchive@gmail.com';
+      let avatar = '';
+
+      const savedUserStr = localStorage.getItem('bilik_current_user');
+      if (savedUserStr) {
+        try {
+          const u = JSON.parse(savedUserStr);
+          if (u.username) username = u.username;
+          if (u.email) email = u.email;
+          if (u.avatar) avatar = u.avatar;
+        } catch {}
+      }
+
       try {
-        const [userRes, teamRes] = await Promise.all([
-          fetch('/api/clickup/user'),
-          fetch('/api/clickup/teams'),
-        ]);
-
-        let resolvedRole = 'Owner';
-        let username = 'Dinur Pradipta';
-        let avatar = '';
-
+        const userRes = await fetch('/api/clickup/user');
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
-            username = userData.user.username;
-            avatar = userData.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`;
-            if (userData.user.role === 1) resolvedRole = 'Owner';
-            else if (userData.user.role === 2) resolvedRole = 'Admin';
+            username = userData.user.username || username;
+            email = userData.user.email || email;
+            if (userData.user.profilePicture) avatar = userData.user.profilePicture;
           }
         }
-
-        if (teamRes.ok) {
-          const teamData = await teamRes.json();
-          const members = Array.isArray(teamData.members) ? teamData.members : [];
-          const matched = members.find((m: any) => {
-            const mName = (m.username || '').toLowerCase().trim();
-            const uName = (username || '').toLowerCase().trim();
-            return mName === uName || mName.includes(uName) || uName.includes(mName);
-          });
-          if (matched) {
-            resolvedRole = matched.role === 1 ? 'Owner' : matched.role === 2 ? 'Admin' : 'Member';
-          }
-        }
-
-        setUserProfile({
-          name: username,
-          role: resolvedRole,
-          avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
-        });
       } catch (err) {
         console.warn('[Sidebar] ClickUp profile fetch failed, using default workspace profile.', err);
       }
+
+      const isSuperOwner = email.toLowerCase().trim() === 'snllabsarchive@gmail.com';
+      let resolvedRole = isSuperOwner ? 'Owner' : 'Member';
+
+      if (!isSuperOwner) {
+        const savedTeamStr = localStorage.getItem('bilik_team_members');
+        if (savedTeamStr) {
+          try {
+            const parsed = JSON.parse(savedTeamStr);
+            if (Array.isArray(parsed)) {
+              const found = parsed.find(
+                (m: any) =>
+                  (m.email && m.email.toLowerCase().trim() === email.toLowerCase().trim()) ||
+                  (m.name && m.name.toLowerCase().trim() === username.toLowerCase().trim())
+              );
+              if (found && found.role) {
+                resolvedRole = found.role;
+              }
+            }
+          } catch {}
+        }
+      }
+
+      setUserProfile({
+        name: username,
+        role: resolvedRole,
+        avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
+      });
     }
+
     loadClickUpProfile();
+
+    const handleStorage = () => loadClickUpProfile();
+    window.addEventListener('storage', handleStorage);
 
     // Check if badges were previously read/cleared by user
     const isChatRead = localStorage.getItem('bilik_chat_read') === 'true';
@@ -87,6 +105,8 @@ export default function Sidebar() {
 
     setChatUnread(isChatRead ? 0 : 3);
     setNotifUnread(isNotifRead ? 0 : 2);
+
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   // Clear unread badge immediately when user visits the respective page
