@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
   Users,
@@ -19,7 +20,14 @@ import {
   ChevronRight,
   Search,
   Activity,
-  Zap
+  Zap,
+  Edit3,
+  Mail,
+  Phone,
+  Building2,
+  X,
+  Send,
+  UserPlus,
 } from 'lucide-react';
 
 interface TeamMemberWorkload {
@@ -27,6 +35,9 @@ interface TeamMemberWorkload {
   full_name: string;
   email: string;
   role: string;
+  custom_role?: string;
+  division?: string;
+  phone?: string;
   avatar_url: string;
   assigned_tasks_count: number;
   overdue_tasks_count: number;
@@ -39,12 +50,89 @@ interface TeamMemberWorkload {
 }
 
 export default function TeamWorkloadPage() {
-  const [activeTab, setActiveTab] = useState<'workload' | 'analytics' | 'priorities' | 'timesheet'>('workload');
+  const [activeTab, setActiveTab] = useState<'workload' | 'team_list' | 'analytics' | 'priorities' | 'timesheet'>('workload');
+  const [mounted, setMounted] = useState(false);
   const [members, setMembers] = useState<TeamMemberWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
+
+  // Edit Member Modal State
+  const [editingMember, setEditingMember] = useState<TeamMemberWorkload | null>(null);
+  const [formRole, setFormRole] = useState('');
+  const [formDivision, setFormDivision] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formCapacity, setFormCapacity] = useState(40);
+  const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleOpenEditMemberModal = (member: TeamMemberWorkload) => {
+    setEditingMember(member);
+    setFormRole(member.custom_role || member.role);
+    setFormDivision(member.division || 'Agency Team');
+    setFormEmail(member.email);
+    setFormPhone(member.phone || '+62 812-3456-7890');
+    setFormCapacity(member.capacity_hours);
+    setShowEditMemberModal(true);
+  };
+
+  const handleSaveMemberInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+
+    const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
+    let customInfoMap: Record<string, any> = {};
+    if (savedCustomInfoStr) {
+      try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
+    }
+
+    const updatedInfo = {
+      custom_role: formRole,
+      division: formDivision,
+      email: formEmail,
+      phone: formPhone,
+      capacity: formCapacity,
+    };
+
+    customInfoMap[editingMember.full_name] = updatedInfo;
+    customInfoMap[editingMember.id] = updatedInfo;
+
+    localStorage.setItem('bilik_team_custom_info', JSON.stringify(customInfoMap));
+
+    // Also update capacities map
+    const savedCapsStr = localStorage.getItem('bilik_member_capacities');
+    let currentCaps: Record<string, number> = {};
+    if (savedCapsStr) {
+      try { currentCaps = JSON.parse(savedCapsStr); } catch {}
+    }
+    currentCaps[editingMember.id] = formCapacity;
+    currentCaps[editingMember.full_name] = formCapacity;
+    localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
+
+    // Update in-memory members list
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id === editingMember.id || m.full_name === editingMember.full_name) {
+          return {
+            ...m,
+            custom_role: formRole,
+            division: formDivision,
+            email: formEmail,
+            phone: formPhone,
+            capacity_hours: formCapacity,
+          };
+        }
+        return m;
+      })
+    );
+
+    setShowEditMemberModal(false);
+  };
 
   // Active Sessions Live Ticker & Capacity State
   const [activeSessions, setActiveSessions] = useState<Record<string, { checkInTimestamp: number; checkInTime: string; projectName?: string }>>({});
@@ -56,7 +144,7 @@ export default function TeamWorkloadPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
-      if (tabParam && ['workload', 'analytics', 'priorities', 'timesheet'].includes(tabParam)) {
+      if (tabParam && ['workload', 'team_list', 'analytics', 'priorities', 'timesheet'].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
@@ -215,7 +303,7 @@ export default function TeamWorkloadPage() {
       const fetchedTasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
       setAllTasks(fetchedTasks);
 
-      // 3. Map members with workload stats
+      // 3. Map members with workload stats & custom role info
       const now = new Date();
       const savedCapsStr = localStorage.getItem('bilik_member_capacities');
       let currentCaps: Record<string, number> = {};
@@ -223,8 +311,16 @@ export default function TeamWorkloadPage() {
         try { currentCaps = JSON.parse(savedCapsStr); } catch {}
       }
 
+      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
+      let customInfoMap: Record<string, any> = {};
+      if (savedCustomInfoStr) {
+        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
+      }
+
       const mappedMembers: TeamMemberWorkload[] = clickUpMembers.map((m: any) => {
         const memberName = m.username || (m.email ? m.email.split('@')[0] : 'Team Member');
+        const cInfo = customInfoMap[memberName] || customInfoMap[String(m.id)] || {};
+
         const assignedTasks = fetchedTasks.filter((t: any) =>
           t.assignee_names?.some((name: string) => name.toLowerCase().includes(memberName.toLowerCase()))
         );
@@ -234,7 +330,7 @@ export default function TeamWorkloadPage() {
         const overdueTasks = activeTasks.filter((t: any) => new Date(t.due_date) < now);
 
         const hoursTracked = assignedTasks.reduce((acc: number, t: any) => acc + (t.time_tracked_hours || 4), 0);
-        const capacity = currentCaps[String(m.id)] || currentCaps[memberName] || 40;
+        const capacity = cInfo.capacity || currentCaps[String(m.id)] || currentCaps[memberName] || 40;
 
         let workloadStatus: 'low' | 'balanced' | 'high' | 'over_capacity' = 'balanced';
         if (hoursTracked > capacity || activeTasks.length > 8) workloadStatus = 'over_capacity';
@@ -258,11 +354,16 @@ export default function TeamWorkloadPage() {
           progress: t.status === 'completed' ? 100 : 40,
         }));
 
+        const defaultCustomRole = m.role === 1 ? 'Owner / Project Lead' : m.role === 2 ? 'Admin / Operations' : 'Agency Team Member';
+
         return {
           id: String(m.id),
           full_name: memberName,
-          email: m.email || '',
+          email: cInfo.email || m.email || '',
           role: m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member',
+          custom_role: cInfo.custom_role || defaultCustomRole,
+          division: cInfo.division || 'Agency Team',
+          phone: cInfo.phone || '+62 812-3456-7890',
           avatar_url: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=24324A&color=fff`,
           assigned_tasks_count: activeTasks.length,
           overdue_tasks_count: overdueTasks.length,
@@ -372,6 +473,18 @@ export default function TeamWorkloadPage() {
         >
           <Briefcase className="w-4 h-4 text-[#F26B5E]" />
           <span>Workload</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('team_list')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'team_list'
+              ? 'bg-[#24324A] text-[#FFFFFF] shadow-2xs'
+              : 'text-[#737680] hover:text-[#24324A] hover:bg-[#EEF2F7]'
+          }`}
+        >
+          <Users className="w-4 h-4 text-[#3B82F6]" />
+          <span>Team List</span>
         </button>
 
         <button
@@ -828,8 +941,10 @@ export default function TeamWorkloadPage() {
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
                             <div>
-                              <span className="font-bold text-[#24324A] block">{m.full_name}</span>
-                              <span className="text-[10px] text-[#737680]">ClickUp Team Member</span>
+                              <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
+                              <span className="text-[10px] text-[#F26B5E] font-extrabold block truncate max-w-[150px]" title={m.custom_role || m.role}>
+                                {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
+                              </span>
                             </div>
                           </div>
                         </td>
@@ -854,6 +969,173 @@ export default function TeamWorkloadPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* TAB: TEAM LIST (Member Directory & Role Management)  */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'team_list' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs">
+            <div>
+              <h3 className="text-sm font-extrabold text-[#24324A] flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#3B82F6]" />
+                <span>Direktori & Role Anggota Tim Agency</span>
+              </h3>
+              <p className="text-xs text-[#737680] mt-1">
+                Kelola nama, role/jabatan spesifik, divisi, email, telepon, dan kapasitas kerja tim. Role di sini akan otomatis muncul di Timesheet.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#737680]">Total {members.length} Anggota</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {members.map((member) => (
+              <div key={member.id} className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4 hover:border-[#24324A] transition-colors relative group">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={member.avatar_url} alt={member.full_name} className="w-12 h-12 rounded-full object-cover border border-[#E8E8EC]" />
+                    <div>
+                      <h4 className="text-sm font-extrabold text-[#24324A]">{member.full_name}</h4>
+                      <span className="px-2 py-0.5 text-[10px] font-extrabold bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 rounded-md block mt-1">
+                        {member.custom_role || member.role}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenEditMemberModal(member)}
+                    className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] cursor-pointer shadow-xs transition-colors"
+                    title="Edit Role & Info Anggota Tim"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 pt-3 border-t border-[#E8E8EC] text-xs text-[#737680]">
+                  <p className="flex items-center gap-2 truncate">
+                    <Building2 className="w-3.5 h-3.5 text-[#24324A] flex-shrink-0" />
+                    <span>Divisi: <strong className="text-[#202124]">{member.division || 'Agency Team'}</strong></span>
+                  </p>
+                  <p className="flex items-center gap-2 truncate">
+                    <Mail className="w-3.5 h-3.5 text-[#24324A] flex-shrink-0" />
+                    <span>{member.email}</span>
+                  </p>
+                  <p className="flex items-center gap-2 truncate">
+                    <Phone className="w-3.5 h-3.5 text-[#24324A] flex-shrink-0" />
+                    <span>{member.phone || '+62 812-3456-7890'}</span>
+                  </p>
+                  <p className="flex items-center gap-2 truncate">
+                    <Clock className="w-3.5 h-3.5 text-[#4F9D78] flex-shrink-0" />
+                    <span>Kapasitas: <strong className="text-[#4F9D78]">{member.capacity_hours} jam/bulan</strong></span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT DATA ANGGOTA TIM */}
+      {showEditMemberModal && editingMember && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button onClick={() => setShowEditMemberModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={editingMember.avatar_url} alt={editingMember.full_name} className="w-10 h-10 rounded-full border border-[#E8E8EC]" />
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">{editingMember.full_name}</h3>
+                <p className="text-xs text-[#737680]">Edit Role, Divisi & Informasi Anggota Tim</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveMemberInfo} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Role / Jabatan Spesifik *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Project Lead / Senior Creative Designer"
+                  value={formRole}
+                  onChange={(e) => setFormRole(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+                <span className="text-[10px] text-[#737680] mt-0.5 block">* Role ini akan langsung tampil di Timesheet di bawah nama anggota.</span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Divisi / Departemen</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Creative & Strategy / Tech & Dev"
+                  value={formDivision}
+                  onChange={(e) => setFormDivision(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Email Kontak</label>
+                  <input
+                    type="email"
+                    placeholder="name@bilikstrategi.id"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Telepon / WA</label>
+                  <input
+                    type="text"
+                    placeholder="+62 812-3456-7890"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Default Kapasitas Jam Kerja (Jam/Bulan)</label>
+                <input
+                  type="number"
+                  required
+                  value={formCapacity}
+                  onChange={(e) => setFormCapacity(parseInt(e.target.value) || 40)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-extrabold outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditMemberModal(false)}
+                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5 text-[#F26B5E]" />
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
