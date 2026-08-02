@@ -19,8 +19,9 @@ import {
   AlertTriangle,
   Send,
   Sparkles,
+  Users,
 } from 'lucide-react';
-import { AgencyClient, AgencyProject, MOCK_CLIENTS } from '@/lib/mock/data';
+import { AgencyClient, AgencyProject } from '@/lib/mock/data';
 import { supabase } from '@/lib/supabase/client';
 
 export default function ClientsPage() {
@@ -46,178 +47,78 @@ export default function ClientsPage() {
   const [formStatus, setFormStatus] = useState<'active' | 'lead' | 'archived'>('active');
   const [formNotes, setFormNotes] = useState('');
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // 1. Load Clients & Projects (Merge Mock + Supabase + ClickUp + LocalStorage)
-  const fetchClientsAndProjects = async () => {
+  // Fetch real clients from Supabase database
+  const fetchClientsFromSupabase = async () => {
     setLoading(true);
     try {
-      const clientMap = new Map<string, AgencyClient>();
+      // 1. Query Supabase table 'clients'
+      const { data: supaData, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      // A. Pre-seed MOCK_CLIENTS (Nusantara Retail Group, Kopi Senja Indonesia, TechVision Global, GlowSkin Cosmetic, etc.)
-      if (Array.isArray(MOCK_CLIENTS)) {
-        MOCK_CLIENTS.forEach((c) => {
-          clientMap.set(c.company_name, c);
-        });
-      }
-
-      // B. Pre-seed Default Agency Clients (Dinur Pradipta & hidden)
-      const defaultAgencyClients: AgencyClient[] = [
-        {
-          id: 'c_dinur',
-          name: 'Dinur Pradipta',
-          company_name: 'Dinur Pradipta',
-          email: 'contact.dinurpradipta@gmail.com',
-          phone: '089619941101',
-          logo_url: 'https://ui-avatars.com/api/?name=Dinur+Pradipta&background=24324A&color=fff',
-          status: 'active',
-          industry: 'Digital Agency',
-          clickup_folder_id: 'fold_dinur',
-          overall_progress: 0,
-          notes: 'Klien utama Digital Agency.',
-          start_date: '2026-01-01',
+      if (!error && supaData && supaData.length > 0) {
+        const mappedClients: AgencyClient[] = supaData.map((sc: any) => ({
+          id: String(sc.id),
+          name: sc.name || `PIC ${sc.company_name || sc.name}`,
+          company_name: sc.company_name || sc.name,
+          email: sc.email || `contact@${(sc.company_name || 'client').toLowerCase().replace(/\s+/g, '')}.id`,
+          phone: sc.phone || '+62 812-0000-0000',
+          logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sc.company_name || sc.name)}&background=24324A&color=fff`,
+          status: sc.status || 'active',
+          industry: sc.industry || 'Digital Agency',
+          clickup_folder_id: sc.clickup_folder_id || 'folder_1',
+          overall_progress: sc.overall_progress || 0,
+          notes: sc.notes || 'Klien resmi Bilik Strategi Workspace.',
+          start_date: sc.start_date || new Date().toISOString().split('T')[0],
           account_manager_id: 'u1',
-          active_projects_count: 0,
-          completed_projects_count: 0,
-          total_tasks_count: 0,
-        },
-        {
-          id: 'c_hidden',
-          name: 'PIC hidden',
-          company_name: 'hidden',
-          email: 'contact@hidden.id',
-          phone: '+62 812-3456-7890',
-          logo_url: 'https://ui-avatars.com/api/?name=hidden&background=24324A&color=fff',
-          status: 'active',
-          industry: 'Digital & Creative Agency',
-          clickup_folder_id: 'fold_hidden',
-          overall_progress: 50,
-          notes: 'Klien Creative Agency.',
-          start_date: '2026-01-01',
-          account_manager_id: 'u1',
-          active_projects_count: 1,
-          completed_projects_count: 0,
-          total_tasks_count: 5,
-        },
-        {
-          id: 'c_default',
-          name: 'Workspace Admin',
-          company_name: 'Bilik Workspace Client',
-          email: 'admin@bilikstrategi.id',
-          phone: '+62 812-0000-0000',
-          logo_url: 'https://ui-avatars.com/api/?name=Bilik+Workspace&background=24324A&color=fff',
-          status: 'active',
-          industry: 'Agency Operation',
-          clickup_folder_id: '90182855619',
-          overall_progress: 100,
-          notes: 'Workspace utama ClickUp.',
-          start_date: '2026-01-01',
-          account_manager_id: 'u1',
-          active_projects_count: 1,
-          completed_projects_count: 1,
-          total_tasks_count: 10,
-        },
-      ];
+          active_projects_count: sc.active_projects_count || 0,
+          completed_projects_count: sc.completed_projects_count || 0,
+          total_tasks_count: sc.total_tasks_count || 0,
+        }));
 
-      defaultAgencyClients.forEach((dc) => {
-        if (!clientMap.has(dc.company_name)) {
-          clientMap.set(dc.company_name, dc);
-        }
-      });
-
-      // C. Fetch Supabase clients table
-      try {
-        const { data: supaClients } = await supabase.from('clients').select('*');
-        if (supaClients && supaClients.length > 0) {
-          supaClients.forEach((sc: any) => {
-            const compName = sc.company_name || sc.name;
-            if (compName) {
-              clientMap.set(compName, {
-                id: sc.id || `c_supa_${Date.now()}`,
-                name: sc.name || `PIC ${compName}`,
-                company_name: compName,
-                email: sc.email || `contact@${compName.toLowerCase().replace(/\s+/g, '')}.id`,
-                phone: sc.phone || '+62 812-3456-7890',
-                logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(compName)}&background=24324A&color=fff`,
-                status: sc.status || 'active',
-                industry: sc.industry || 'Digital Agency',
-                clickup_folder_id: sc.clickup_folder_id || 'folder_1',
-                overall_progress: sc.overall_progress || 50,
-                notes: sc.notes || 'Klien dari database Supabase.',
-                start_date: sc.start_date || '2026-01-01',
-                account_manager_id: 'u1',
-                active_projects_count: sc.active_projects_count || 1,
-                completed_projects_count: sc.completed_projects_count || 0,
-                total_tasks_count: sc.total_tasks_count || 5,
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('[ClientsPage] Supabase clients fetch fallback.', err);
+        setClients(mappedClients);
+        localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mappedClients));
+        setLoading(false);
+        return;
       }
-
-      // D. Fetch Live ClickUp projects
-      try {
-        const res = await fetch('/api/clickup/projects');
-        if (res.ok) {
-          const data = await res.json();
-          const liveProjects: AgencyProject[] = Array.isArray(data.projects) ? data.projects : [];
-          setProjects(liveProjects);
-
-          liveProjects.forEach((p, idx) => {
-            const clientName = p.client_name || 'Bilik Workspace Client';
-            if (!clientMap.has(clientName)) {
-              clientMap.set(clientName, {
-                id: `c_cu_${idx + 1}`,
-                name: `PIC ${clientName}`,
-                company_name: clientName,
-                email: `contact@${clientName.toLowerCase().replace(/\s+/g, '')}.id`,
-                phone: '+62 812-3456-7890',
-                logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=24324A&color=fff`,
-                status: 'active',
-                industry: 'Digital & Creative Agency',
-                clickup_folder_id: p.clickup_list_id || `folder_${idx}`,
-                overall_progress: p.progress_percentage || 50,
-                notes: `Klien aktif terhubung langsung dengan ClickUp Space / List.`,
-                start_date: '2026-01-01',
-                account_manager_id: 'u1',
-                active_projects_count: 1,
-                completed_projects_count: 0,
-                total_tasks_count: p.total_tasks || 5,
-              });
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('[ClientsPage] ClickUp projects fetch error.', err);
-      }
-
-      // E. Merge saved custom clients from localStorage
-      const savedCustomStr = localStorage.getItem('bilik_custom_clients');
-      if (savedCustomStr) {
-        try {
-          const customClients: AgencyClient[] = JSON.parse(savedCustomStr);
-          customClients.forEach((cc) => {
-            clientMap.set(cc.company_name, cc);
-          });
-        } catch {
-          // ignore parse error
-        }
-      }
-
-      setClients(Array.from(clientMap.values()));
-    } catch {
-      setClients([]);
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.warn('[ClientsPage] Supabase query error, fallback to local storage.', err);
     }
+
+    // 2. Local storage fallback if Supabase table is empty or offline
+    const saved = localStorage.getItem('bilik_agency_clients_db');
+    if (saved) {
+      try {
+        setClients(JSON.parse(saved));
+      } catch {
+        setClients([]);
+      }
+    } else {
+      setClients([]);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
-    fetchClientsAndProjects();
+    setMounted(true);
+    fetchClientsFromSupabase();
+
+    // Supabase Realtime Channel Subscription for 'clients' table
+    const channel = supabase
+      .channel('realtime_clients_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients' },
+        () => {
+          fetchClientsFromSupabase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Open Add Modal
@@ -247,90 +148,93 @@ export default function ClientsPage() {
     setShowAddModal(true);
   };
 
-  // Save / Add Client
+  // Save / Add Client directly to Supabase Database
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCompany.trim()) return;
 
-    let updatedList: AgencyClient[] = [];
+    const companyNameClean = formCompany.trim();
+    const picNameClean = formPIC.trim() || `PIC ${companyNameClean}`;
+    const emailClean = formEmail.trim() || `contact@${companyNameClean.toLowerCase().replace(/\s+/g, '')}.id`;
+    const phoneClean = formPhone.trim() || '+62 812-0000-0000';
+    const logoClean = `https://ui-avatars.com/api/?name=${encodeURIComponent(companyNameClean)}&background=24324A&color=fff`;
 
     if (editingClient) {
-      // Update existing
-      updatedList = clients.map((c) => {
+      // 1. Update in Supabase
+      try {
+        await supabase
+          .from('clients')
+          .update({
+            company_name: companyNameClean,
+            name: picNameClean,
+            email: emailClean,
+            phone: phoneClean,
+            industry: formIndustry,
+            status: formStatus,
+            notes: formNotes.trim() || 'Klien Agency',
+            logo_url: logoClean,
+          })
+          .eq('id', editingClient.id);
+      } catch (err) {
+        console.warn('[ClientsPage] Could not update client in Supabase:', err);
+      }
+
+      // Update local state
+      const updatedList = clients.map((c) => {
         if (c.id === editingClient.id) {
           return {
             ...c,
-            company_name: formCompany,
-            name: formPIC || `PIC ${formCompany}`,
-            email: formEmail || `contact@${formCompany.toLowerCase().replace(/\s+/g, '')}.id`,
-            phone: formPhone || '+62 812-0000-0000',
+            company_name: companyNameClean,
+            name: picNameClean,
+            email: emailClean,
+            phone: phoneClean,
             industry: formIndustry,
             status: formStatus,
-            notes: formNotes || 'Klien Agency',
-            logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formCompany)}&background=24324A&color=fff`,
+            notes: formNotes.trim() || 'Klien Agency',
+            logo_url: logoClean,
           };
         }
         return c;
       });
+
+      setClients(updatedList);
+      localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
     } else {
-      // Add new client
-      const newClient: AgencyClient = {
-        id: 'c_custom_' + Date.now(),
-        name: formPIC || `PIC ${formCompany}`,
-        company_name: formCompany,
-        email: formEmail || `contact@${formCompany.toLowerCase().replace(/\s+/g, '')}.id`,
-        phone: formPhone || '+62 812-0000-0000',
-        logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formCompany)}&background=24324A&color=fff`,
-        status: formStatus,
+      // 2. Add New Client to Supabase
+      const newId = 'cli-' + Date.now();
+      const newClientObj = {
+        id: newId,
+        company_name: companyNameClean,
+        name: picNameClean,
+        email: emailClean,
+        phone: phoneClean,
         industry: formIndustry,
-        clickup_folder_id: 'folder_custom_' + Date.now(),
+        status: formStatus,
+        notes: formNotes.trim() || 'Klien Baru Didaftarkan',
+        logo_url: logoClean,
+        clickup_folder_id: 'fold_' + Date.now(),
         overall_progress: 0,
-        notes: formNotes || 'Klien Baru Didaftarkan',
         start_date: new Date().toISOString().split('T')[0],
-        account_manager_id: 'u1',
         active_projects_count: 0,
         completed_projects_count: 0,
         total_tasks_count: 0,
       };
-      updatedList = [newClient, ...clients];
-    }
 
-    setClients(updatedList);
-
-    // Save all custom clients to localStorage so they persist across reloads
-    localStorage.setItem('bilik_custom_clients', JSON.stringify(updatedList));
-
-    // Save to Supabase clients table
-    const targetClient = editingClient
-      ? updatedList.find((c) => c.id === editingClient.id)
-      : updatedList[0];
-
-    if (targetClient) {
       try {
-        await supabase
-          .from('clients')
-          .upsert([
-            {
-              id: targetClient.id,
-              name: targetClient.name,
-              company_name: targetClient.company_name,
-              email: targetClient.email,
-              phone: targetClient.phone,
-              industry: targetClient.industry,
-              status: targetClient.status,
-              notes: targetClient.notes,
-              logo_url: targetClient.logo_url,
-            },
-          ]);
+        await supabase.from('clients').insert([newClientObj]);
       } catch (err) {
-        console.warn('Supabase client save error:', err);
+        console.warn('[ClientsPage] Could not insert client to Supabase:', err);
       }
+
+      const updatedList = [newClientObj as AgencyClient, ...clients];
+      setClients(updatedList);
+      localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
     }
 
     setShowAddModal(false);
   };
 
-  // Delete Client
+  // Delete Client from Supabase
   const handleDeleteClient = (client: AgencyClient, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setClientToDelete(client);
@@ -339,21 +243,15 @@ export default function ClientsPage() {
   const confirmDeleteClient = async () => {
     if (!clientToDelete) return;
 
+    try {
+      await supabase.from('clients').delete().eq('id', clientToDelete.id);
+    } catch (err) {
+      console.warn('[ClientsPage] Could not delete client from Supabase:', err);
+    }
+
     const updatedList = clients.filter((c) => c.id !== clientToDelete.id);
     setClients(updatedList);
-
-    // Update localStorage
-    localStorage.setItem('bilik_custom_clients', JSON.stringify(updatedList));
-
-    // Delete from Supabase
-    try {
-      await supabase
-        .from('clients')
-        .delete()
-        .eq('id', clientToDelete.id);
-    } catch (err) {
-      console.warn('Supabase client delete error:', err);
-    }
+    localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
 
     if (selectedClient?.id === clientToDelete.id) {
       setDrawerOpen(false);
@@ -362,253 +260,226 @@ export default function ClientsPage() {
     setClientToDelete(null);
   };
 
+  // Filter clients by search query
   const filteredClients = clients.filter(
     (c) =>
       c.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.name.toLowerCase().includes(searchQuery.toLowerCase())
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.industry.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
-      {/* Header */}
+      {/* Top Title Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Client Listing</h1>
-          <p className="text-xs text-[#737680] mt-1">
-            Manajemen direktori klien agency, penambahan klien baru, pemetaan Folder ClickUp, dan histori retainer.
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+              <Building2 className="w-5.5 h-5.5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Client Listing</h1>
+              <p className="text-xs text-[#737680] mt-0.5">
+                Manajemen direktori klien resmi agency, penambahan klien baru, dan integrasi data Supabase realtime.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex items-center gap-3">
           <button
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#24324A] text-white rounded-xl text-xs font-extrabold hover:bg-[#1A2536] transition-colors shadow-2xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-[#F26B5E]" />
-            <span>+ Tambah Client Baru</span>
-          </button>
-
-          <button
-            onClick={fetchClientsAndProjects}
-            className="flex items-center gap-2 px-4 py-2 border border-[#E8E8EC] bg-[#FFFFFF] rounded-xl text-xs font-bold text-[#24324A] hover:bg-[#EEF2F7] transition-colors cursor-pointer shadow-2xs"
+            onClick={fetchClientsFromSupabase}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Sync Clients</span>
+            <span>Sync Client</span>
+          </button>
+
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white text-xs font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-[#F26B5E]" />
+            <span>Tambah Client Baru</span>
           </button>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-xl shadow-2xs flex items-center justify-between">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-[#737680] absolute left-3 top-2.5" />
+      {/* Search Bar & Counter */}
+      <div className="bg-white border border-[#E8E8EC] rounded-2xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-[#737680] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Cari perusahaan atau nama klien..."
+            placeholder="Cari perusahaan, nama PIC, email, atau industri klien..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A]"
+            className="w-full pl-10 pr-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs font-medium outline-none focus:border-[#24324A] transition-colors"
           />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#737680] hover:text-[#24324A]">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        <span className="text-xs font-bold text-[#737680]">Total {filteredClients.length} Klien Terdaftar</span>
+
+        <div className="text-xs text-[#737680] font-medium text-right">
+          Total <strong className="text-[#24324A] font-bold">{filteredClients.length}</strong> Klien Terdaftar
+        </div>
       </div>
 
-      {/* Empty State */}
-      {!loading && filteredClients.length === 0 && (
-        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-12 text-center space-y-3 shadow-2xs">
-          <Building2 className="w-10 h-10 text-[#737680] mx-auto opacity-40" />
-          <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Data Klien</h3>
-          <p className="text-xs text-[#737680]">Klik tombol "+ Tambah Client Baru" di atas untuk mendaftarkan klien agency pertama Anda.</p>
-        </div>
-      )}
-
-      {/* Client Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredClients.map((client) => {
-          const clientProjects = projects.filter(
-            (p) => (p.client_name || '').toLowerCase() === client.company_name.toLowerCase()
-          );
-          return (
+      {/* CLIENT CARDS GRID */}
+      {filteredClients.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredClients.map((client) => (
             <div
               key={client.id}
               onClick={() => {
                 setSelectedClient(client);
                 setDrawerOpen(true);
               }}
-              className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs hover:border-[#24324A] cursor-pointer transition-all space-y-4 group relative"
+              className="bg-white border border-[#E8E8EC] hover:border-[#24324A]/40 rounded-2xl p-5 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between space-y-4"
             >
-              {/* Card Action Buttons (Edit & Delete) */}
-              <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                <button
-                  type="button"
-                  onClick={(e) => handleOpenEditModal(client, e)}
-                  title="Edit Klien"
-                  className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] cursor-pointer shadow-xs transition-colors"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleDeleteClient(client, e)}
-                  title="Hapus Klien"
-                  className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg hover:bg-[#F26B5E]/10 text-[#F26B5E] cursor-pointer shadow-xs transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <div className="space-y-3">
+                {/* Header Info */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={client.logo_url}
+                      alt={client.company_name}
+                      className="w-11 h-11 rounded-xl object-cover border border-[#E8E8EC] flex-shrink-0"
+                    />
+                    <div>
+                      <h3 className="text-sm font-extrabold text-[#24324A] group-hover:text-[#F26B5E] transition-colors line-clamp-1">
+                        {client.company_name}
+                      </h3>
+                      <p className="text-[11px] text-[#737680] font-medium">{client.industry}</p>
+                    </div>
+                  </div>
 
-              {/* Header */}
-              <div className="flex items-center justify-between pr-14">
-                <div className="flex items-center gap-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={client.logo_url}
-                    alt={client.company_name}
-                    className="w-10 h-10 rounded-xl object-cover border border-[#E8E8EC]"
-                  />
-                  <div>
-                    <h3 className="text-sm font-bold text-[#24324A] group-hover:text-[#F26B5E] transition-colors truncate max-w-[150px]">
-                      {client.company_name}
-                    </h3>
-                    <p className="text-xs text-[#737680] truncate max-w-[150px]">{client.industry}</p>
+                  <div className="flex items-center gap-1 opacity-90 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => handleOpenEditModal(client, e)}
+                      className="p-1.5 text-[#737680] hover:text-[#24324A] hover:bg-[#F7F7F8] rounded-lg transition-colors cursor-pointer"
+                      title="Edit Client"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteClient(client, e)}
+                      className="p-1.5 text-[#737680] hover:text-[#D95858] hover:bg-[#FFF0ED] rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Client"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Badge & Retainer Progress */}
+                <div className="pt-2 border-t border-[#E8E8EC] space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#737680] text-[11px]">Status Retainer:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        client.status === 'active'
+                          ? 'bg-[#E6F4ED] text-[#4F9D78]'
+                          : client.status === 'lead'
+                          ? 'bg-[#FFF8E7] text-[#D97706]'
+                          : 'bg-[#F7F7F8] text-[#737680]'
+                      }`}
+                    >
+                      {client.status}
+                    </span>
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="space-y-1 text-xs text-[#737680] pt-1">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-[#737680]" />
+                      <span className="truncate">{client.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-[#737680]" />
+                      <span>{client.phone}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-[#737680] font-semibold">Status Retainer:</span>
-                <span
-                  className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase ${
-                    client.status === 'active' ? 'bg-[#EEF2F7] text-[#4F9D78]' : 'bg-[#FEF3D6] text-[#E6A23C]'
-                  }`}
-                >
-                  {client.status}
-                </span>
-              </div>
-
-              {/* Contacts */}
-              <div className="text-xs text-[#737680] space-y-1 pt-2 border-t border-[#E8E8EC]">
-                <p className="flex items-center gap-2 truncate">
-                  <Mail className="w-3.5 h-3.5 text-[#24324A] flex-shrink-0" /> {client.email}
-                </p>
-                <p className="flex items-center gap-2 truncate">
-                  <Phone className="w-3.5 h-3.5 text-[#24324A] flex-shrink-0" /> {client.phone}
-                </p>
-              </div>
-
-              {/* Progress & Projects */}
-              <div className="pt-2 border-t border-[#E8E8EC] space-y-2">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className="text-[#737680]">Progress Retainer:</span>
-                  <span className="text-[#4F9D78]">{client.overall_progress}%</span>
-                </div>
-                <div className="w-full bg-[#EEF2F7] h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-[#4F9D78] h-full rounded-full" style={{ width: `${client.overall_progress}%` }}></div>
-                </div>
-                <p className="text-[11px] text-[#737680]">
-                  Active Projects: <strong className="text-[#24324A]">{clientProjects.length} Project</strong>
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Client Detail Drawer */}
-      {drawerOpen && selectedClient && mounted && createPortal(
-        <div className="fixed inset-0 z-35 flex justify-end bg-black/50 backdrop-blur-xs">
-          <div className="absolute inset-0" onClick={() => setDrawerOpen(false)} />
-
-          <div className="relative z-10 w-full max-w-xl bg-[#FFFFFF] h-full shadow-2xl flex flex-col border-l border-[#E8E8EC] p-6 space-y-6 overflow-y-auto animate-slide-left">
-            <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={selectedClient.logo_url}
-                  alt={selectedClient.company_name}
-                  className="w-12 h-12 rounded-xl object-cover border border-[#E8E8EC]"
-                />
-                <div>
-                  <h2 className="text-lg font-extrabold text-[#24324A]">{selectedClient.company_name}</h2>
-                  <p className="text-xs text-[#737680]">Folder ClickUp ID: {selectedClient.clickup_folder_id}</p>
+              {/* Footer Projects Counter */}
+              <div className="pt-3 border-t border-[#E8E8EC] text-xs flex items-center justify-between">
+                <div className="w-full">
+                  <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+                    <span className="text-[#737680]">Progress Retainer:</span>
+                    <span className="text-[#4F9D78]">{client.overall_progress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[#EEF2F7] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#4F9D78] rounded-full transition-all duration-500"
+                      style={{ width: `${client.overall_progress}%` }}
+                    ></div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#737680]">
+                    Active Projects: <strong className="text-[#24324A]">{client.active_projects_count} Project</strong>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleOpenEditModal(selectedClient)}
-                  className="p-2 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] text-xs font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteClient(selectedClient)}
-                  className="p-2 bg-[#F26B5E]/10 border border-[#F26B5E]/30 rounded-lg hover:bg-[#F26B5E]/20 text-[#F26B5E] text-xs font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Hapus
-                </button>
-                <button onClick={() => setDrawerOpen(false)} className="p-1 rounded-lg hover:bg-[#F7F7F8] text-[#737680] cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
             </div>
-
-            <div className="space-y-4 text-xs">
-              <h3 className="font-bold text-[#24324A] text-sm">Informasi Detail Klien</h3>
-              <p><strong>Nama Contact Person (PIC):</strong> {selectedClient.name}</p>
-              <p><strong>Email:</strong> {selectedClient.email}</p>
-              <p><strong>Telepon:</strong> {selectedClient.phone}</p>
-              <p><strong>Industri:</strong> {selectedClient.industry}</p>
-              <p><strong>Tanggal Mulai Retainer:</strong> {selectedClient.start_date}</p>
-              <p className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg"><strong>Catatan Internal Agency:</strong> {selectedClient.notes}</p>
-            </div>
-
-            <div className="space-y-3 pt-4 border-t border-[#E8E8EC]">
-              <h3 className="font-bold text-[#24324A] text-sm flex items-center">
-                <Briefcase className="w-4 h-4 mr-2 text-[#F26B5E]" /> Project Terkait
-              </h3>
-              <div className="space-y-2 text-xs">
-                {projects
-                  .filter((p) => (p.client_name || '').toLowerCase() === selectedClient.company_name.toLowerCase())
-                  .map((p) => (
-                    <div key={p.id} className="p-3 border border-[#E8E8EC] rounded-lg flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-[#24324A]">{p.name}</p>
-                        <span className="text-[10px] text-[#737680]">
-                          {p.completed_tasks}/{p.total_tasks} Task Completed
-                        </span>
-                      </div>
-                      <span className="font-bold text-[#4F9D78]">{p.progress_percentage}%</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
+          ))}
+        </div>
+      ) : (
+        /* EMPTY STATE */
+        <div className="bg-white border border-[#E8E8EC] rounded-2xl p-12 text-center space-y-4">
+          <div className="w-14 h-14 bg-[#FFF0ED] text-[#F26B5E] rounded-2xl flex items-center justify-center mx-auto border border-[#F26B5E]/20 shadow-xs">
+            <Building2 className="w-7 h-7" />
           </div>
-        </div>,
-        document.body
+          <div>
+            <h3 className="text-base font-extrabold text-[#24324A]">Belum Ada Client Terdaftar</h3>
+            <p className="text-xs text-[#737680] max-w-md mx-auto mt-1">
+              Data klien dari database Supabase masih kosong. Klik tombol di bawah untuk mendaftarkan klien resmi agency Anda.
+            </p>
+          </div>
+          <button
+            onClick={handleOpenAddModal}
+            className="px-5 py-2.5 bg-[#24324A] hover:bg-[#1A2536] text-white text-xs font-extrabold rounded-xl transition-all shadow-md inline-flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-[#F26B5E]" />
+            <span>Tambah Client Baru Sekarang</span>
+          </button>
+        </div>
       )}
 
-      {/* Modal Add / Edit Client */}
+      {/* ========================================================================= */}
+      {/* MODAL 1: ADD / EDIT CLIENT MODAL - VIA PORTAL */}
+      {/* ========================================================================= */}
       {showAddModal && mounted && createPortal(
-        <div className="fixed inset-0 bg-[#24324A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-3">
-              <Building2 className="w-5 h-5 text-[#24324A]" />
-              <h3 className="text-base font-extrabold text-[#24324A]">
-                {editingClient ? 'Edit Data Klien' : 'Tambah Client Baru'}
-              </h3>
+            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">
+                  {editingClient ? 'Edit Informasi Client' : 'Tambah Client Baru'}
+                </h3>
+                <p className="text-xs text-[#737680]">Simpan data perusahaan klien ke database Supabase.</p>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveClient} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveClient} className="space-y-3.5 text-xs">
               <div>
                 <label className="block font-bold text-[#24324A] mb-1">Nama Perusahaan / Klien *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: PT Tokopedia Indonesia / Brand Creative"
+                  placeholder="Contoh: PT Nusantara Retail"
                   value={formCompany}
                   onChange={(e) => setFormCompany(e.target.value)}
                   className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
@@ -617,10 +488,11 @@ export default function ClientsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-[#24324A] mb-1">Nama Contact Person (PIC)</label>
+                  <label className="block font-bold text-[#24324A] mb-1">Nama PIC *</label>
                   <input
                     type="text"
-                    placeholder="Contoh: Budi Santoso"
+                    required
+                    placeholder="Nama Kontak PIC"
                     value={formPIC}
                     onChange={(e) => setFormPIC(e.target.value)}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
@@ -628,14 +500,16 @@ export default function ClientsPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-[#24324A] mb-1">Industri</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: E-Commerce / FMCG"
-                    value={formIndustry}
-                    onChange={(e) => setFormIndustry(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                  />
+                  <label className="block font-bold text-[#24324A] mb-1">Status Client *</label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value as any)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
+                  >
+                    <option value="active">Active (Retainer)</option>
+                    <option value="lead">Prospect / Lead</option>
+                    <option value="archived">Archived</option>
+                  </select>
                 </div>
               </div>
 
@@ -644,7 +518,7 @@ export default function ClientsPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Email Klien</label>
                   <input
                     type="email"
-                    placeholder="contact@brand.com"
+                    placeholder="contact@perusahaan.com"
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
@@ -652,10 +526,10 @@ export default function ClientsPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-[#24324A] mb-1">Telepon / WhatsApp</label>
+                  <label className="block font-bold text-[#24324A] mb-1">Nomor Telepon / WA</label>
                   <input
                     type="text"
-                    placeholder="+62 812-3456-7890"
+                    placeholder="+62 812-..."
                     value={formPhone}
                     onChange={(e) => setFormPhone(e.target.value)}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
@@ -664,26 +538,24 @@ export default function ClientsPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">Status Retainer</label>
-                <select
-                  value={formStatus}
-                  onChange={(e) => setFormStatus(e.target.value as any)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
-                >
-                  <option value="active">Active (Retainer Berjalan)</option>
-                  <option value="lead">Lead (Prospek Baru)</option>
-                  <option value="archived">Archived (Selesai / Non-Aktif)</option>
-                </select>
+                <label className="block font-bold text-[#24324A] mb-1">Industri / Kategori</label>
+                <input
+                  type="text"
+                  placeholder="Retail, F&B, Technology, Beauty, dsb."
+                  value={formIndustry}
+                  onChange={(e) => setFormIndustry(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
               </div>
 
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">Catatan Internal Agency</label>
+                <label className="block font-bold text-[#24324A] mb-1">Catatan Tambahan</label>
                 <textarea
                   rows={2}
-                  placeholder="Catatan paket retainer, requirement khusus, dll."
+                  placeholder="Catatan scope retainer, SLA, atau kontak tambahan..."
                   value={formNotes}
                   onChange={(e) => setFormNotes(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A] resize-none"
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
                 />
               </div>
 
@@ -699,8 +571,8 @@ export default function ClientsPage() {
                   type="submit"
                   className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5 text-[#F26B5E]" />
-                  <span>{editingClient ? 'Simpan Perubahan' : 'Tambah Client'}</span>
+                  <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
+                  <span>Simpan Ke Database</span>
                 </button>
               </div>
             </form>
@@ -709,27 +581,113 @@ export default function ClientsPage() {
         document.body
       )}
 
-      {/* Confirmation Modal Delete Client */}
+      {/* ========================================================================= */}
+      {/* MODAL 2: DELETE CLIENT CONFIRMATION MODAL - VIA PORTAL */}
+      {/* ========================================================================= */}
       {clientToDelete && mounted && createPortal(
-        <div className="fixed inset-0 bg-[#24324A]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
-            <AlertTriangle className="w-10 h-10 text-[#F26B5E] mx-auto" />
-            <h3 className="text-base font-extrabold text-[#24324A]">Hapus Klien Ini?</h3>
-            <p className="text-xs text-[#737680]">
-              Apakah Anda yakin ingin menghapus <b>{clientToDelete.company_name}</b>? Data klien ini akan dihapus dari direktori agency.
-            </p>
-            <div className="pt-2 flex items-center justify-center gap-2 text-xs font-bold">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#D95858] border border-[#F26B5E]/30 flex items-center justify-center mx-auto shadow-xs">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-extrabold text-[#24324A]">Hapus Client Ini?</h3>
+              <p className="text-xs text-[#737680] mt-1">
+                Apakah Anda yakin ingin menghapus <strong className="text-[#24324A]">{clientToDelete.company_name}</strong> dari database Supabase?
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 onClick={() => setClientToDelete(null)}
-                className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl hover:text-[#24324A] cursor-pointer"
+                className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer flex-1 text-xs"
               >
                 Batal
               </button>
               <button
                 onClick={confirmDeleteClient}
-                className="px-4 py-2 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl shadow-sm cursor-pointer"
+                className="px-4 py-2 bg-[#D95858] hover:bg-[#B91C1C] text-white rounded-xl font-extrabold cursor-pointer flex-1 text-xs shadow-sm"
               >
-                Ya, Hapus Klien
+                Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* DRAWER: CLIENT DETAIL DRAWER - VIA PORTAL */}
+      {/* ========================================================================= */}
+      {drawerOpen && selectedClient && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 overflow-y-auto space-y-6 relative flex flex-col justify-between">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={selectedClient.logo_url} alt={selectedClient.company_name} className="w-10 h-10 rounded-xl object-cover border" />
+                  <div>
+                    <h2 className="text-base font-extrabold text-[#24324A]">{selectedClient.company_name}</h2>
+                    <p className="text-xs text-[#737680]">{selectedClient.industry}</p>
+                  </div>
+                </div>
+                <button onClick={() => setDrawerOpen(false)} className="text-[#737680] hover:text-[#24324A] cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Detail Items */}
+              <div className="space-y-3 text-xs bg-[#F7F7F8] p-4 rounded-xl">
+                <div className="flex justify-between py-1 border-b border-[#E8E8EC]">
+                  <span className="text-[#737680]">PIC Nama:</span>
+                  <span className="font-bold text-[#24324A]">{selectedClient.name}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#E8E8EC]">
+                  <span className="text-[#737680]">Email:</span>
+                  <span className="font-bold text-[#24324A]">{selectedClient.email}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#E8E8EC]">
+                  <span className="text-[#737680]">Telepon:</span>
+                  <span className="font-bold text-[#24324A]">{selectedClient.phone}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#E8E8EC]">
+                  <span className="text-[#737680]">Status:</span>
+                  <span className="font-bold text-[#4F9D78] uppercase">{selectedClient.status}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-[#737680]">Tanggal Bergabung:</span>
+                  <span className="font-bold text-[#24324A]">{selectedClient.start_date}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-[#24324A]">Catatan Agency:</h4>
+                <p className="text-xs text-[#737680] bg-[#F7F7F8] p-3 rounded-xl leading-relaxed">{selectedClient.notes}</p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-[#E8E8EC] flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  setDrawerOpen(false);
+                  handleOpenEditModal(selectedClient, e);
+                }}
+                className="flex-1 py-2.5 bg-[#F7F7F8] border border-[#E8E8EC] text-[#24324A] font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer hover:bg-[#EEF2F7]"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Edit Client</span>
+              </button>
+              <button
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setClientToDelete(selectedClient);
+                }}
+                className="flex-1 py-2.5 bg-[#FFF0ED] border border-[#F26B5E]/30 text-[#D95858] font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer hover:bg-[#FFE4DE]"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Client</span>
               </button>
             </div>
           </div>
