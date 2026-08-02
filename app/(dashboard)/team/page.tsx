@@ -635,12 +635,18 @@ export default function TeamWorkloadPage() {
                   {members.map((m) => {
                     const userRecap = timesheetRecap[m.full_name] || {};
 
-                    const getDayCell = (dayKey: string, defaultHours: number) => {
+                    const getDayCell = (dayKey: string) => {
                       const dayData = userRecap[dayKey];
-                      if (!dayData) return defaultHours ? <span className="font-semibold text-[#24324A]">{defaultHours}h</span> : <span className="text-[#737680]">0h</span>;
+                      if (!dayData) {
+                        return <span className="text-[#737680] font-normal">0h</span>;
+                      }
 
                       if (typeof dayData === 'number') {
-                        return <span className="font-semibold text-[#24324A]">{dayData}h</span>;
+                        return dayData > 0 ? (
+                          <span className="font-semibold text-[#24324A]">{dayData}h</span>
+                        ) : (
+                          <span className="text-[#737680]">0h</span>
+                        );
                       }
 
                       if (dayData.status === 'ALPHA') {
@@ -653,15 +659,19 @@ export default function TeamWorkloadPage() {
                       const reg = dayData.regular || 0;
                       const ot = dayData.overtime || 0;
 
+                      if (reg === 0 && ot === 0) {
+                        return <span className="text-[#737680]">0h</span>;
+                      }
+
                       return (
                         <div className="flex flex-col items-center">
-                          <span className="font-bold text-[#24324A]">{reg}h</span>
+                          <span className="font-extrabold text-[#24324A]">{reg}h</span>
                           {ot > 0 && <span className="text-[9px] font-bold text-[#E6A23C] bg-[#E6A23C]/10 px-1 rounded">+{ot}h OT</span>}
                         </div>
                       );
                     };
 
-                    // Compute totals
+                    // Compute totals exclusively from real check-in data in this application
                     let totalReg = 0;
                     let totalOT = 0;
 
@@ -673,8 +683,6 @@ export default function TeamWorkloadPage() {
                       } else if (dayData) {
                         totalReg += dayData.regular || 0;
                         totalOT += dayData.overtime || 0;
-                      } else if (['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(d) && m.hours_tracked > 0) {
-                        totalReg += 8;
                       }
                     });
 
@@ -688,22 +696,22 @@ export default function TeamWorkloadPage() {
                             <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
                             <div>
                               <span className="font-bold text-[#24324A] block">{m.full_name}</span>
-                              <span className="text-[10px] text-[#737680]">40h capacity</span>
+                              <span className="text-[10px] text-[#737680]">ClickUp Team Member</span>
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Sun', 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Mon', m.hours_tracked > 0 ? 8 : 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Tue', m.hours_tracked > 0 ? 8 : 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Wed', m.hours_tracked > 0 ? 8 : 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Thu', m.hours_tracked > 0 ? 8 : 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Fri', m.hours_tracked > 0 ? 8 : 0)}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Sat', 0)}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Sun')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Mon')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Tue')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Wed')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Thu')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Fri')}</td>
+                        <td className="py-3 px-2 text-center">{getDayCell('Sat')}</td>
                         <td className="py-3 px-3 text-center font-extrabold text-[#E6A23C] bg-[#E6A23C]/5">
                           {totalOT > 0 ? `+${totalOT}h` : '-'}
                         </td>
                         <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">
-                          {totalOverall}h
+                          {totalOverall > 0 ? `${totalOverall}h` : '0h'}
                         </td>
                       </tr>
                     );
