@@ -201,22 +201,15 @@ export default function ProjectsPage() {
       description: newProjectDesc.trim() || 'Project Baru Bilik Strategi',
     };
 
-    // 1. Immediately save to Supabase DB & Server Store
+    // 1. Immediately save to Shared Server Store & DB API
     try {
-      await supabase.from('projects').upsert([{
-        id: newId,
-        name: newProjectName.trim(),
-        description: newProjectDesc.trim(),
-        status: 'in_progress',
-      }]);
-
       await fetch('/api/supabase/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProjectObj),
       });
     } catch (err) {
-      console.warn('[ProjectsPage] Could not save project to Supabase:', err);
+      console.warn('[ProjectsPage] Could not save project to server store:', err);
     }
 
     // 2. Fire-and-forget ClickUp sync in background (never blocks user)
@@ -432,10 +425,10 @@ export default function ProjectsPage() {
                 {filteredProjects.map((project) => (
                   <tr key={project.id} className="hover:bg-[#F7F7F8] transition-colors group">
                     <td className="py-3.5 px-4 font-semibold text-[#24324A]">
-                      <Link href={`/projects/${project.id}`} className="hover:text-[#F26B5E] flex items-center gap-1.5">
+                      <a href={`/projects/${project.id}`} className="hover:text-[#F26B5E] flex items-center gap-1.5 cursor-pointer">
                         {project.name}
                         <ChevronRight className="w-3.5 h-3.5 text-[#737680] opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </Link>
+                      </a>
                       <span className="text-[11px] font-normal text-[#737680] block truncate max-w-xs">{project.description}</span>
                     </td>
                     <td className="py-3.5 px-4 text-[#202124] font-medium">{project.client_name}</td>
