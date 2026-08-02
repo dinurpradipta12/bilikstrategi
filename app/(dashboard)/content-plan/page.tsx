@@ -37,6 +37,7 @@ export interface ContentSheetItem {
   embed_url: string;
   platform: string;
   status: string;
+  logo_url?: string;
   updated_at?: string;
 }
 
@@ -49,6 +50,7 @@ const DEFAULT_SHEETS: ContentSheetItem[] = [
     embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
     platform: 'Instagram & TikTok',
     status: 'active',
+    logo_url: 'https://ui-avatars.com/api/?name=Nusantara+Retail&background=FFF0ED&color=F26B5E&font-size=0.4',
     updated_at: '2026-08-01',
   },
   {
@@ -59,6 +61,7 @@ const DEFAULT_SHEETS: ContentSheetItem[] = [
     embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
     platform: 'Instagram Reels',
     status: 'active',
+    logo_url: 'https://ui-avatars.com/api/?name=Kopi+Senja&background=E6F4ED&color=4F9D78&font-size=0.4',
     updated_at: '2026-07-29',
   },
   {
@@ -69,6 +72,7 @@ const DEFAULT_SHEETS: ContentSheetItem[] = [
     embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
     platform: 'LinkedIn & Blog',
     status: 'active',
+    logo_url: 'https://ui-avatars.com/api/?name=Tech+Vision&background=EEF2F7&color=24324A&font-size=0.4',
     updated_at: '2026-07-25',
   },
   {
@@ -79,6 +83,7 @@ const DEFAULT_SHEETS: ContentSheetItem[] = [
     embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
     platform: 'All Social Channels',
     status: 'active',
+    logo_url: '/landscape.png',
     updated_at: '2026-08-02',
   },
 ];
@@ -116,6 +121,23 @@ export default function ContentPlanPage() {
   const [formTitle, setFormTitle] = useState('');
   const [formSheetUrl, setFormSheetUrl] = useState('');
   const [formPlatform, setFormPlatform] = useState('Instagram & TikTok');
+  const [formLogoUrl, setFormLogoUrl] = useState('');
+
+  // Handle Logo Upload File Conversion to Base64
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Ukuran file logo maksimal 2MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormLogoUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Convert normal Google Sheets URL to embed URL
   const convertToEmbedUrl = (url: string) => {
@@ -148,6 +170,7 @@ export default function ContentPlanPage() {
           embed_url: item.embed_url || convertToEmbedUrl(item.sheet_url),
           platform: item.platform || 'Social Media',
           status: item.status || 'active',
+          logo_url: item.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.client_name)}&background=FFF0ED&color=F26B5E&font-size=0.4`,
           updated_at: item.updated_at || new Date().toISOString().split('T')[0],
         }));
         setSheets(mapped);
@@ -216,6 +239,8 @@ export default function ContentPlanPage() {
     if (!formClientName.trim() || !formSheetUrl.trim()) return;
 
     const embedUrl = convertToEmbedUrl(formSheetUrl.trim());
+    const logoUrlToUse = formLogoUrl.trim() || `https://ui-avatars.com/api/?name=${encodeURIComponent(formClientName.trim())}&background=FFF0ED&color=F26B5E&font-size=0.4`;
+
     const newSheet: ContentSheetItem = {
       id: 'sheet-' + Date.now(),
       client_name: formClientName.trim(),
@@ -224,6 +249,7 @@ export default function ContentPlanPage() {
       embed_url: embedUrl,
       platform: formPlatform,
       status: 'active',
+      logo_url: logoUrlToUse,
       updated_at: new Date().toISOString().split('T')[0],
     };
 
@@ -242,6 +268,7 @@ export default function ContentPlanPage() {
           embed_url: newSheet.embed_url,
           platform: newSheet.platform,
           status: newSheet.status,
+          logo_url: newSheet.logo_url,
         },
       ]);
     } catch (err) {
@@ -252,6 +279,7 @@ export default function ContentPlanPage() {
     setFormClientName('');
     setFormTitle('');
     setFormSheetUrl('');
+    setFormLogoUrl('');
     setToastMessage(`Content Plan "${newSheet.title}" berhasil ditambahkan!`);
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -328,13 +356,18 @@ export default function ContentPlanPage() {
               <button
                 key={sheet.id}
                 onClick={() => setSelectedSheetId(sheet.id)}
-                className={`px-4 py-2 rounded-xl font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                className={`px-4 py-2 rounded-xl font-bold transition-all whitespace-nowrap flex items-center gap-2.5 cursor-pointer ${
                   isSelected
                     ? 'bg-[#24324A] text-white shadow-xs'
                     : 'bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] hover:bg-[#EEF2F7] hover:text-[#24324A]'
                 }`}
               >
-                <FileSpreadsheet className={`w-3.5 h-3.5 ${isSelected ? 'text-[#F26B5E]' : 'text-[#737680]'}`} />
+                {sheet.logo_url ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={sheet.logo_url} alt={sheet.client_name} className="w-5 h-5 rounded-lg object-contain bg-white p-0.5 border border-black/10 flex-shrink-0" />
+                ) : (
+                  <FileSpreadsheet className={`w-3.5 h-3.5 ${isSelected ? 'text-[#F26B5E]' : 'text-[#737680]'}`} />
+                )}
                 <span>{sheet.client_name}</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-[#E8E8EC] text-[#737680]'}`}>
                   {sheet.platform}
@@ -350,14 +383,22 @@ export default function ContentPlanPage() {
         <div className="bg-white border border-[#E8E8EC] rounded-2xl overflow-hidden shadow-xs space-y-0">
           {/* Viewport Control Bar */}
           <div className="bg-[#F7F7F8] border-b border-[#E8E8EC] p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 rounded-md text-[10px] font-extrabold uppercase">
-                  {currentSheet.client_name}
-                </span>
-                <span className="text-xs text-[#737680] font-medium">• {currentSheet.platform}</span>
+            <div className="flex items-center gap-3">
+              {currentSheet.logo_url ? (
+                <div className="w-10 h-10 rounded-2xl bg-white border border-[#E8E8EC] p-1 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={currentSheet.logo_url} alt={currentSheet.client_name} className="w-full h-full object-contain rounded-xl" />
+                </div>
+              ) : null}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 rounded-md text-[10px] font-extrabold uppercase">
+                    {currentSheet.client_name}
+                  </span>
+                  <span className="text-xs text-[#737680] font-medium">• {currentSheet.platform}</span>
+                </div>
+                <h2 className="text-base font-extrabold text-[#24324A] mt-0.5">{currentSheet.title}</h2>
               </div>
-              <h2 className="text-base font-extrabold text-[#24324A] mt-1">{currentSheet.title}</h2>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -483,12 +524,17 @@ export default function ContentPlanPage() {
           {/* Focus Mode Control Bar */}
           <div className="bg-[#1A2536] border-b border-[#24324A] px-6 py-3 flex items-center justify-between text-white">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-[#FFF0ED] text-[#F26B5E] flex items-center justify-center font-bold">
-                <FileSpreadsheet className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 p-1 flex items-center justify-center font-bold overflow-hidden flex-shrink-0">
+                {currentSheet.logo_url ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={currentSheet.logo_url} alt={currentSheet.client_name} className="w-full h-full object-contain rounded-xl" />
+                ) : (
+                  <FileSpreadsheet className="w-5 h-5 text-[#F26B5E]" />
+                )}
               </div>
               <div>
                 <h3 className="text-sm font-extrabold leading-none">{currentSheet.title}</h3>
-                <span className="text-[11px] text-[#737680]">{currentSheet.client_name} • Focus Content Writing Mode</span>
+                <span className="text-[11px] text-[#737680] mt-1 block">{currentSheet.client_name} • Focus Content Writing Mode</span>
               </div>
             </div>
 
@@ -579,6 +625,37 @@ export default function ContentPlanPage() {
             </div>
 
             <form onSubmit={handleAddSheet} className="space-y-3.5 text-xs">
+              {/* Upload Icon / Logo Klien */}
+              <div className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-2">
+                <label className="block font-bold text-[#24324A]">Upload Icon / Logo Klien (Ditampilkan di Header Fullscreen)</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-white border border-[#E8E8EC] p-1 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs">
+                    {formLogoUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={formLogoUrl} alt="Logo Preview" className="w-full h-full object-contain rounded-lg" />
+                    ) : (
+                      <Building2 className="w-6 h-6 text-[#737680]" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoFileUpload}
+                      className="w-full text-[11px] text-[#737680] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-[#24324A] file:text-white hover:file:bg-[#1A2536] cursor-pointer"
+                    />
+                    <input
+                      type="url"
+                      placeholder="atau paste URL logo image (https://...)"
+                      value={formLogoUrl}
+                      onChange={(e) => setFormLogoUrl(e.target.value)}
+                      className="w-full p-2 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-medium outline-none focus:border-[#24324A]"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-[#24324A] mb-1">Nama Klien / Brand *</label>
                 <input
