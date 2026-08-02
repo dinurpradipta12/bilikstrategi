@@ -260,7 +260,14 @@ export default function ClientsPage() {
       localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
     } else {
       // 2. Add New Client to Supabase & Server API
-      const newId = 'cli-' + Date.now();
+      const generateUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+        return 'a0eebc99-9c0b-4ef8-bb6d-' + Date.now().toString(16).padStart(12, '0');
+      };
+
+      const newId = generateUUID();
       const newClientObj = {
         id: newId,
         company_name: companyNameClean,

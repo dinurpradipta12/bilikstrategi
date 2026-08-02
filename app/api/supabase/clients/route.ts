@@ -61,9 +61,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, client: clientData });
     }
 
+    const isValidUUID = id && typeof id === 'string' && id.length > 20 && id.includes('-');
+    const newId = isValidUUID ? id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0eebc99-9c0b-4ef8-bb6d-' + Date.now().toString(16).padStart(12, '0'));
+
     // Insert / Upsert new client
     const newClient = {
-      id: id || 'cli-' + Date.now(),
+      id: newId,
       company_name: clientData.company_name || 'Client Baru',
       name: clientData.name || 'PIC Client',
       email: clientData.email || '',
