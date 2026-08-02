@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal as createPortalDom } from 'react-dom';
 import {
   FolderArchive,
   Search,
@@ -27,8 +28,9 @@ import {
   HardDrive,
   Pencil,
   Trash2,
+  Upload,
 } from 'lucide-react';
-import { createPortal as createPortalDom } from 'react-dom';
+import { supabase } from '@/lib/supabase/client';
 
 interface AssetItem {
   id: string;
@@ -183,8 +185,38 @@ export default function AssetManagementPage() {
   // Delete Asset Modal State
   const [deletingAsset, setDeletingAsset] = useState<AssetItem | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
+  // Fetch Assets from Supabase or LocalStorage
+  const fetchAssetsFromSupabase = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('agency_assets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const mapped: AssetItem[] = data.map((item: any) => ({
+          id: String(item.id),
+          title: item.title,
+          category: item.category,
+          description: item.description || '',
+          format: item.format,
+          size: item.size || '3.0 MB',
+          fileUrl: item.file_url,
+          thumbnailUrl: item.thumbnail_url || item.file_url,
+          uploadedBy: item.uploaded_by || 'Workspace Admin',
+          uploadedDate: item.uploaded_date || new Date().toISOString().split('T')[0],
+          tags: Array.isArray(item.tags) ? item.tags : typeof item.tags === 'string' ? JSON.parse(item.tags) : ['Asset'],
+          downloadsCount: item.downloads_count || 1,
+        }));
+        setAssets(mapped);
+        localStorage.setItem('bilik_asset_items', JSON.stringify(mapped));
+        return;
+      }
+    } catch (err) {
+      console.warn('[Assets] Supabase fetch error, fallback to local storage.', err);
+    }
+
+    // Local storage fallback
     const savedAssets = localStorage.getItem('bilik_asset_items');
     if (savedAssets) {
       try {
@@ -195,11 +227,53 @@ export default function AssetManagementPage() {
     } else {
       setAssets(DEFAULT_ASSETS);
     }
+  };
+
+  useEffect(() => {
+    setMounted(true);
+    fetchAssetsFromSupabase();
+
+    // Supabase Realtime Subscription
+    const channel = supabase
+      .channel('realtime_agency_assets')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agency_assets' },
+        () => {
+          fetchAssetsFromSupabase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const saveAssetsToStateAndStorage = (updated: AssetItem[]) => {
     setAssets(updated);
     localStorage.setItem('bilik_asset_items', JSON.stringify(updated));
+  };
+
+  // Image Upload File Handler (Converts File to Data URL)
+  const handleCoverImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setTargetUrlState: (url: string) => void
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        alert('Ukuran gambar cover maksimal 8 MB!');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setTargetUrlState(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleCopyLink = (asset: AssetItem, e?: React.MouseEvent) => {
@@ -219,7 +293,7 @@ export default function AssetManagementPage() {
   };
 
   // Create Asset Handler
-  const handleCreateAsset = (e: React.FormEvent) => {
+  const handleCreateAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
@@ -243,15 +317,38 @@ export default function AssetManagementPage() {
       downloadsCount: 1,
     };
 
+    // Save to local state first
     const updated = [created, ...assets];
     saveAssetsToStateAndStorage(updated);
+
+    // Save to Supabase Database
+    try {
+      await supabase.from('agency_assets').insert([
+        {
+          id: created.id,
+          title: created.title,
+          category: created.category,
+          description: created.description,
+          format: created.format,
+          size: created.size,
+          file_url: created.fileUrl,
+          thumbnail_url: created.thumbnailUrl,
+          uploaded_by: created.uploadedBy,
+          uploaded_date: created.uploadedDate,
+          tags: created.tags,
+          downloads_count: created.downloadsCount,
+        },
+      ]);
+    } catch (err) {
+      console.warn('[Assets] Could not insert to Supabase table agency_assets.', err);
+    }
 
     setShowUploadModal(false);
     setNewTitle('');
     setNewDescription('');
     setNewFileUrl('');
     setNewThumbnailUrl('');
-    setToastMessage(`Aset "${created.title}" berhasil ditambahkan!`);
+    setToastMessage(`Aset "${created.title}" berhasil ditambahkan & tersimpan di database!`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
@@ -270,7 +367,7 @@ export default function AssetManagementPage() {
   };
 
   // Save Edited Asset Handler
-  const handleSaveEditedAsset = (e: React.FormEvent) => {
+  const handleSaveEditedAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAsset || !editTitle.trim()) return;
 
@@ -297,17 +394,44 @@ export default function AssetManagementPage() {
     });
 
     saveAssetsToStateAndStorage(updatedList);
+
+    // Save update to Supabase Database
+    try {
+      await supabase
+        .from('agency_assets')
+        .update({
+          title: editTitle.trim(),
+          category: editCategory,
+          description: editDescription.trim(),
+          format: editFormat,
+          size: editSize.trim() || editingAsset.size,
+          file_url: editFileUrl.trim() || editingAsset.fileUrl,
+          thumbnail_url: editThumbnailUrl.trim() || editFileUrl.trim() || editingAsset.thumbnailUrl,
+          tags: tagList.length > 0 ? tagList : editingAsset.tags,
+        })
+        .eq('id', editingAsset.id);
+    } catch (err) {
+      console.warn('[Assets] Could not update Supabase table agency_assets.', err);
+    }
+
     setEditingAsset(null);
-    setToastMessage(`Perubahan aset "${editTitle}" berhasil disimpan!`);
+    setToastMessage(`Perubahan aset "${editTitle}" berhasil disimpan ke database!`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   // Delete Asset Handler
-  const handleDeleteAssetConfirm = () => {
+  const handleDeleteAssetConfirm = async () => {
     if (!deletingAsset) return;
 
     const updatedList = assets.filter((ast) => ast.id !== deletingAsset.id);
     saveAssetsToStateAndStorage(updatedList);
+
+    // Delete from Supabase Database
+    try {
+      await supabase.from('agency_assets').delete().eq('id', deletingAsset.id);
+    } catch (err) {
+      console.warn('[Assets] Could not delete from Supabase table agency_assets.', err);
+    }
 
     if (viewingAsset?.id === deletingAsset.id) {
       setViewingAsset(null);
@@ -755,7 +879,7 @@ export default function AssetManagementPage() {
             <div className="relative rounded-2xl overflow-hidden border border-[#E8E8EC] bg-[#24324A] min-h-[220px] max-h-[320px] flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={viewingAsset.fileUrl}
+                src={viewingAsset.thumbnailUrl || viewingAsset.fileUrl}
                 alt={viewingAsset.title}
                 className="w-full h-full object-cover max-h-[320px]"
               />
@@ -951,7 +1075,7 @@ export default function AssetManagementPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">URL Link Download / File *</label>
+                <label className="block font-bold text-[#24324A] mb-1">URL Link File / Download *</label>
                 <input
                   type="url"
                   required
@@ -962,15 +1086,42 @@ export default function AssetManagementPage() {
                 />
               </div>
 
+              {/* UPLOAD FOTO COVER / THUMBNAIL DROPZONE */}
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">URL Cover / Thumbnail (Opsional)</label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={newThumbnailUrl}
-                  onChange={(e) => setNewThumbnailUrl(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                />
+                <label className="block font-bold text-[#24324A] mb-1">Upload Gambar Cover / Thumbnail</label>
+                <div className="border-2 border-dashed border-[#E8E8EC] hover:border-[#24324A] rounded-xl p-3 text-center bg-[#F7F7F8] transition-colors relative cursor-pointer group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleCoverImageUpload(e, setNewThumbnailUrl)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+                  {newThumbnailUrl ? (
+                    <div className="relative flex items-center justify-between gap-2 p-1 bg-white rounded-lg border border-[#E8E8EC]">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={newThumbnailUrl} alt="Cover Preview" className="w-12 h-10 object-cover rounded" />
+                        <span className="text-[11px] text-[#4F9D78] font-bold truncate">Gambar Cover Terpilih</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNewThumbnailUrl('');
+                        }}
+                        className="p-1 text-[#737680] hover:text-[#D95858] z-20 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-5 h-5 text-[#F26B5E] mx-auto group-hover:scale-110 transition-transform" />
+                      <p className="text-xs font-bold text-[#24324A]">Klik untuk Pilih Gambar Cover dari Komputer</p>
+                      <p className="text-[10px] text-[#737680]">Format JPG, PNG, WEBP (Maksimal 8 MB)</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -1000,7 +1151,7 @@ export default function AssetManagementPage() {
       {/* ========================================================================= */}
       {editingAsset && mounted && createPortalDom(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setEditingAsset(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -1105,14 +1256,42 @@ export default function AssetManagementPage() {
                 />
               </div>
 
+              {/* EDIT UPLOAD FOTO COVER / THUMBNAIL DROPZONE */}
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">URL Cover Image / Thumbnail</label>
-                <input
-                  type="url"
-                  value={editThumbnailUrl}
-                  onChange={(e) => setEditThumbnailUrl(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                />
+                <label className="block font-bold text-[#24324A] mb-1">Upload Gambar Cover Baru</label>
+                <div className="border-2 border-dashed border-[#E8E8EC] hover:border-[#24324A] rounded-xl p-3 text-center bg-[#F7F7F8] transition-colors relative cursor-pointer group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleCoverImageUpload(e, setEditThumbnailUrl)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                  />
+                  {editThumbnailUrl ? (
+                    <div className="relative flex items-center justify-between gap-2 p-1 bg-white rounded-lg border border-[#E8E8EC]">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={editThumbnailUrl} alt="Cover Preview" className="w-12 h-10 object-cover rounded" />
+                        <span className="text-[11px] text-[#4F9D78] font-bold truncate">Ganti Gambar Cover</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditThumbnailUrl('');
+                        }}
+                        className="p-1 text-[#737680] hover:text-[#D95858] z-20 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-5 h-5 text-[#F26B5E] mx-auto group-hover:scale-110 transition-transform" />
+                      <p className="text-xs font-bold text-[#24324A]">Klik untuk Pilih Gambar Cover dari Komputer</p>
+                      <p className="text-[10px] text-[#737680]">Format JPG, PNG, WEBP (Maksimal 8 MB)</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
