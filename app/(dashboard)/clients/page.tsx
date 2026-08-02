@@ -48,8 +48,8 @@ export default function ClientsPage() {
   const [formNotes, setFormNotes] = useState('');
 
   // Fetch real clients from Supabase database & shared API store
-  const fetchClientsFromSupabase = async () => {
-    setLoading(true);
+  const fetchClientsFromSupabase = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     let supaData: any[] | null = null;
 
     try {
@@ -99,7 +99,7 @@ export default function ClientsPage() {
 
       setClients(mappedClients);
       localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mappedClients));
-      setLoading(false);
+      if (!isSilent) setLoading(false);
       return;
     }
 
@@ -114,25 +114,25 @@ export default function ClientsPage() {
     } else {
       setClients([]);
     }
-    setLoading(false);
+    if (!isSilent) setLoading(false);
   };
 
   useEffect(() => {
     setMounted(true);
-    fetchClientsFromSupabase();
+    fetchClientsFromSupabase(false);
 
-    // 1. Polling interval for fast background sync (5s)
+    // Silent background interval (15s)
     const interval = setInterval(() => {
-      fetchClientsFromSupabase();
-    }, 5000);
+      fetchClientsFromSupabase(true);
+    }, 15000);
 
-    // 2. BroadcastChannel for cross-tab / cross-window instant sync
+    // BroadcastChannel for cross-tab / cross-window instant sync
     let bc: BroadcastChannel | null = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         bc = new BroadcastChannel('bilik_clients_channel');
         bc.onmessage = () => {
-          fetchClientsFromSupabase();
+          fetchClientsFromSupabase(true);
         };
       } catch {}
     }
@@ -383,7 +383,7 @@ export default function ClientsPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchClientsFromSupabase}
+            onClick={() => fetchClientsFromSupabase(false)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />

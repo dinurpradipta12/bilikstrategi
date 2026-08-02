@@ -67,8 +67,8 @@ export default function ProjectsPage() {
   };
 
   // 1. Fetch Projects (combining Supabase DB, Shared Server Store, and ClickUp)
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchProjects = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     let combinedProjects: AgencyProject[] = [];
     const deletedIdsRaw = typeof window !== 'undefined' ? localStorage.getItem('bilik_deleted_project_ids') : null;
     const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
@@ -138,24 +138,24 @@ export default function ProjectsPage() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('bilik_agency_projects_db', JSON.stringify(cleanProjects));
     }
-    setLoading(false);
+    if (!isSilent) setLoading(false);
   };
 
   useEffect(() => {
-    fetchProjects();
+    fetchProjects(false);
 
-    // 1. Fast background interval (5s)
+    // Silent background interval (15s)
     const interval = setInterval(() => {
-      fetchProjects();
-    }, 5000);
+      fetchProjects(true);
+    }, 15000);
 
-    // 2. BroadcastChannel
+    // BroadcastChannel: Silent background sync
     let bc: BroadcastChannel | null = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         bc = new BroadcastChannel('bilik_projects_channel');
         bc.onmessage = () => {
-          fetchProjects();
+          fetchProjects(true);
         };
       } catch {}
     }
@@ -167,14 +167,14 @@ export default function ProjectsPage() {
       };
     }
 
-    // 3. Supabase Realtime Channel
+    // Supabase Realtime Channel: Silent background sync
     const channel = supabase
       .channel('realtime_projects_channel')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'projects' },
         () => {
-          fetchProjects();
+          fetchProjects(true);
         }
       )
       .subscribe();
@@ -331,7 +331,7 @@ export default function ProjectsPage() {
           </button>
 
           <button
-            onClick={fetchProjects}
+            onClick={() => fetchProjects(false)}
             className="p-2 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs font-semibold text-[#24324A] hover:bg-[#EEF2F7] transition-colors"
             title="Sync Data ClickUp"
           >
