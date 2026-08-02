@@ -67,6 +67,7 @@ export default function TeamWorkloadPage() {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formCapacity, setFormCapacity] = useState(40);
+  const [formIsAdmin, setFormIsAdmin] = useState(false);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
 
   // ------------------------------------------------------------------------
@@ -325,6 +326,15 @@ export default function TeamWorkloadPage() {
     setFormEmail(member.email);
     setFormPhone(member.phone || '+62 812-3456-7890');
     setFormCapacity(member.capacity_hours);
+
+    const isAlreadyAdmin =
+      (member.role || '').toLowerCase().includes('admin') ||
+      (member.role || '').toLowerCase().includes('owner') ||
+      (member.role || '').toLowerCase().includes('lead') ||
+      (member.custom_role || '').toLowerCase().includes('admin') ||
+      (member.custom_role || '').toLowerCase().includes('lead');
+
+    setFormIsAdmin(isAlreadyAdmin);
     setShowEditMemberModal(true);
   };
 
@@ -338,18 +348,51 @@ export default function TeamWorkloadPage() {
       try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
     }
 
+    const updatedRoleStr = formIsAdmin ? 'Admin' : 'Member';
+
     const updatedInfo = {
       custom_role: formRole,
+      role: updatedRoleStr,
       division: formDivision,
       email: formEmail,
       phone: formPhone,
       capacity: formCapacity,
+      is_admin: formIsAdmin,
     };
 
     customInfoMap[editingMember.full_name] = updatedInfo;
     customInfoMap[editingMember.id] = updatedInfo;
-
     localStorage.setItem('bilik_team_custom_info', JSON.stringify(customInfoMap));
+
+    // Persist in bilik_team_members for global role resolution!
+    const savedTeamStr = localStorage.getItem('bilik_team_members');
+    let teamList: any[] = [];
+    if (savedTeamStr) {
+      try { teamList = JSON.parse(savedTeamStr); } catch {}
+    }
+
+    const memberIdx = teamList.findIndex(
+      (m: any) => m.id === editingMember.id || m.full_name === editingMember.full_name || (m.email && m.email === formEmail)
+    );
+
+    const newTeamMemberObj = {
+      id: editingMember.id,
+      name: editingMember.full_name,
+      full_name: editingMember.full_name,
+      email: formEmail,
+      role: updatedRoleStr,
+      custom_role: formRole,
+      division: formDivision,
+      capacity: formCapacity,
+      is_admin: formIsAdmin,
+    };
+
+    if (memberIdx >= 0) {
+      teamList[memberIdx] = { ...teamList[memberIdx], ...newTeamMemberObj };
+    } else {
+      teamList.push(newTeamMemberObj);
+    }
+    localStorage.setItem('bilik_team_members', JSON.stringify(teamList));
 
     // Also update capacities map
     const savedCapsStr = localStorage.getItem('bilik_member_capacities');
@@ -367,6 +410,7 @@ export default function TeamWorkloadPage() {
         if (m.id === editingMember.id || m.full_name === editingMember.full_name) {
           return {
             ...m,
+            role: updatedRoleStr,
             custom_role: formRole,
             division: formDivision,
             email: formEmail,
@@ -378,6 +422,7 @@ export default function TeamWorkloadPage() {
       })
     );
 
+    window.dispatchEvent(new Event('storage'));
     setShowEditMemberModal(false);
   };
 
@@ -1729,6 +1774,32 @@ export default function TeamWorkloadPage() {
                   onChange={(e) => setFormCapacity(parseInt(e.target.value) || 40)}
                   className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-extrabold outline-none focus:border-[#24324A]"
                 />
+              </div>
+
+              {/* Toggle Switch Akses Admin / Full Access (Executive Lead) */}
+              <div className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-extrabold text-[#24324A]">
+                    <ShieldCheck className={`w-4 h-4 ${formIsAdmin ? 'text-[#4F9D78]' : 'text-[#737680]'}`} />
+                    <span>Berikan Akses Admin / Full Access</span>
+                  </div>
+                  <p className="text-[10px] text-[#737680] leading-snug">
+                    {formIsAdmin
+                      ? '🟢 Pengguna ini memiliki Full Access (Executive Dashboard, Timesheet Edit, & Manajemen Tim).'
+                      : '⚪ Pengguna ini hanya memiliki akses Member biasa (Personal Dashboard privat).'
+                    }
+                  </p>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={formIsAdmin}
+                    onChange={(e) => setFormIsAdmin(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-[#E8E8EC] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#4F9D78]"></div>
+                </label>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
