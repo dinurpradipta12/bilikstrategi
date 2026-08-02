@@ -47,46 +47,63 @@ export default function ClientsPage() {
   const [formStatus, setFormStatus] = useState<'active' | 'lead' | 'archived'>('active');
   const [formNotes, setFormNotes] = useState('');
 
-  // Fetch real clients from Supabase database
+  // Fetch real clients from Supabase database & shared API store
   const fetchClientsFromSupabase = async () => {
     setLoading(true);
+    let supaData: any[] | null = null;
+
     try {
-      // 1. Query Supabase table 'clients'
-      const { data: supaData, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && supaData && supaData.length > 0) {
-        const mappedClients: AgencyClient[] = supaData.map((sc: any) => ({
-          id: String(sc.id),
-          name: sc.name || `PIC ${sc.company_name || sc.name}`,
-          company_name: sc.company_name || sc.name,
-          email: sc.email || `contact@${(sc.company_name || 'client').toLowerCase().replace(/\s+/g, '')}.id`,
-          phone: sc.phone || '+62 812-0000-0000',
-          logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sc.company_name || sc.name)}&background=24324A&color=fff`,
-          status: sc.status || 'active',
-          industry: sc.industry || 'Digital Agency',
-          clickup_folder_id: sc.clickup_folder_id || 'folder_1',
-          overall_progress: sc.overall_progress || 0,
-          notes: sc.notes || 'Klien resmi Bilik Strategi Workspace.',
-          start_date: sc.start_date || new Date().toISOString().split('T')[0],
-          account_manager_id: 'u1',
-          active_projects_count: sc.active_projects_count || 0,
-          completed_projects_count: sc.completed_projects_count || 0,
-          total_tasks_count: sc.total_tasks_count || 0,
-        }));
-
-        setClients(mappedClients);
-        localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mappedClients));
-        setLoading(false);
-        return;
+      const res = await fetch('/api/supabase/clients', { cache: 'no-store' });
+      if (res.ok) {
+        const resJson = await res.json();
+        if (Array.isArray(resJson.clients) && resJson.clients.length > 0) {
+          supaData = resJson.clients;
+        }
       }
-    } catch (err) {
-      console.warn('[ClientsPage] Supabase query error, fallback to local storage.', err);
+    } catch {}
+
+    if (!supaData || supaData.length === 0) {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          supaData = data;
+        }
+      } catch (err) {
+        console.warn('[ClientsPage] Supabase query error', err);
+      }
     }
 
-    // 2. Local storage fallback if Supabase table is empty or offline
+    if (supaData && supaData.length > 0) {
+      const mappedClients: AgencyClient[] = supaData.map((sc: any) => ({
+        id: String(sc.id),
+        name: sc.name || `PIC ${sc.company_name || sc.name}`,
+        company_name: sc.company_name || sc.name,
+        email: sc.email || `contact@${(sc.company_name || 'client').toLowerCase().replace(/\s+/g, '')}.id`,
+        phone: sc.phone || '+62 812-0000-0000',
+        logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sc.company_name || sc.name)}&background=24324A&color=fff`,
+        status: sc.status || 'active',
+        industry: sc.industry || 'Digital Agency',
+        clickup_folder_id: sc.clickup_folder_id || 'folder_1',
+        overall_progress: sc.overall_progress || 0,
+        notes: sc.notes || 'Klien resmi Bilik Strategi Workspace.',
+        start_date: sc.start_date || new Date().toISOString().split('T')[0],
+        account_manager_id: 'u1',
+        active_projects_count: sc.active_projects_count || 0,
+        completed_projects_count: sc.completed_projects_count || 0,
+        total_tasks_count: sc.total_tasks_count || 0,
+      }));
+
+      setClients(mappedClients);
+      localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mappedClients));
+      setLoading(false);
+      return;
+    }
+
+    // Default to local storage or empty array
     const saved = localStorage.getItem('bilik_agency_clients_db');
     if (saved) {
       try {
@@ -104,9 +121,30 @@ export default function ClientsPage() {
     setMounted(true);
     fetchClientsFromSupabase();
 
-    if (!isSupabaseConfigured) return;
+    // 1. Polling interval for fast background sync (5s)
+    const interval = setInterval(() => {
+      fetchClientsFromSupabase();
+    }, 5000);
 
-    // Supabase Realtime Channel Subscription for 'clients' table
+    // 2. BroadcastChannel for cross-tab / cross-window instant sync
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('bilik_clients_channel');
+        bc.onmessage = () => {
+          fetchClientsFromSupabase();
+        };
+      } catch {}
+    }
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        clearInterval(interval);
+        if (bc) bc.close();
+      };
+    }
+
+    // 3. Supabase Realtime Channel Subscription for 'clients' table
     const channel = supabase
       .channel('realtime_clients_channel')
       .on(
@@ -119,6 +157,8 @@ export default function ClientsPage() {
       .subscribe();
 
     return () => {
+      clearInterval(interval);
+      if (bc) bc.close();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -150,7 +190,7 @@ export default function ClientsPage() {
     setShowAddModal(true);
   };
 
-  // Save / Add Client directly to Supabase Database
+  // Save / Add Client directly to Supabase Database & Server API Store
   const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCompany.trim()) return;
@@ -162,7 +202,7 @@ export default function ClientsPage() {
     const logoClean = `https://ui-avatars.com/api/?name=${encodeURIComponent(companyNameClean)}&background=24324A&color=fff`;
 
     if (editingClient) {
-      // 1. Update in Supabase
+      // 1. Update in Supabase & Server API
       try {
         await supabase
           .from('clients')
@@ -177,6 +217,23 @@ export default function ClientsPage() {
             logo_url: logoClean,
           })
           .eq('id', editingClient.id);
+
+        await fetch('/api/supabase/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            id: editingClient.id,
+            company_name: companyNameClean,
+            name: picNameClean,
+            email: emailClean,
+            phone: phoneClean,
+            industry: formIndustry,
+            status: formStatus,
+            notes: formNotes.trim() || 'Klien Agency',
+            logo_url: logoClean,
+          }),
+        });
       } catch (err) {
         console.warn('[ClientsPage] Could not update client in Supabase:', err);
       }
@@ -202,7 +259,7 @@ export default function ClientsPage() {
       setClients(updatedList);
       localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
     } else {
-      // 2. Add New Client to Supabase
+      // 2. Add New Client to Supabase & Server API
       const newId = 'cli-' + Date.now();
       const newClientObj = {
         id: newId,
@@ -223,7 +280,12 @@ export default function ClientsPage() {
       };
 
       try {
-        await supabase.from('clients').insert([newClientObj]);
+        await supabase.from('clients').upsert([newClientObj]);
+        await fetch('/api/supabase/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newClientObj),
+        });
       } catch (err) {
         console.warn('[ClientsPage] Could not insert client to Supabase:', err);
       }
@@ -231,6 +293,15 @@ export default function ClientsPage() {
       const updatedList = [newClientObj as AgencyClient, ...clients];
       setClients(updatedList);
       localStorage.setItem('bilik_agency_clients_db', JSON.stringify(updatedList));
+    }
+
+    // Broadcast change
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_clients_channel');
+        bc.postMessage({ type: 'CLIENTS_UPDATED' });
+        bc.close();
+      } catch {}
     }
 
     setShowAddModal(false);
@@ -247,6 +318,11 @@ export default function ClientsPage() {
 
     try {
       await supabase.from('clients').delete().eq('id', clientToDelete.id);
+      await fetch('/api/supabase/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: clientToDelete.id }),
+      });
     } catch (err) {
       console.warn('[ClientsPage] Could not delete client from Supabase:', err);
     }
@@ -260,6 +336,15 @@ export default function ClientsPage() {
       setSelectedClient(null);
     }
     setClientToDelete(null);
+
+    // Broadcast change
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_clients_channel');
+        bc.postMessage({ type: 'CLIENTS_UPDATED' });
+        bc.close();
+      } catch {}
+    }
   };
 
   // Filter clients by search query
