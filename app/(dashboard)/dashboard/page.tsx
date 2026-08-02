@@ -58,11 +58,49 @@ export default function DashboardPage() {
 
   // Currently Logged-in User State (Personal View)
   const [currentUser, setCurrentUser] = useState({
-    username: 'Dinur Pradipta',
-    email: 'dinur@bilikstrategi.id',
-    role: 'Owner / Project Lead',
-    avatar: 'https://ui-avatars.com/api/?name=Dinur+Pradipta&background=24324A&color=fff',
+    username: 'Dinur mp',
+    email: 'contact.dinurpradipta@gmail.com',
+    role: 'Member',
+    avatar: 'https://ui-avatars.com/api/?name=Dinur+mp&background=24324A&color=fff',
   });
+
+  const checkIsAdminOrOwner = (userEmail: string, userName: string, defaultRole: string) => {
+    const emailLower = (userEmail || '').toLowerCase().trim();
+
+    // Rule 1: Primary Owner (snllabsarchive@gmail.com) is ALWAYS Admin/Owner
+    if (emailLower === 'snllabsarchive@gmail.com') return true;
+
+    // Rule 2: Check team list in localStorage ('bilik_team_members') to see if promoted by Owner
+    if (typeof window !== 'undefined') {
+      const savedTeamStr = localStorage.getItem('bilik_team_members');
+      if (savedTeamStr) {
+        try {
+          const parsedMembers = JSON.parse(savedTeamStr);
+          if (Array.isArray(parsedMembers)) {
+            const found = parsedMembers.find(
+              (m: any) =>
+                (m.email && m.email.toLowerCase().trim() === emailLower) ||
+                (m.name && m.name.toLowerCase().trim() === userName.toLowerCase().trim())
+            );
+            if (found && found.role) {
+              const r = found.role.toLowerCase();
+              if (r.includes('owner') || r.includes('admin') || r.includes('lead')) {
+                return true;
+              } else {
+                return false; // Explicitly assigned as Member in Team List!
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    // Rule 3: Check defaultRole string if not contact.dinurpradipta@gmail.com
+    if (emailLower === 'contact.dinurpradipta@gmail.com') return false;
+
+    const r = (defaultRole || '').toLowerCase();
+    return r.includes('owner') || r.includes('admin') || r.includes('lead');
+  };
 
   const [activeSessionTime, setActiveSessionTime] = useState<string | null>(null);
 
@@ -244,11 +282,15 @@ export default function DashboardPage() {
     if (savedUserStr) {
       try {
         const u = JSON.parse(savedUserStr);
+        const emailLower = (u.email || '').toLowerCase().trim();
+        const isSuperOwner = emailLower === 'snllabsarchive@gmail.com';
+        const role = isSuperOwner ? 'Owner / Workspace Admin' : (u.role || 'Member');
+
         setCurrentUser({
-          username: u.username || 'Dinur Pradipta',
-          email: u.email || 'dinur@bilikstrategi.id',
-          role: u.role || 'Owner / Project Lead',
-          avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username || 'Dinur Pradipta')}&background=24324A&color=fff`,
+          username: u.username || (isSuperOwner ? 'Dinur Pradipta' : 'Dinur mp'),
+          email: u.email || (isSuperOwner ? 'snllabsarchive@gmail.com' : 'contact.dinurpradipta@gmail.com'),
+          role: role,
+          avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username || 'User')}&background=24324A&color=fff`,
         });
       } catch {}
     }
@@ -826,12 +868,7 @@ export default function DashboardPage() {
         /* PERSONAL DASHBOARD VIEW (DASHBOARD SAYA)              */
         /* ---------------------------------------------------- */
         (() => {
-          const isAdminOrOwner =
-            currentUser.role === 'Owner' ||
-            currentUser.role === 'Admin' ||
-            currentUser.role.toLowerCase().includes('lead') ||
-            currentUser.role.toLowerCase().includes('owner') ||
-            currentUser.role.toLowerCase().includes('admin');
+          const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.username, currentUser.role);
 
           const hour = new Date().getHours();
           const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
