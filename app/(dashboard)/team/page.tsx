@@ -28,6 +28,8 @@ import {
   X,
   Send,
   UserPlus,
+  CalendarDays,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface TeamMemberWorkload {
@@ -66,6 +68,169 @@ export default function TeamWorkloadPage() {
   const [formPhone, setFormPhone] = useState('');
   const [formCapacity, setFormCapacity] = useState(40);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+
+  // ------------------------------------------------------------------------
+  // TIMESHEET RECORDING PERIOD RANGE STATE
+  // ------------------------------------------------------------------------
+  type PeriodMode = 'weekly' | 'monthly' | 'custom';
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('weekly');
+
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day;
+    const start = new Date(d.setDate(diff));
+    start.setHours(0, 0, 0, 0);
+    return start;
+  });
+
+  const [endDate, setEndDate] = useState<Date>(() => {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = d.getDate() - day + 6;
+    const end = new Date(d.setDate(diff));
+    end.setHours(23, 59, 59, 999);
+    return end;
+  });
+
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [customStartStr, setCustomStartStr] = useState<string>('');
+  const [customEndStr, setCustomEndStr] = useState<string>('');
+
+  const handlePrevPeriod = () => {
+    if (periodMode === 'weekly') {
+      const newStart = new Date(startDate);
+      newStart.setDate(newStart.getDate() - 7);
+      const newEnd = new Date(endDate);
+      newEnd.setDate(newEnd.getDate() - 7);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    } else if (periodMode === 'monthly') {
+      const newStart = new Date(startDate.getFullYear(), startDate.getMonth() - 1, 1);
+      const newEnd = new Date(startDate.getFullYear(), startDate.getMonth(), 0, 23, 59, 59);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    } else {
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 7;
+      const newStart = new Date(startDate);
+      newStart.setDate(newStart.getDate() - diffDays);
+      const newEnd = new Date(endDate);
+      newEnd.setDate(newEnd.getDate() - diffDays);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    }
+  };
+
+  const handleNextPeriod = () => {
+    if (periodMode === 'weekly') {
+      const newStart = new Date(startDate);
+      newStart.setDate(newStart.getDate() + 7);
+      const newEnd = new Date(endDate);
+      newEnd.setDate(newEnd.getDate() + 7);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    } else if (periodMode === 'monthly') {
+      const newStart = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+      const newEnd = new Date(startDate.getFullYear(), startDate.getMonth() + 2, 0, 23, 59, 59);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    } else {
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 7;
+      const newStart = new Date(startDate);
+      newStart.setDate(newStart.getDate() + diffDays);
+      const newEnd = new Date(endDate);
+      newEnd.setDate(newEnd.getDate() + diffDays);
+      setStartDate(newStart);
+      setEndDate(newEnd);
+    }
+  };
+
+  const handleSelectPreset = (mode: PeriodMode) => {
+    setPeriodMode(mode);
+    const now = new Date();
+    if (mode === 'weekly') {
+      const day = now.getDay();
+      const diff = now.getDate() - day;
+      const start = new Date(now.setDate(diff));
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+
+      setStartDate(start);
+      setEndDate(end);
+    } else if (mode === 'monthly') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+
+      setStartDate(start);
+      setEndDate(end);
+    } else if (mode === 'custom') {
+      setCustomStartStr(startDate.toISOString().split('T')[0]);
+      setCustomEndStr(endDate.toISOString().split('T')[0]);
+      setShowPeriodModal(true);
+    }
+  };
+
+  const handleSaveCustomPeriod = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customStartStr || !customEndStr) return;
+
+    const s = new Date(customStartStr);
+    s.setHours(0, 0, 0, 0);
+
+    const eD = new Date(customEndStr);
+    eD.setHours(23, 59, 59, 999);
+
+    if (s > eD) {
+      alert('Tanggal mulai tidak boleh melebihi tanggal selesai!');
+      return;
+    }
+
+    setStartDate(s);
+    setEndDate(eD);
+    setPeriodMode('custom');
+    setShowPeriodModal(false);
+  };
+
+  const getDaysInPeriod = () => {
+    const daysList: Array<{ dateObj: Date; dayName: string; dateStr: string; label: string }> = [];
+    const curr = new Date(startDate);
+    curr.setHours(0, 0, 0, 0);
+
+    const finalEnd = new Date(endDate);
+    finalEnd.setHours(23, 59, 59, 999);
+
+    const dayNamesShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    while (curr <= finalEnd && daysList.length < 31) {
+      const dayName = dayNamesShort[curr.getDay()];
+      const dateStr = curr.toISOString().split('T')[0];
+      const label = `${dayName}, ${monthNamesShort[curr.getMonth()]} ${curr.getDate()}`;
+      daysList.push({
+        dateObj: new Date(curr),
+        dayName,
+        dateStr,
+        label,
+      });
+      curr.setDate(curr.getDate() + 1);
+    }
+    return daysList;
+  };
+
+  const formatPeriodLabel = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const startStr = `${months[startDate.getMonth()]} ${startDate.getDate()}`;
+    const endStr = `${months[endDate.getMonth()]} ${endDate.getDate()}, ${endDate.getFullYear()}`;
+    return `${startStr} - ${endStr}`;
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -878,140 +1043,293 @@ export default function TeamWorkloadPage() {
 
 
       {/* ---------------------------------------------------- */}
-      {/* TAB 5: TIMESHEET (Weekly Logged Hours Matrix Grid)   */}
+      {/* TAB 5: TIMESHEET (Dynamic Logged Hours Matrix Grid)  */}
       {/* ---------------------------------------------------- */}
-      {activeTab === 'timesheet' && (
-        <div className="space-y-6 animate-fade-in">
-          {/* Controls Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <button className="p-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8]"><ChevronLeft className="w-4 h-4" /></button>
-              <span className="text-xs font-extrabold text-[#24324A]">Jul 26 - Aug 1, 2026</span>
-              <button className="p-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8]"><ChevronRight className="w-4 h-4" /></button>
+      {activeTab === 'timesheet' && (() => {
+        const activeDays = getDaysInPeriod();
+        return (
+          <div className="space-y-6 animate-fade-in">
+            {/* Controls Bar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Period Shift Controls */}
+                <div className="flex items-center gap-1 bg-[#F7F7F8] p-1 border border-[#E8E8EC] rounded-xl">
+                  <button
+                    onClick={handlePrevPeriod}
+                    className="p-1.5 rounded-lg hover:bg-[#FFFFFF] text-[#24324A] transition-colors cursor-pointer"
+                    title="Periode Sebelumnya"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-2 text-xs font-extrabold text-[#24324A] min-w-[140px] text-center">
+                    {formatPeriodLabel()}
+                  </span>
+                  <button
+                    onClick={handleNextPeriod}
+                    className="p-1.5 rounded-lg hover:bg-[#FFFFFF] text-[#24324A] transition-colors cursor-pointer"
+                    title="Periode Berikutnya"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Preset Mode Pills */}
+                <div className="flex items-center gap-1 bg-[#EEF2F7] p-1 rounded-xl text-xs font-bold">
+                  <button
+                    onClick={() => handleSelectPreset('weekly')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      periodMode === 'weekly' ? 'bg-[#24324A] text-white shadow-2xs' : 'text-[#737680] hover:text-[#24324A]'
+                    }`}
+                  >
+                    Mingguan
+                  </button>
+                  <button
+                    onClick={() => handleSelectPreset('monthly')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                      periodMode === 'monthly' ? 'bg-[#24324A] text-white shadow-2xs' : 'text-[#737680] hover:text-[#24324A]'
+                    }`}
+                  >
+                    Bulanan
+                  </button>
+                  <button
+                    onClick={() => handleSelectPreset('custom')}
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                      periodMode === 'custom' ? 'bg-[#24324A] text-white shadow-2xs' : 'text-[#737680] hover:text-[#24324A]'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3 h-3" />
+                    <span>Kustom</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <Link
+                  href="/attendance"
+                  className="px-3.5 py-2 bg-[#4F9D78] text-white rounded-xl font-extrabold hover:bg-[#3D8362] transition-colors shadow-2xs flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5 text-white" />
+                  <span>⏱️ Presensi Check-In Live</span>
+                </Link>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <Link
-                href="/attendance"
-                className="px-3.5 py-1.5 bg-[#4F9D78] text-white rounded-xl font-extrabold hover:bg-[#3D8362] transition-colors shadow-2xs flex items-center gap-1.5"
-              >
-                <Clock className="w-3.5 h-3.5 text-white" />
-                <span>⏱️ Presensi Check-In Live</span>
-              </Link>
-              <span className="px-3 py-1 bg-[#EEF2F7] border border-[#24324A]/20 rounded-lg font-bold text-[#24324A]">⏱️ Tracked time</span>
-            </div>
-          </div>
+            {/* Matrix Table */}
+            <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-[#F7F7F8] border-b border-[#E8E8EC] text-[#737680] uppercase tracking-wider font-semibold">
+                      <th className="py-3 px-4 min-w-[180px]">People ({members.length})</th>
+                      {activeDays.map((d) => (
+                        <th key={d.dateStr} className="py-3 px-2 text-center whitespace-nowrap min-w-[70px]">
+                          {d.label}
+                        </th>
+                      ))}
+                      <th className="py-3 px-3 text-center font-bold text-[#E6A23C] min-w-[80px]">Total OT</th>
+                      <th className="py-3 px-4 text-center font-bold text-[#4F9D78] min-w-[80px]">Total Jam</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E8E8EC]">
+                    {members.map((m) => {
+                      const userRecap = timesheetRecap[m.full_name] || {};
 
-          {/* Matrix Table */}
-          <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#F7F7F8] border-b border-[#E8E8EC] text-[#737680] uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-4 min-w-[180px]">People ({members.length})</th>
-                    <th className="py-3 px-2 text-center">Sun, Jul 26</th>
-                    <th className="py-3 px-2 text-center">Mon, Jul 27</th>
-                    <th className="py-3 px-2 text-center">Tue, Jul 28</th>
-                    <th className="py-3 px-2 text-center">Wed, Jul 29</th>
-                    <th className="py-3 px-2 text-center">Thu, Jul 30</th>
-                    <th className="py-3 px-2 text-center">Fri, Jul 31</th>
-                    <th className="py-3 px-2 text-center">Sat, Aug 1</th>
-                    <th className="py-3 px-3 text-center font-bold text-[#E6A23C]">Total OT</th>
-                    <th className="py-3 px-4 text-center font-bold text-[#4F9D78]">Total Jam</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8E8EC]">
-                  {members.map((m) => {
-                    const userRecap = timesheetRecap[m.full_name] || {};
+                      const getDayCell = (dayInfo: { dayName: string; dateStr: string }) => {
+                        const dayData = userRecap[dayInfo.dateStr] || userRecap[dayInfo.dayName];
+                        if (!dayData) {
+                          return <span className="text-[#737680] font-normal">0h</span>;
+                        }
 
-                    const getDayCell = (dayKey: string) => {
-                      const dayData = userRecap[dayKey];
-                      if (!dayData) {
-                        return <span className="text-[#737680] font-normal">0h</span>;
-                      }
+                        if (typeof dayData === 'number') {
+                          return dayData > 0 ? (
+                            <span className="font-semibold text-[#24324A]">{dayData}h</span>
+                          ) : (
+                            <span className="text-[#737680]">0h</span>
+                          );
+                        }
 
-                      if (typeof dayData === 'number') {
-                        return dayData > 0 ? (
-                          <span className="font-semibold text-[#24324A]">{dayData}h</span>
-                        ) : (
-                          <span className="text-[#737680]">0h</span>
+                        if (dayData.status === 'ALPHA') {
+                          return <span className="px-1.5 py-0.5 bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/30 rounded font-bold text-[10px]">ALPHA</span>;
+                        }
+                        if (['IZIN', 'SAKIT', 'CUTI'].includes(dayData.status)) {
+                          return <span className="px-1.5 py-0.5 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded font-bold text-[10px]">{dayData.status}</span>;
+                        }
+
+                        const reg = dayData.regular || 0;
+                        const ot = dayData.overtime || 0;
+
+                        if (reg === 0 && ot === 0) {
+                          return <span className="text-[#737680]">0h</span>;
+                        }
+
+                        return (
+                          <div className="flex flex-col items-center">
+                            <span className="font-extrabold text-[#24324A]">{reg}h</span>
+                            {ot > 0 && <span className="text-[9px] font-bold text-[#E6A23C] bg-[#E6A23C]/10 px-1 rounded">+{ot}h OT</span>}
+                          </div>
                         );
-                      }
+                      };
 
-                      if (dayData.status === 'ALPHA') {
-                        return <span className="px-1.5 py-0.5 bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/30 rounded font-bold text-[10px]">ALPHA</span>;
-                      }
-                      if (['IZIN', 'SAKIT', 'CUTI'].includes(dayData.status)) {
-                        return <span className="px-1.5 py-0.5 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded font-bold text-[10px]">{dayData.status}</span>;
-                      }
+                      // Compute totals across all days in the active period
+                      let totalReg = 0;
+                      let totalOT = 0;
 
-                      const reg = dayData.regular || 0;
-                      const ot = dayData.overtime || 0;
+                      activeDays.forEach((d) => {
+                        const dayData = userRecap[d.dateStr] || userRecap[d.dayName];
+                        if (typeof dayData === 'number') {
+                          totalReg += dayData;
+                        } else if (dayData) {
+                          totalReg += dayData.regular || 0;
+                          totalOT += dayData.overtime || 0;
+                        }
+                      });
 
-                      if (reg === 0 && ot === 0) {
-                        return <span className="text-[#737680]">0h</span>;
-                      }
+                      const totalOverall = parseFloat((totalReg + totalOT).toFixed(2));
 
                       return (
-                        <div className="flex flex-col items-center">
-                          <span className="font-extrabold text-[#24324A]">{reg}h</span>
-                          {ot > 0 && <span className="text-[9px] font-bold text-[#E6A23C] bg-[#E6A23C]/10 px-1 rounded">+{ot}h OT</span>}
-                        </div>
-                      );
-                    };
-
-                    // Compute totals exclusively from real check-in data in this application
-                    let totalReg = 0;
-                    let totalOT = 0;
-
-                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    days.forEach((d) => {
-                      const dayData = userRecap[d];
-                      if (typeof dayData === 'number') {
-                        totalReg += dayData;
-                      } else if (dayData) {
-                        totalReg += dayData.regular || 0;
-                        totalOT += dayData.overtime || 0;
-                      }
-                    });
-
-                    const totalOverall = parseFloat((totalReg + totalOT).toFixed(2));
-
-                    return (
-                      <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
-                            <div>
-                              <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
-                              <span className="text-[11px] text-[#737680] font-medium block truncate max-w-[150px]" title={m.custom_role || m.role}>
-                                {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
-                              </span>
+                        <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
+                              <div>
+                                <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
+                                <span className="text-[11px] text-[#737680] font-medium block truncate max-w-[150px]" title={m.custom_role || m.role}>
+                                  {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Sun')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Mon')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Tue')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Wed')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Thu')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Fri')}</td>
-                        <td className="py-3 px-2 text-center">{getDayCell('Sat')}</td>
-                        <td className="py-3 px-3 text-center font-extrabold text-[#E6A23C] bg-[#E6A23C]/5">
-                          {totalOT > 0 ? `+${totalOT}h` : '-'}
-                        </td>
-                        <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">
-                          {totalOverall > 0 ? `${totalOverall}h` : '0h'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+
+                          {activeDays.map((d) => (
+                            <td key={d.dateStr} className="py-3 px-2 text-center">
+                              {getDayCell(d)}
+                            </td>
+                          ))}
+
+                          <td className="py-3 px-3 text-center font-extrabold text-[#E6A23C] bg-[#E6A23C]/5">
+                            {totalOT > 0 ? `+${totalOT}h` : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-center font-extrabold text-[#4F9D78]">
+                            {totalOverall > 0 ? `${totalOverall}h` : '0h'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        );
+      })()}
+
+      {/* MODAL SET RENTANG PERIODE KUSTOM */}
+      {showPeriodModal && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button onClick={() => setShowPeriodModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-3">
+              <SlidersHorizontal className="w-5 h-5 text-[#24324A]" />
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Atur Rentang Periode Kustom</h3>
+                <p className="text-xs text-[#737680]">Tentukan tanggal mulai dan tanggal selesai pencatatan timesheet</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCustomPeriod} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Tanggal Mulai *</label>
+                  <input
+                    type="date"
+                    required
+                    value={customStartStr}
+                    onChange={(e) => setCustomStartStr(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Tanggal Selesai *</label>
+                  <input
+                    type="date"
+                    required
+                    value={customEndStr}
+                    onChange={(e) => setCustomEndStr(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <label className="block font-bold text-[#737680] mb-1.5">Preset Cepat:</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const eD = new Date();
+                      const sD = new Date();
+                      sD.setDate(sD.getDate() - 6);
+                      setCustomStartStr(sD.toISOString().split('T')[0]);
+                      setCustomEndStr(eD.toISOString().split('T')[0]);
+                    }}
+                    className="px-2.5 py-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[11px] font-bold text-[#24324A]"
+                  >
+                    7 Hari Terakhir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const eD = new Date();
+                      const sD = new Date();
+                      sD.setDate(sD.getDate() - 13);
+                      setCustomStartStr(sD.toISOString().split('T')[0]);
+                      setCustomEndStr(eD.toISOString().split('T')[0]);
+                    }}
+                    className="px-2.5 py-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[11px] font-bold text-[#24324A]"
+                  >
+                    14 Hari Terakhir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      const sD = new Date(now.getFullYear(), now.getMonth(), 1);
+                      const eD = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                      setCustomStartStr(sD.toISOString().split('T')[0]);
+                      setCustomEndStr(eD.toISOString().split('T')[0]);
+                    }}
+                    className="px-2.5 py-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[11px] font-bold text-[#24324A]"
+                  >
+                    Bulan Ini
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPeriodModal(false)}
+                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5 text-[#4F9D78]" />
+                  <span>Terapkan Periode</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ---------------------------------------------------- */}
