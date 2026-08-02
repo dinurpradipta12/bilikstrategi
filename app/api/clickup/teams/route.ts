@@ -11,15 +11,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ mock: true });
     }
 
-    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
+    const cookieToken = req.cookies.get('clickup_access_token')?.value || '';
+    const workspaceToken = process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN || '';
+    const tokenCandidates = Array.from(new Set([workspaceToken, cookieToken].filter(Boolean)));
     const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
-    const teamsData = await getAuthorizedTeams(token);
-    const members = await getWorkspaceMembers(teamId, token);
 
-    return NextResponse.json({
-      teams: teamsData.teams || [],
-      members: members || [],
-    });
+    let lastError: any = null;
+    for (const token of tokenCandidates) {
+      try {
+        const teamsData = await getAuthorizedTeams(token);
+        const members = await getWorkspaceMembers(teamId, token);
+
+        if (members.length > 0 || teamsData.teams?.length > 0) {
+          return NextResponse.json({
+            teams: teamsData.teams || [],
+            members: members || [],
+            source: token === workspaceToken ? 'workspace_token' : 'user_cookie',
+          });
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (lastError) throw lastError;
+    return NextResponse.json({ teams: [], members: [], source: 'empty' });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Gagal mengambil data tim dari ClickUp' },

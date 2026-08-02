@@ -149,6 +149,42 @@ export default function AttendancePage() {
     return roleClean === 'admin';
   };
 
+  const normalizeMemberKey = (value?: string) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const createAvatarUrl = (name: string) =>
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=24324A&color=fff`;
+
+  const buildMemberFromActiveSession = (active: any): TeamMemberStatus => {
+    const name = active.user_name || 'User';
+    const isCurrentUser = normalizeMemberKey(name) === normalizeMemberKey(currentUser.username);
+
+    return {
+      id: isCurrentUser ? currentUser.id : `active-${normalizeMemberKey(name) || Date.now()}`,
+      name,
+      email: isCurrentUser ? currentUser.email : '',
+      role: isCurrentUser ? currentUser.role : 'Member',
+      avatar: active.user_avatar || (isCurrentUser ? currentUser.avatar : createAvatarUrl(name)),
+      isOnline: true,
+      checkInTime: active.checkInTime,
+      checkInTimestamp: active.checkInTimestamp,
+      project: active.selectedProject || 'Bilik Strategi Workspace',
+      statusText: 'Online & Bekerja',
+    };
+  };
+
+  const buildCurrentUserMember = (): TeamMemberStatus => ({
+    id: currentUser.id,
+    name: currentUser.username,
+    email: currentUser.email,
+    role: currentUser.role,
+    avatar: currentUser.avatar || createAvatarUrl(currentUser.username),
+    isOnline: isCheckedIn,
+    checkInTime: isCheckedIn ? checkInTime || undefined : undefined,
+    checkInTimestamp: isCheckedIn ? checkInTimestamp || undefined : undefined,
+    project: isCheckedIn ? selectedProject : undefined,
+    statusText: isCheckedIn ? 'Online & Bekerja' : 'Belum Check-In',
+  });
+
   // 1. Fetch User Profile, Projects, & Team Members on Mount
   useEffect(() => {
     async function loadUserAndData() {
@@ -231,7 +267,10 @@ export default function AttendancePage() {
             };
           });
 
-          setTeamStatusList(baseTeam);
+          setTeamStatusList((prev) => {
+            if (baseTeam.length > 0) return baseTeam;
+            return prev.length > 0 ? prev : [buildCurrentUserMember()];
+          });
 
           setTimeout(() => {
             syncRealTimeTeamAttendance();
