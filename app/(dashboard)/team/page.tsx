@@ -646,37 +646,33 @@ export default function TeamWorkloadPage() {
       const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
       // Fetch authenticated user profile & resolve exact workspace role
-      try {
-        const userRes = await fetch('/api/clickup/user');
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          if (userData.user) {
-            const uName = (userData.user.username || '').toLowerCase().trim();
-            const uEmail = (userData.user.email || '').toLowerCase().trim();
+      const savedUserStr = localStorage.getItem('bilik_current_user');
+      let loggedInEmail = 'contact.dinurpradipta@gmail.com';
+      let loggedInName = 'Dinur mp';
+      if (savedUserStr) {
+        try {
+          const u = JSON.parse(savedUserStr);
+          if (u.email) loggedInEmail = u.email;
+          if (u.username) loggedInName = u.username;
+        } catch {}
+      }
 
-            const foundMember = clickUpMembers.find((m: any) => {
-              const mName = (m.username || '').toLowerCase().trim();
-              const mEmail = (m.email || '').toLowerCase().trim();
-              return (
-                (mName && (mName === uName || mName.includes(uName) || uName.includes(mName))) ||
-                (mEmail && mEmail === uEmail)
-              );
-            });
+      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
+      let customInfoMap: Record<string, any> = {};
+      if (savedCustomInfoStr) {
+        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
+      }
 
-            if (foundMember) {
-              const matchedRole = foundMember.role === 1 ? 'Owner' : foundMember.role === 2 ? 'Admin' : 'Member';
-              setCurrentUserRole(matchedRole);
-            } else {
-              const roleNum = userData.user.role;
-              if (roleNum === 1) setCurrentUserRole('Owner');
-              else if (roleNum === 2) setCurrentUserRole('Admin');
-              else setCurrentUserRole('Owner'); // Default workspace creator to Owner
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[TeamWorkload] User role fetch fallback.', err);
+      const isSuperOwner = loggedInEmail.toLowerCase().trim() === 'snllabsarchive@gmail.com';
+      const cInfoLoggedIn = customInfoMap[loggedInName] || {};
+      const isLoggedInPromotedAdmin = cInfoLoggedIn.is_admin === true || cInfoLoggedIn.role === 'Admin' || (cInfoLoggedIn.custom_role || '').toLowerCase().includes('admin');
+
+      if (isSuperOwner) {
         setCurrentUserRole('Owner');
+      } else if (isLoggedInPromotedAdmin) {
+        setCurrentUserRole('Admin');
+      } else {
+        setCurrentUserRole('Member');
       }
 
       // 2. Fetch live ClickUp tasks
@@ -691,12 +687,6 @@ export default function TeamWorkloadPage() {
       let currentCaps: Record<string, number> = {};
       if (savedCapsStr) {
         try { currentCaps = JSON.parse(savedCapsStr); } catch {}
-      }
-
-      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
-      let customInfoMap: Record<string, any> = {};
-      if (savedCustomInfoStr) {
-        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
       }
 
       const mappedMembers: TeamMemberWorkload[] = clickUpMembers.map((m: any) => {
@@ -748,11 +738,15 @@ export default function TeamWorkloadPage() {
 
         const defaultCustomRole = m.role === 1 ? 'Owner / Project Lead' : m.role === 2 ? 'Admin / Operations' : 'Agency Team Member';
 
+        const isMemberSuperOwner = (cInfo.email || m.email || '').toLowerCase().trim() === 'snllabsarchive@gmail.com';
+        const isMemberPromotedAdmin = cInfo.is_admin === true || cInfo.role === 'Admin' || (cInfo.custom_role || '').toLowerCase().includes('admin');
+        const effectiveMemberRole = isMemberSuperOwner ? 'Owner' : isMemberPromotedAdmin ? 'Admin' : (m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member');
+
         return {
           id: String(m.id),
           full_name: memberName,
           email: cInfo.email || m.email || '',
-          role: m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member',
+          role: effectiveMemberRole,
           custom_role: cInfo.custom_role || defaultCustomRole,
           division: cInfo.division || 'Agency Team',
           phone: cInfo.phone || '+62 812-3456-7890',
