@@ -94,7 +94,6 @@ export default function ContentPlanPage() {
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showContentModal, setShowContentModal] = useState(false);
 
   // Zoom & Viewport Size Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -117,14 +116,6 @@ export default function ContentPlanPage() {
   const [formTitle, setFormTitle] = useState('');
   const [formSheetUrl, setFormSheetUrl] = useState('');
   const [formPlatform, setFormPlatform] = useState('Instagram & TikTok');
-
-  // Form State - Fast Content Entry
-  const [contentTitle, setContentTitle] = useState('');
-  const [contentPlatform, setContentPlatform] = useState('Instagram Reels');
-  const [contentDate, setContentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [contentCaption, setContentCaption] = useState('');
-  const [contentAssetUrl, setContentAssetUrl] = useState('');
-  const [contentStatus, setContentStatus] = useState('Draft');
 
   // Convert normal Google Sheets URL to embed URL
   const convertToEmbedUrl = (url: string) => {
@@ -265,18 +256,6 @@ export default function ContentPlanPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleFastContentSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!contentTitle.trim()) return;
-
-    setShowContentModal(false);
-    setContentTitle('');
-    setContentCaption('');
-    setContentAssetUrl('');
-    setToastMessage(`Item konten "${contentTitle}" berhasil dicatat untuk ${currentSheet?.client_name || 'Klien'}!`);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
   const filteredSheets = sheets.filter(
     (s) =>
       s.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -311,14 +290,6 @@ export default function ContentPlanPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => setShowContentModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
-          >
-            <Plus className="w-4 h-4 text-[#4F9D78]" />
-            <span>Tambah Item Konten</span>
-          </button>
-
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white text-xs font-extrabold rounded-xl transition-all shadow-md cursor-pointer"
@@ -547,14 +518,6 @@ export default function ContentPlanPage() {
                 </button>
               </div>
 
-              <button
-                onClick={() => setShowContentModal(true)}
-                className="px-3.5 py-1.5 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Tambah Item Konten</span>
-              </button>
-
               <a
                 href={currentSheet.sheet_url}
                 target="_blank"
@@ -590,111 +553,6 @@ export default function ContentPlanPage() {
                 allow="clipboard-write; auto-fill"
               />
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODAL 2: TAMBAH ITEM KONTEN BARU - VIA PORTAL */}
-      {/* ========================================================================= */}
-      {showContentModal && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
-            <button onClick={() => setShowContentModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
-                <Plus className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-extrabold text-[#24324A]">Tambah Item Konten Baru</h3>
-                <p className="text-xs text-[#737680]">Input draf jadwal & caption untuk {currentSheet?.client_name || 'Klien'}.</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleFastContentSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-bold text-[#24324A] mb-1">Judul / Topic Konten *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Carousel 5 Tips Branding 2026"
-                  value={contentTitle}
-                  onChange={(e) => setContentTitle(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-[#24324A] mb-1">Platform *</label>
-                  <select
-                    value={contentPlatform}
-                    onChange={(e) => setContentPlatform(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
-                  >
-                    <option value="Instagram Reels">Instagram Reels</option>
-                    <option value="Instagram Carousel">Instagram Carousel</option>
-                    <option value="TikTok Video">TikTok Video</option>
-                    <option value="LinkedIn Post">LinkedIn Post</option>
-                    <option value="YouTube Shorts">YouTube Shorts</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-[#24324A] mb-1">Tanggal Tayang *</label>
-                  <input
-                    type="date"
-                    required
-                    value={contentDate}
-                    onChange={(e) => setContentDate(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-[#24324A] mb-1">Draf Copywriting / Caption</label>
-                <textarea
-                  rows={3}
-                  placeholder="Tulis naskah caption, hook, CTA, dan hashtag..."
-                  value={contentCaption}
-                  onChange={(e) => setContentCaption(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-[#24324A] mb-1">Link Visual Asset (Google Drive / Canva)</label>
-                <input
-                  type="url"
-                  placeholder="https://drive.google.com/..."
-                  value={contentAssetUrl}
-                  onChange={(e) => setContentAssetUrl(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowContentModal(false)}
-                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
-                  <span>Simpan Ke Content Plan</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>,
         document.body
