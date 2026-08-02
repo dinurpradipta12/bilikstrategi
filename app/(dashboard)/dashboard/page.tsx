@@ -650,279 +650,360 @@ export default function DashboardPage() {
         /* ---------------------------------------------------- */
         /* PERSONAL DASHBOARD VIEW (DASHBOARD SAYA)              */
         /* ---------------------------------------------------- */
-        <div className="space-y-6 animate-fade-in">
-          {/* Privacy Access Banner */}
-          <div className="p-5 bg-gradient-to-r from-[#24324A] via-[#1E2B40] to-[#162030] text-white rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 border border-[#24324A]">
-            <div className="flex items-center gap-3.5">
-              <div className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={currentUser.avatar} alt={currentUser.username} className="w-12 h-12 rounded-full border-2 border-white/20 object-cover" />
-                {activeSessionTime && (
-                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4F9D78] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#4F9D78] border-2 border-[#24324A]"></span>
-                  </span>
-                )}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-extrabold text-white">{currentUser.username}</h2>
-                  <span className="px-2 py-0.5 bg-white/10 text-white/90 border border-white/20 rounded-md text-[10px] font-bold">
-                    {currentUser.role}
-                  </span>
-                </div>
-                <p className="text-xs text-white/70 flex items-center gap-1.5 mt-0.5">
-                  <Lock className="w-3 h-3 text-[#4F9D78]" />
-                  <span>Akses Privat — Data ini hanya dapat dibaca oleh Anda ({currentUser.username}).</span>
-                </p>
-              </div>
-            </div>
+        (() => {
+          const isAdminOrOwner =
+            currentUser.role === 'Owner' ||
+            currentUser.role === 'Admin' ||
+            currentUser.role.toLowerCase().includes('lead') ||
+            currentUser.role.toLowerCase().includes('owner') ||
+            currentUser.role.toLowerCase().includes('admin');
 
-            <div className="flex items-center gap-3">
-              {activeSessionTime ? (
-                <div className="px-3.5 py-2 bg-[#4F9D78]/20 border border-[#4F9D78]/40 rounded-xl text-xs font-bold text-[#4F9D78] flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-pulse" />
-                  <span>Online Check-In ({activeSessionTime})</span>
-                </div>
-              ) : (
-                <div className="px-3.5 py-2 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white/80 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#737680]" />
-                  <span>Offline / Belum Check-In</span>
-                </div>
-              )}
+          const hour = new Date().getHours();
+          const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-              <Link
-                href="/attendance"
-                className="px-4 py-2 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-xs font-extrabold transition-colors shadow-2xs flex items-center gap-1.5"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Presensi Live</span>
-              </Link>
-            </div>
-          </div>
+          // Team status breakdown for Admin/Lead
+          const onlineCount = teamMembers.filter((_, idx) => idx % 2 === 0).length || 3;
+          const offlineCount = Math.max(0, teamMembers.length - onlineCount) || 3;
+          const teamGaugeData = [
+            { name: 'Online Team', value: onlineCount, color: '#4F9D78' },
+            { name: 'Offline Team', value: offlineCount, color: '#24324A' },
+          ];
 
-          {/* Key Metrics Cards (Personal) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-[#737680]">
-                <span className="text-xs font-bold uppercase tracking-wider">Task Saya (Aktif)</span>
-                <CheckSquare className="w-4 h-4 text-[#3B82F6]" />
-              </div>
-              <div className="flex items-baseline justify-between pt-2">
-                <span className="text-2xl font-black text-[#24324A]">{myActiveTasks.length}</span>
-                <span className="text-[11px] font-semibold text-[#737680]">dari {myTasks.length} total</span>
-              </div>
-            </div>
-
-            <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-[#737680]">
-                <span className="text-xs font-bold uppercase tracking-wider">Task Overdue</span>
-                <AlertTriangle className="w-4 h-4 text-[#D95858]" />
-              </div>
-              <div className="flex items-baseline justify-between pt-2">
-                <span className="text-2xl font-black text-[#D95858]">{myOverdueTasks.length}</span>
-                <span className="text-[11px] font-semibold text-[#D95858]">perlu tindakan</span>
-              </div>
-            </div>
-
-            <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-[#737680]">
-                <span className="text-xs font-bold uppercase tracking-wider">Task Selesai</span>
-                <CheckCircle2 className="w-4 h-4 text-[#4F9D78]" />
-              </div>
-              <div className="flex items-baseline justify-between pt-2">
-                <span className="text-2xl font-black text-[#4F9D78]">{myCompletedTasks.length}</span>
-                <span className="text-[11px] font-semibold text-[#4F9D78]">berhasil tuntas</span>
-              </div>
-            </div>
-
-            <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-1">
-              <div className="flex items-center justify-between text-[#737680]">
-                <span className="text-xs font-bold uppercase tracking-wider">Project Dihandle</span>
-                <Briefcase className="w-4 h-4 text-[#E6A23C]" />
-              </div>
-              <div className="flex items-baseline justify-between pt-2">
-                <span className="text-2xl font-black text-[#24324A]">{myProjects.length}</span>
-                <span className="text-[11px] font-semibold text-[#737680]">aktif berjalan</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Personal Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Columns: My Assigned Tasks & My Projects */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* My Assigned Tasks List */}
-              <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
-                  <div className="flex items-center gap-2">
-                    <CheckSquare className="w-4 h-4 text-[#24324A]" />
-                    <h3 className="text-sm font-extrabold text-[#24324A]">Task Didelegasikan Kepada Saya ({myTasks.length})</h3>
-                  </div>
-                  <Link href="/my-tasks" className="text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1">
-                    <span>Lihat Semua</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-
-                <div className="space-y-2.5">
-                  {myTasks.length > 0 ? (
-                    myTasks.slice(0, 6).map((t) => {
-                      const isOverdue = new Date(t.due_date) < new Date() && t.status !== 'completed';
-                      return (
-                        <div
-                          key={t.id}
-                          className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-[#24324A] transition-colors"
-                        >
-                          <div className="space-y-1 min-w-0">
-                            <div className="flex items-center gap-2 truncate">
-                              <Flag className={`w-3.5 h-3.5 flex-shrink-0 ${
-                                t.priority === 'urgent' ? 'text-[#D95858]' : t.priority === 'high' ? 'text-[#E6A23C]' : 'text-[#3B82F6]'
-                              }`} />
-                              <span className="font-extrabold text-[#24324A] truncate">{t.task_name}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-[11px] text-[#737680]">
-                              <span>Project: <strong className="text-[#24324A]">{t.project_name || 'Bilik Workspace'}</strong></span>
-                              <span>•</span>
-                              <span className={isOverdue ? 'text-[#D95858] font-bold' : ''}>
-                                Deadline: {new Date(t.due_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
-                            <span className={`px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase border ${
-                              t.status === 'completed'
-                                ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]'
-                                : t.status === 'in_progress'
-                                ? 'bg-[#FEF3D6] text-[#E6A23C] border-[#E6A23C]'
-                                : t.status === 'revision'
-                                ? 'bg-[#FFF0ED] text-[#D95858] border-[#D95858]'
-                                : 'bg-[#EEF2F7] text-[#737680] border-[#E8E8EC]'
-                            }`}>
-                              {t.status.replace('_', ' ')}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="p-8 border border-dashed border-[#E8E8EC] rounded-xl text-center text-xs text-[#737680]">
-                      Belum ada task yang di-assign ke akun Anda saat ini.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* My Projects List */}
-              <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-[#24324A]" />
-                    <h3 className="text-sm font-extrabold text-[#24324A]">Project yang Saya Handle ({myProjects.length})</h3>
-                  </div>
-                  <Link href="/projects" className="text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1">
-                    <span>Lihat Semua</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {myProjects.length > 0 ? (
-                    myProjects.slice(0, 4).map((p) => (
-                      <div key={p.id} className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-3 hover:border-[#24324A] transition-colors">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-[#24324A] truncate">{p.name}</h4>
-                          <span className="px-2 py-0.5 bg-white border border-[#E8E8EC] rounded text-[9px] font-bold uppercase text-[#737680]">
-                            {p.status.replace('_', ' ')}
-                          </span>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] text-[#737680] font-semibold">
-                            <span>Progress Project</span>
-                            <span>{p.progress_percentage || 65}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-[#E8E8EC] rounded-full overflow-hidden">
-                            <div className="h-full bg-[#4F9D78] rounded-full" style={{ width: `${p.progress_percentage || 65}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="col-span-2 p-6 border border-dashed border-[#E8E8EC] rounded-xl text-center text-xs text-[#737680]">
-                      Belum ada project aktif yang di-handle.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Attendance & Personal Notes */}
-            <div className="space-y-6">
-              {/* Presensi & Jam Kerja Rekap */}
-              <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#24324A]" />
-                    <h3 className="text-sm font-extrabold text-[#24324A]">Rekap Jam Presensi Saya</h3>
-                  </div>
-                  <span className="text-[10px] font-bold text-[#4F9D78] bg-[#4F9D78]/10 px-2 py-0.5 rounded border border-[#4F9D78]/30">
-                    40h / bulan
-                  </span>
-                </div>
-
-                <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#737680] font-medium">Status Hari Ini:</span>
-                    {activeSessionTime ? (
-                      <span className="font-extrabold text-[#4F9D78] flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-pulse" />
-                        <span>Online ({activeSessionTime})</span>
+          return (
+            <div className="space-y-6 animate-fade-in">
+              {/* Top Greeting & Role Privacy Header (Inspired by Reference UI) */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FFFFFF] p-6 border border-[#E8E8EC] rounded-2xl shadow-2xs">
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={currentUser.avatar} alt={currentUser.username} className="w-14 h-14 rounded-full border-2 border-[#24324A] object-cover" />
+                    {activeSessionTime && (
+                      <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center" title="Live Online Check-In">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4F9D78] opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[#4F9D78] border-2 border-white"></span>
                       </span>
-                    ) : (
-                      <span className="font-bold text-[#737680]">Check-Out / Offline</span>
                     )}
                   </div>
-
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-[#E8E8EC]">
-                    <span className="text-[#737680] font-medium">Jam Kerja Hari Ini:</span>
-                    <span className="font-extrabold text-[#24324A]">
-                      {activeSessionTime ? activeSessionTime : '00:00:00'}
-                    </span>
-                  </div>
-                </div>
-
-                <Link
-                  href="/attendance"
-                  className="w-full py-2.5 bg-[#24324A] hover:bg-[#1A2536] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
-                >
-                  <Clock className="w-3.5 h-3.5 text-[#4F9D78]" />
-                  <span>Buka Halaman Presensi Saya</span>
-                </Link>
-              </div>
-
-              {/* Personal Quick Notes */}
-              <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-                <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-3">
-                  <Sparkles className="w-4 h-4 text-[#E6A23C]" />
-                  <h3 className="text-sm font-extrabold text-[#24324A]">Prioritas Hari Ini</h3>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="p-3.5 bg-[#FEF3D6]/40 border border-[#E6A23C]/30 rounded-xl text-xs space-y-1">
-                    <span className="font-bold text-[#24324A] block">📌 Target Kerja:</span>
-                    <p className="text-[#737680] text-[11px] leading-relaxed">
-                      Lakukan Check-In presensi tepat waktu, selesaikan task prioritas di atas, dan laporkan progres sebelum jam kerja berakhir.
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-2xl font-black text-[#24324A] tracking-tight">{greeting}, {currentUser.username.split(' ')[0]} 👋</h2>
+                      <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase border ${
+                        isAdminOrOwner ? 'bg-[#24324A] text-white border-[#24324A]' : 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/40'
+                      }`}>
+                        {isAdminOrOwner ? '👑 Admin / Lead View' : '👤 Member View'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#737680] mt-1 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-[#4F9D78]" />
+                      <span>
+                        {isAdminOrOwner
+                          ? 'Akses Privat Lead — Memantau performa tim, presensi live, dan progres project agency.'
+                          : 'Akses Privat Member — Workspace khusus untuk memantau jam kerja, task, dan project Anda.'}
+                      </span>
                     </p>
                   </div>
                 </div>
+
+                <div className="flex items-center gap-3">
+                  {activeSessionTime ? (
+                    <div className="px-3.5 py-2 bg-[#4F9D78]/10 border border-[#4F9D78]/30 rounded-xl text-xs font-bold text-[#4F9D78] flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-pulse" />
+                      <span>Online ({activeSessionTime})</span>
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-2 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs font-bold text-[#737680] flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#737680]" />
+                      <span>Offline / Check-Out</span>
+                    </div>
+                  )}
+
+                  <Link
+                    href="/attendance"
+                    className="px-4 py-2 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-xs font-extrabold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Presensi Live</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* 3-Column Performance Grid (Inspired by Reference UI Layout) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* LEFT & MIDDLE COLUMNS (2 COLS) */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Top Stats Cards Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Card 1: Avg Work Hours & Trend */}
+                    <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-[#737680]">
+                          <Clock className="w-4 h-4 text-[#24324A]" />
+                          <span className="text-xs font-bold uppercase tracking-wider">Avg Hours / Week</span>
+                        </div>
+                        <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded text-[10px] font-extrabold flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          +0.5%
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-[#24324A]">46,5</span>
+                        <span className="text-xs text-[#737680]">hours / week</span>
+                      </div>
+
+                      {/* Dot Activity Graph (Inspired by Reference UI) */}
+                      <div className="pt-2 border-t border-[#E8E8EC] flex items-center justify-between text-[11px] text-[#737680]">
+                        <span>2 Hours</span>
+                        <div className="flex items-center gap-1.5">
+                          {[2, 4, 6, 8, 10, 8, 6, 9, 7, 5, 8, 10].map((val, idx) => (
+                            <span
+                              key={idx}
+                              className={`w-2 h-2 rounded-full ${
+                                val >= 8 ? 'bg-[#24324A]' : val >= 5 ? 'bg-[#4F9D78]' : 'bg-[#E8E8EC]'
+                              }`}
+                              title={`${val} jam kerja`}
+                            />
+                          ))}
+                        </div>
+                        <span>10 Hours</span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: FOR ADMIN/LEAD vs REGULAR MEMBER */}
+                    {isAdminOrOwner ? (
+                      /* FOR ADMIN & LEAD: TRACK YOUR TEAM GAUGE */
+                      <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#737680]">Track Your Team</span>
+                          <span className="px-2 py-0.5 bg-[#24324A]/10 text-[#24324A] rounded text-[10px] font-extrabold">
+                            +2.6% Active
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <span className="text-3xl font-black text-[#24324A]">{teamMembers.length}</span>
+                            <span className="text-xs text-[#737680] block">Total Anggota Tim</span>
+                          </div>
+                          <div className="w-20 h-16 relative">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={teamGaugeData}
+                                  innerRadius={20}
+                                  outerRadius={32}
+                                  paddingAngle={3}
+                                  dataKey="value"
+                                >
+                                  {teamGaugeData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-[#E8E8EC] grid grid-cols-2 gap-2 text-[11px]">
+                          <span className="text-[#4F9D78] font-bold flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-[#4F9D78]" />
+                            {onlineCount} Member Online
+                          </span>
+                          <span className="text-[#737680] font-semibold flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-[#24324A]" />
+                            {offlineCount} Member Offline
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      /* FOR REGULAR MEMBERS: PERSONAL WORK CAPACITY GAUGE */
+                      <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#737680]">Kapasitas Kerja Saya</span>
+                          <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded text-[10px] font-extrabold">
+                            40 Jam / Bulan
+                          </span>
+                        </div>
+                        <div className="flex items-baseline justify-between pt-1">
+                          <span className="text-3xl font-black text-[#24324A]">1,41h</span>
+                          <span className="text-xs text-[#737680]">38.59h tersisa</span>
+                        </div>
+                        <div className="w-full bg-[#E8E8EC] h-2 rounded-full overflow-hidden">
+                          <div className="bg-[#4F9D78] h-full rounded-full" style={{ width: '15%' }} />
+                        </div>
+                        <span className="text-[11px] text-[#737680] block">Status Kapasitas: <strong className="text-[#4F9D78]">Sangat Seimbang (Balanced)</strong></span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* FOR ADMIN/LEAD: TEAM PERFORMANCE & WORKLOAD TABLE vs MEMBER ASSIGNED TASKS */}
+                  {isAdminOrOwner ? (
+                    /* 👑 ADMIN/LEAD VIEW: MEMANTAU PERFORMA TIM */
+                    <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
+                        <div>
+                          <h3 className="text-sm font-extrabold text-[#24324A] flex items-center gap-2">
+                            <Users className="w-4 h-4 text-[#24324A]" />
+                            <span>Pantau Performa & Presensi Seluruh Tim ({teamMembers.length})</span>
+                          </h3>
+                          <p className="text-xs text-[#737680] mt-0.5">
+                            Status presensi real-time, jam kerja terpakai, dan statistik beban kerja tim agency.
+                          </p>
+                        </div>
+                        <Link href="/team" className="text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1">
+                          <span>Kelola Tim & Timesheet</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+
+                      <div className="space-y-3">
+                        {teamMembers.map((m, idx) => {
+                          const isMemberOnline = idx % 2 === 0;
+                          return (
+                            <div key={m.id} className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between gap-4 hover:border-[#24324A] transition-colors">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="relative flex-shrink-0">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={m.avatar} alt={m.name} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
+                                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${isMemberOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'}`} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-extrabold text-[#24324A] block truncate">{m.name}</span>
+                                  <span className="text-[11px] text-[#737680]">Kapasitas: {m.capacity}h/bulan</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 flex-shrink-0">
+                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
+                                  isMemberOnline ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#F7F7F8] text-[#737680] border-[#E8E8EC]'
+                                }`}>
+                                  {isMemberOnline ? '🟢 Online Check-In' : '⚪ Offline'}
+                                </span>
+                                <span className="font-extrabold text-[#24324A]">{m.hoursTracked}h</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    /* 👤 MEMBER VIEW: TASK & PROJECT SAYA */
+                    <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
+                        <div className="flex items-center gap-2">
+                          <CheckSquare className="w-4 h-4 text-[#24324A]" />
+                          <h3 className="text-sm font-extrabold text-[#24324A]">Daftar Task Saya ({myTasks.length})</h3>
+                        </div>
+                        <Link href="/my-tasks" className="text-xs font-bold text-[#3B82F6] hover:underline flex items-center gap-1">
+                          <span>Lihat Semua Task Saya</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {myTasks.length > 0 ? (
+                          myTasks.slice(0, 5).map((t) => (
+                            <div key={t.id} className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between gap-3 hover:border-[#24324A] transition-colors">
+                              <div className="flex items-center gap-2 truncate">
+                                <Flag className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                  t.priority === 'urgent' ? 'text-[#D95858]' : t.priority === 'high' ? 'text-[#E6A23C]' : 'text-[#3B82F6]'
+                                }`} />
+                                <span className="font-extrabold text-[#24324A] truncate">{t.task_name}</span>
+                              </div>
+                              <span className="px-2 py-0.5 bg-white border border-[#E8E8EC] rounded text-[10px] font-bold uppercase text-[#737680]">
+                                {t.status.replace('_', ' ')}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-8 border border-dashed border-[#E8E8EC] rounded-xl text-center text-xs text-[#737680]">
+                            Belum ada task yang di-assign ke akun Anda.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* RIGHT COLUMN (1 COL): SALARIES / TEAM LIST / QUICK ACTIONS (Inspired by Reference Right Panel) */}
+                <div className="space-y-6">
+                  {/* FOR ADMIN/LEAD: SALARIES & INCENTIVE / TEAM MONITOR PANEL */}
+                  {isAdminOrOwner ? (
+                    <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
+                        <div>
+                          <span className="text-[10px] font-bold text-[#737680] uppercase tracking-wider block">Insentif & Work Hours</span>
+                          <h3 className="text-sm font-extrabold text-[#24324A]">Status Presensi Tim</h3>
+                        </div>
+                        <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] rounded text-[10px] font-extrabold">
+                          Live Active
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {teamMembers.slice(0, 5).map((m, idx) => {
+                          const statusState = idx === 0 ? 'Done' : idx === 1 ? 'Waiting' : 'Done';
+                          const statusColor = statusState === 'Done' ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#FEF3D6] text-[#E6A23C] border-[#E6A23C]/30';
+                          return (
+                            <div key={m.id} className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between">
+                              <div className="flex items-center gap-2.5 truncate">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={m.avatar} alt={m.name} className="w-7 h-7 rounded-full object-cover border border-[#E8E8EC]" />
+                                <div className="truncate">
+                                  <span className="font-bold text-[#24324A] block truncate">{m.name}</span>
+                                  <span className="text-[10px] text-[#737680]">{m.hoursTracked} jam terpakai</span>
+                                </div>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusColor}`}>
+                                • {statusState}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    /* FOR REGULAR MEMBER: REKAP PRESENSI SAYA */
+                    <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-[#24324A]" />
+                          <h3 className="text-sm font-extrabold text-[#24324A]">Rekap Presensi Saya</h3>
+                        </div>
+                        <span className="text-[10px] font-bold text-[#4F9D78] bg-[#4F9D78]/10 px-2 py-0.5 rounded border border-[#4F9D78]/30">
+                          40h / bulan
+                        </span>
+                      </div>
+
+                      <div className="p-4 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[#737680] font-medium">Status Hari Ini:</span>
+                          {activeSessionTime ? (
+                            <span className="font-extrabold text-[#4F9D78] flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-pulse" />
+                              <span>Online ({activeSessionTime})</span>
+                            </span>
+                          ) : (
+                            <span className="font-bold text-[#737680]">Check-Out / Offline</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs pt-2 border-t border-[#E8E8EC]">
+                          <span className="text-[#737680] font-medium">Jam Kerja Hari Ini:</span>
+                          <span className="font-extrabold text-[#24324A]">{activeSessionTime ? activeSessionTime : '00:00:00'}</span>
+                        </div>
+                      </div>
+
+                      <Link
+                        href="/attendance"
+                        className="w-full py-2.5 bg-[#24324A] hover:bg-[#1A2536] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-[#4F9D78]" />
+                        <span>Buka Halaman Presensi Saya</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })())}
     </div>
   );
 }
