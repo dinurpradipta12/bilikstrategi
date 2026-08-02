@@ -30,7 +30,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 interface AssetItem {
   id: string;
@@ -232,6 +232,8 @@ export default function AssetManagementPage() {
   useEffect(() => {
     setMounted(true);
     fetchAssetsFromSupabase();
+
+    if (!isSupabaseConfigured) return;
 
     // Supabase Realtime Subscription
     const channel = supabase

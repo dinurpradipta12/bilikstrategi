@@ -1,16 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const isPlaceholder = !rawUrl || rawUrl.includes('placeholder.supabase.co');
+export const isSupabaseConfigured = Boolean(
+  rawUrl && !rawUrl.includes('placeholder.supabase.co')
+);
 
-const supabaseUrl = isPlaceholder ? 'https://placeholder.supabase.co' : rawUrl;
+const supabaseUrl = isSupabaseConfigured ? rawUrl : 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: !isPlaceholder,
+    persistSession: isSupabaseConfigured,
   },
   realtime: {
-    timeout: isPlaceholder ? 0 : 10000,
+    timeout: isSupabaseConfigured ? 10000 : 0,
   },
 });

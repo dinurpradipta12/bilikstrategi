@@ -27,7 +27,7 @@ import {
   Activity,
   BarChart3,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface AttendanceRecord {
   id: string;
@@ -363,6 +363,8 @@ export default function AttendancePage() {
 
   // 3. Supabase Live Realtime WebSocket Listener (Instant Push Notification on DB Changes)
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
     const channel = supabase
       .channel('realtime_attendance_sessions')
       .on(

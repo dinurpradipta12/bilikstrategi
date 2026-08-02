@@ -22,7 +22,7 @@ import {
   Users,
 } from 'lucide-react';
 import { AgencyClient, AgencyProject } from '@/lib/mock/data';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export default function ClientsPage() {
   const [mounted, setMounted] = useState(false);
@@ -103,6 +103,8 @@ export default function ClientsPage() {
   useEffect(() => {
     setMounted(true);
     fetchClientsFromSupabase();
+
+    if (!isSupabaseConfigured) return;
 
     // Supabase Realtime Channel Subscription for 'clients' table
     const channel = supabase
