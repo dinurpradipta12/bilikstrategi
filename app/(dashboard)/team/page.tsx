@@ -97,6 +97,87 @@ export default function TeamWorkloadPage() {
   const [customStartStr, setCustomStartStr] = useState<string>('');
   const [customEndStr, setCustomEndStr] = useState<string>('');
 
+  // ------------------------------------------------------------------------
+  // CUSTOM PRIORITY TASKS PER MEMBER STATE
+  // ------------------------------------------------------------------------
+  const [customPriorityTasks, setCustomPriorityTasks] = useState<Record<string, Array<{ id: string; name: string; priority: string; progress: number }>>>({});
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [targetMember, setTargetMember] = useState<{ id: string; name: string; avatar: string } | null>(null);
+  const [taskNameInput, setTaskNameInput] = useState('');
+  const [taskPriorityInput, setTaskPriorityInput] = useState<'urgent' | 'high' | 'normal' | 'low'>('normal');
+
+  useEffect(() => {
+    const savedTasksStr = localStorage.getItem('bilik_custom_priority_tasks');
+    if (savedTasksStr) {
+      try {
+        setCustomPriorityTasks(JSON.parse(savedTasksStr));
+      } catch {}
+    }
+  }, []);
+
+  const handleOpenAddTaskModal = (member: TeamMemberWorkload) => {
+    setTargetMember({ id: member.id, name: member.full_name, avatar: member.avatar_url });
+    setTaskNameInput('');
+    setTaskPriorityInput('normal');
+    setShowAddTaskModal(true);
+  };
+
+  const handleSaveCustomTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetMember || !taskNameInput.trim()) return;
+
+    const newTask = {
+      id: 'task-' + Date.now(),
+      name: taskNameInput.trim(),
+      priority: taskPriorityInput,
+      progress: 40,
+    };
+
+    const key = targetMember.name;
+    const existing = customPriorityTasks[key] || [];
+    const updated = [newTask, ...existing];
+
+    const newMap = { ...customPriorityTasks, [key]: updated };
+    setCustomPriorityTasks(newMap);
+    localStorage.setItem('bilik_custom_priority_tasks', JSON.stringify(newMap));
+
+    // Update in-memory members state
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.full_name === targetMember.name || m.id === targetMember.id) {
+          const currentTasks = m.tasks || [];
+          return {
+            ...m,
+            tasks: [newTask, ...currentTasks],
+          };
+        }
+        return m;
+      })
+    );
+
+    setShowAddTaskModal(false);
+  };
+
+  const handleDeleteCustomTask = (memberName: string, taskId: string) => {
+    const existing = customPriorityTasks[memberName] || [];
+    const updated = existing.filter((t) => t.id !== taskId);
+    const newMap = { ...customPriorityTasks, [memberName]: updated };
+    setCustomPriorityTasks(newMap);
+    localStorage.setItem('bilik_custom_priority_tasks', JSON.stringify(newMap));
+
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.full_name === memberName) {
+          return {
+            ...m,
+            tasks: (m.tasks || []).filter((t) => t.id !== taskId),
+          };
+        }
+        return m;
+      })
+    );
+  };
+
   const handlePrevPeriod = () => {
     if (periodMode === 'weekly') {
       const newStart = new Date(startDate);
@@ -602,6 +683,14 @@ export default function TeamWorkloadPage() {
 
         const projects = Array.from(projectMap.entries()).map(([name, progress]) => ({ name, progress }));
 
+        // Load custom priority tasks for this member from localStorage
+        const savedCustomTasksStr = localStorage.getItem('bilik_custom_priority_tasks');
+        let cTasksMap: Record<string, any[]> = {};
+        if (savedCustomTasksStr) {
+          try { cTasksMap = JSON.parse(savedCustomTasksStr); } catch {}
+        }
+        const customUserTasks = cTasksMap[memberName] || cTasksMap[String(m.id)] || [];
+
         // Format priority tasks
         const memberPriorityTasks = assignedTasks.map((t: any) => ({
           id: t.id,
@@ -609,6 +698,8 @@ export default function TeamWorkloadPage() {
           priority: t.priority || 'normal',
           progress: t.status === 'completed' ? 100 : 40,
         }));
+
+        const allMemberTasks = [...customUserTasks, ...memberPriorityTasks];
 
         const defaultCustomRole = m.role === 1 ? 'Owner / Project Lead' : m.role === 2 ? 'Admin / Operations' : 'Agency Team Member';
 
@@ -628,7 +719,7 @@ export default function TeamWorkloadPage() {
           capacity_hours: capacity,
           workload_status: workloadStatus,
           projects,
-          tasks: memberPriorityTasks,
+          tasks: allMemberTasks,
         };
       });
 
@@ -1059,24 +1150,41 @@ export default function TeamWorkloadPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {members.map((user) => (
-              <div key={user.id} className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
+              <div key={user.id} className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4 hover:border-[#24324A] transition-colors">
                 <div className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={user.avatar_url} alt={user.full_name} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
-                  <h4 className="text-xs font-bold text-[#24324A] truncate">{user.full_name}</h4>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#24324A] truncate">{user.full_name}</h4>
+                    <span className="text-[10px] text-[#737680]">{user.custom_role || user.role}</span>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
                   {user.tasks && user.tasks.length > 0 ? (
-                    user.tasks.slice(0, 3).map((t) => (
-                      <div key={t.id} className="p-2.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between">
+                    user.tasks.map((t) => (
+                      <div key={t.id} className="p-2.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between group/task hover:border-[#24324A] transition-colors">
                         <div className="flex items-center gap-2 truncate">
                           <Flag className={`w-3.5 h-3.5 flex-shrink-0 ${
-                            t.priority === 'urgent' ? 'text-[#D95858]' : t.priority === 'high' ? 'text-[#E6A23C]' : 'text-[#3B82F6]'
+                            t.priority === 'urgent' ? 'text-[#D95858]' : t.priority === 'high' ? 'text-[#E6A23C]' : t.priority === 'low' ? 'text-[#737680]' : 'text-[#3B82F6]'
                           }`} />
                           <span className="font-semibold text-[#24324A] truncate">{t.name}</span>
                         </div>
-                        <span className="text-[10px] text-[#737680] capitalize font-mono">{t.priority}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ${
+                            t.priority === 'urgent' ? 'bg-[#D95858]/10 text-[#D95858]' : t.priority === 'high' ? 'bg-[#E6A23C]/10 text-[#E6A23C]' : t.priority === 'low' ? 'bg-[#737680]/10 text-[#737680]' : 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                          }`}>{t.priority}</span>
+
+                          {t.id.startsWith('task-') && (
+                            <button
+                              onClick={() => handleDeleteCustomTask(user.full_name, t.id)}
+                              className="text-[#737680] hover:text-[#D95858] opacity-0 group-hover/task:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                              title="Hapus Task Prioritas Kustom"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -1086,8 +1194,11 @@ export default function TeamWorkloadPage() {
                   )}
                 </div>
 
-                <button className="w-full py-2 border border-dashed border-[#E8E8EC] rounded-xl text-xs font-bold text-[#737680] hover:text-[#24324A] hover:bg-[#F7F7F8] flex items-center justify-center gap-1 transition-colors cursor-pointer">
-                  <Plus className="w-3.5 h-3.5" />
+                <button
+                  onClick={() => handleOpenAddTaskModal(user)}
+                  className="w-full py-2 border border-dashed border-[#E8E8EC] rounded-xl text-xs font-bold text-[#737680] hover:text-[#24324A] hover:bg-[#F7F7F8] flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#4F9D78]" />
                   <span>Add task</span>
                 </button>
               </div>
@@ -1634,6 +1745,81 @@ export default function TeamWorkloadPage() {
                 >
                   <Send className="w-3.5 h-3.5 text-[#F26B5E]" />
                   <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL TAMBAH TASK PRIORITAS KUSTOM */}
+      {showAddTaskModal && targetMember && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button onClick={() => setShowAddTaskModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={targetMember.avatar} alt={targetMember.name} className="w-10 h-10 rounded-full border border-[#E8E8EC]" />
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Tambah Task Prioritas</h3>
+                <p className="text-xs text-[#737680]">Anggota Tim: <strong className="text-[#24324A]">{targetMember.name}</strong></p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCustomTask} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Nama / Judul Task *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Revisi Copywriting Client A / Pitching Design"
+                  value={taskNameInput}
+                  onChange={(e) => setTaskNameInput(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Tingkat Prioritas</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { id: 'urgent', label: 'Urgent 🔴', color: 'border-[#D95858] text-[#D95858] bg-[#D95858]/10' },
+                    { id: 'high', label: 'High 🟠', color: 'border-[#E6A23C] text-[#E6A23C] bg-[#E6A23C]/10' },
+                    { id: 'normal', label: 'Normal 🔵', color: 'border-[#3B82F6] text-[#3B82F6] bg-[#3B82F6]/10' },
+                    { id: 'low', label: 'Low ⚪', color: 'border-[#737680] text-[#737680] bg-[#737680]/10' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setTaskPriorityInput(p.id as any)}
+                      className={`py-2 rounded-xl font-bold border transition-all text-[11px] cursor-pointer ${
+                        taskPriorityInput === p.id ? p.color + ' ring-2 ring-[#24324A]' : 'border-[#E8E8EC] text-[#737680] hover:bg-[#F7F7F8]'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTaskModal(false)}
+                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#4F9D78]" />
+                  <span>Tambahkan Task</span>
                 </button>
               </div>
             </form>
