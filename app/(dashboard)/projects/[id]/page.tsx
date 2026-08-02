@@ -431,9 +431,9 @@ export default function ProjectDetailPage() {
         });
       }
 
-      // Fetch tasks
+      // Fetch app tasks first. ClickUp sync runs in the background from task actions.
       try {
-        const taskRes = await fetch(`/api/clickup/tasks?listId=${projectId}`);
+        const taskRes = await fetch(`/api/supabase/tasks?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         if (taskRes.ok) {
           const taskData = await taskRes.json();
           if (taskData.tasks) {
@@ -466,6 +466,33 @@ export default function ProjectDetailPage() {
           }
         }
       )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    const loadProjectTasks = async () => {
+      try {
+        const taskRes = await fetch(`/api/supabase/tasks?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
+        if (taskRes.ok) {
+          const taskData = await taskRes.json();
+          setRealTasks(Array.isArray(taskData.tasks) ? taskData.tasks : []);
+        }
+      } catch {
+        // keep current UI state
+      }
+    };
+
+    const channel = supabase
+      .channel(`project_tasks_${projectId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
+        loadProjectTasks();
+      })
       .subscribe();
 
     return () => {
@@ -727,8 +754,8 @@ export default function ProjectDetailPage() {
         <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-6 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-[#24324A]">Task Project ClickUp ({realTasks.length})</h3>
-              <p className="text-xs text-[#737680]">Task disinkronkan secara real-time dari ClickUp Workspace</p>
+              <h3 className="text-sm font-bold text-[#24324A]">Task Project ({realTasks.length})</h3>
+              <p className="text-xs text-[#737680]">Task disinkronkan real-time dari aplikasi. ClickUp berjalan di latar belakang.</p>
             </div>
             <button
               onClick={() => setIsTaskModalOpen(true)}
@@ -740,7 +767,7 @@ export default function ProjectDetailPage() {
           </div>
 
           {loading ? (
-            <div className="p-8 text-center text-xs text-[#737680]">Memuat task dari ClickUp...</div>
+            <div className="p-8 text-center text-xs text-[#737680]">Memuat task dari aplikasi...</div>
           ) : realTasks.length === 0 ? (
             <div className="p-12 text-center text-xs text-[#737680] border border-dashed border-[#E8E8EC] rounded-xl">
               Belum ada task di project ini. Klik &quot;Tambah Task Baru&quot; untuk membuat task.
@@ -1083,12 +1110,12 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {/* Real ClickUp Tasks Timeline Section */}
+          {/* App Tasks Timeline Section */}
           {realTasks.length > 0 && (
             <div className="pt-4 border-t border-[#E8E8EC] space-y-3">
               <h4 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
                 <CheckSquare className="w-4 h-4 text-[#F26B5E]" />
-                <span>Task Live ClickUp Schedule ({realTasks.length})</span>
+                <span>Task Live Schedule ({realTasks.length})</span>
               </h4>
 
               <div className="border border-[#E8E8EC] rounded-2xl p-4 bg-[#FFFFFF] relative min-h-[160px]">
@@ -1395,7 +1422,7 @@ export default function ProjectDetailPage() {
         onClose={() => setIsTaskModalOpen(false)}
         defaultListId={projectId}
         onTaskCreated={(newTask) => {
-          setRealTasks((prev) => [newTask, ...prev]);
+          setRealTasks((prev) => [newTask, ...prev.filter((task) => task.id !== newTask.id)]);
         }}
       />
 
@@ -2087,6 +2114,10 @@ export default function ProjectDetailPage() {
         task={selectedTask}
         isOpen={isTaskDrawerOpen}
         onClose={() => setIsTaskDrawerOpen(false)}
+        onTaskUpdated={(updatedTask) => {
+          setSelectedTask(updatedTask);
+          setRealTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+        }}
       />
     </div>
   );

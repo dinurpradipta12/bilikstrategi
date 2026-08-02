@@ -96,6 +96,8 @@ export default function TaskDetailDrawer({
   useEffect(() => {
     if (task) {
       setLocalTask(task);
+      const persistedSubtasks = (task as any).subtasks || (task as any).raw_data?.subtasks || [];
+      const persistedComments = (task as any).comments || (task as any).raw_data?.comments || [];
       setTaskName(task.task_name || '');
       setTaskDesc(task.description || '');
       setTaskStatus(task.status || 'to_do');
@@ -104,6 +106,8 @@ export default function TaskDetailDrawer({
         task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       );
       setTaskAssigneeId(task.assignee_ids?.[0] || '276885530');
+      setSubtasks(Array.isArray(persistedSubtasks) ? persistedSubtasks : []);
+      setComments(Array.isArray(persistedComments) ? persistedComments : []);
       setIsEditing(false);
       setSaveSuccessMsg(null);
     }
@@ -134,7 +138,7 @@ export default function TaskDetailDrawer({
       }
 
       async function fetchComments() {
-        if (!task?.id) return;
+        if (!task?.id || String(task.id).startsWith('app-')) return;
         setLoadingComments(true);
         try {
           const res = await fetch(`/api/clickup/comments?taskId=${task.id}`);
@@ -153,16 +157,14 @@ export default function TaskDetailDrawer({
             }
           }
         } catch {
-          setComments([
-            { id: 'c1', user: 'Dinur Pradipta', text: 'Task ini disinkronkan langsung dengan ClickUp Workspace.', time: 'Hari ini' },
-          ]);
+          // Keep app-persisted comments.
         } finally {
           setLoadingComments(false);
         }
       }
 
       async function fetchSubtasks() {
-        if (!task?.id) return;
+        if (!task?.id || String(task.id).startsWith('app-')) return;
         setLoadingSubtasks(true);
         try {
           const res = await fetch(`/api/clickup/subtasks?taskId=${task.id}`);
@@ -175,9 +177,6 @@ export default function TaskDetailDrawer({
                 status: st.status?.status?.toLowerCase() === 'complete' || st.status?.status?.toLowerCase() === 'completed' || st.status?.type === 'closed' ? ('completed' as const) : ('to_do' as const),
               }));
               setSubtasks(formatted);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`bilik_subtasks_${task.id}`, JSON.stringify(formatted));
-              }
               setLoadingSubtasks(false);
               return;
             }
@@ -186,20 +185,6 @@ export default function TaskDetailDrawer({
           // ignore
         } finally {
           setLoadingSubtasks(false);
-        }
-
-        // Fallback to localStorage cache
-        if (typeof window !== 'undefined') {
-          const cached = localStorage.getItem(`bilik_subtasks_${task.id}`);
-          if (cached) {
-            try {
-              setSubtasks(JSON.parse(cached));
-            } catch {
-              setSubtasks([]);
-            }
-          } else {
-            setSubtasks([]);
-          }
         }
       }
 
@@ -213,6 +198,23 @@ export default function TaskDetailDrawer({
 
   const activeTask = localTask || task;
 
+  const saveTaskToApp = async (updatedTask: AgencyTask, extra: Record<string, any> = {}) => {
+    const payload = { ...updatedTask, ...extra, taskId: updatedTask.id };
+    const res = await fetch('/api/supabase/tasks', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Gagal menyimpan task aplikasi');
+    }
+
+    const data = await res.json();
+    return data.task || updatedTask;
+  };
+
   // Handle saving task edits to ClickUp API
   const handleSaveTaskEdits = async () => {
     setIsSaving(true);
@@ -220,27 +222,6 @@ export default function TaskDetailDrawer({
 
     try {
       const selectedMember = members.find((m) => m.id === String(taskAssigneeId));
-
-      const res = await fetch('/api/clickup/tasks', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: activeTask.id,
-          name: taskName,
-          description: taskDesc,
-          status: taskStatus,
-          priority: taskPriority,
-          due_date: taskDueDate,
-          assignees: taskAssigneeId ? [taskAssigneeId] : undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        alert(`Gagal mengupdate task di ClickUp: ${errData.error || res.statusText}`);
-        setIsSaving(false);
-        return;
-      }
 
       const updatedTask: AgencyTask = {
         ...activeTask,
@@ -255,23 +236,32 @@ export default function TaskDetailDrawer({
         clickup_updated_at: new Date().toISOString(),
       };
 
-      setLocalTask(updatedTask);
+      const savedTask = await saveTaskToApp(updatedTask, { subtasks, comments });
+      setLocalTask(savedTask);
 
       if (onTaskUpdated) {
-        onTaskUpdated(updatedTask);
-      }
-      if (onStatusChange && taskStatus !== activeTask.status) {
-        onStatusChange(activeTask.id, taskStatus);
-      }
-      if (onPriorityChange && taskPriority !== activeTask.priority) {
-        onPriorityChange(activeTask.id, taskPriority);
+        onTaskUpdated(savedTask);
       }
 
+      fetch('/api/clickup/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: activeTask.clickup_task_id || activeTask.id,
+          name: taskName,
+          description: taskDesc,
+          status: taskStatus,
+          priority: taskPriority,
+          due_date: taskDueDate,
+          assignees: taskAssigneeId ? [taskAssigneeId] : undefined,
+        }),
+      }).catch(() => {});
+
       setIsEditing(false);
-      setSaveSuccessMsg('Perubahan task berhasil disinkronkan ke ClickUp!');
+      setSaveSuccessMsg('Perubahan task berhasil disimpan ke aplikasi.');
       setTimeout(() => setSaveSuccessMsg(null), 3500);
     } catch {
-      alert('Terjadi kesalahan jaringan saat memperbarui task di ClickUp');
+      alert('Terjadi kesalahan jaringan saat memperbarui task aplikasi');
     } finally {
       setIsSaving(false);
     }
@@ -291,9 +281,8 @@ export default function TaskDetailDrawer({
     const updatedSubtasks = [...subtasks, newStItem];
     setSubtasks(updatedSubtasks);
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updatedSubtasks));
-    }
+    const taskWithSubtasks = { ...activeTask, subtask_count: updatedSubtasks.length } as AgencyTask;
+    saveTaskToApp(taskWithSubtasks, { subtasks: updatedSubtasks }).then(setLocalTask).catch(() => {});
 
     try {
       const res = await fetch('/api/clickup/subtasks', {
@@ -301,7 +290,7 @@ export default function TaskDetailDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listId: activeTask.project_id,
-          parentId: activeTask.id,
+          parentId: activeTask.clickup_task_id || activeTask.id,
           name: subtaskText,
         }),
       });
@@ -311,9 +300,7 @@ export default function TaskDetailDrawer({
         if (data.subtask?.id) {
           const finalSubtasks = updatedSubtasks.map((s) => (s.id === tempId ? { ...s, id: String(data.subtask.id) } : s));
           setSubtasks(finalSubtasks);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(finalSubtasks));
-          }
+          saveTaskToApp({ ...activeTask, subtask_count: finalSubtasks.length } as AgencyTask, { subtasks: finalSubtasks }).then(setLocalTask).catch(() => {});
         }
       }
     } catch {
@@ -328,8 +315,8 @@ export default function TaskDetailDrawer({
     const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, status: nextStatus } : s));
     setSubtasks(updated);
 
-    if (activeTask && typeof window !== 'undefined') {
-      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updated));
+    if (activeTask) {
+      saveTaskToApp(activeTask, { subtasks: updated }).then(setLocalTask).catch(() => {});
     }
 
     try {
@@ -350,8 +337,8 @@ export default function TaskDetailDrawer({
     const updated = subtasks.filter((s) => s.id !== subtaskId);
     setSubtasks(updated);
 
-    if (activeTask && typeof window !== 'undefined') {
-      localStorage.setItem(`bilik_subtasks_${activeTask.id}`, JSON.stringify(updated));
+    if (activeTask) {
+      saveTaskToApp({ ...activeTask, subtask_count: updated.length } as AgencyTask, { subtasks: updated }).then(setLocalTask).catch(() => {});
     }
 
     try {
@@ -374,6 +361,7 @@ export default function TaskDetailDrawer({
       const updatedTask = { ...activeTask, tags: updatedTags };
       setLocalTask(updatedTask);
       if (onTaskUpdated) onTaskUpdated(updatedTask);
+      saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
     }
     setTagInput('');
     setShowAddTagInput(false);
@@ -384,6 +372,7 @@ export default function TaskDetailDrawer({
     const updatedTask = { ...activeTask, tags: updatedTags };
     setLocalTask(updatedTask);
     if (onTaskUpdated) onTaskUpdated(updatedTask);
+    saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
   };
 
   // Assignee Handlers
@@ -404,13 +393,13 @@ export default function TaskDetailDrawer({
       };
       setLocalTask(updatedTask);
       if (onTaskUpdated) onTaskUpdated(updatedTask);
+      saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
 
-      // Sync to ClickUp API
       fetch('/api/clickup/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskId: activeTask.id,
+          taskId: activeTask.clickup_task_id || activeTask.id,
           assignees: updatedTask.assignee_ids,
         }),
       }).catch(() => {});
@@ -434,19 +423,19 @@ export default function TaskDetailDrawer({
     };
     setLocalTask(updatedTask);
     if (onTaskUpdated) onTaskUpdated(updatedTask);
+    saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
 
-    // Sync to ClickUp API
     fetch('/api/clickup/tasks', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        taskId: activeTask.id,
+        taskId: activeTask.clickup_task_id || activeTask.id,
         assignees: currentIds,
       }),
     }).catch(() => {});
   };
 
-  // Handle sending comment to ClickUp API
+  // Handle sending comment to app first; ClickUp sync runs in the background.
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -454,50 +443,30 @@ export default function TaskDetailDrawer({
     setIsSendingComment(true);
     const textToSend = commentText;
     setCommentText('');
+    const newComment = {
+      id: `c_${Date.now()}`,
+      user: 'Dinur Pradipta',
+      avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+      text: textToSend,
+      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    };
+    const nextComments = [...comments, newComment];
+    setComments(nextComments);
 
     try {
-      const res = await fetch('/api/clickup/comments', {
+      const savedTask = await saveTaskToApp({ ...activeTask, comments_count: nextComments.length } as AgencyTask, { comments: nextComments, subtasks });
+      setLocalTask(savedTask);
+
+      fetch('/api/clickup/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskId: activeTask.id,
+          taskId: activeTask.clickup_task_id || activeTask.id,
           commentText: textToSend,
         }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const newC = {
-          id: data.id || `c_${Date.now()}`,
-          user: 'Dinur Pradipta',
-          avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
-          text: textToSend,
-          time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        };
-        setComments((prev) => [...prev, newC]);
-      } else {
-        setComments((prev) => [
-          ...prev,
-          {
-            id: `c_${Date.now()}`,
-            user: 'Dinur Pradipta',
-            avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
-            text: textToSend,
-            time: 'Baru saja',
-          },
-        ]);
-      }
+      }).catch(() => {});
     } catch {
-      setComments((prev) => [
-        ...prev,
-        {
-          id: `c_${Date.now()}`,
-          user: 'Dinur Pradipta',
-          avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
-          text: textToSend,
-          time: 'Baru saja',
-        },
-      ]);
+      setComments(comments);
     } finally {
       setIsSendingComment(false);
     }
@@ -532,7 +501,7 @@ export default function TaskDetailDrawer({
                   ? 'border-[#24324A] bg-[#24324A] text-white'
                   : 'border-[#E8E8EC] bg-[#FFFFFF] text-[#24324A] hover:bg-[#EEF2F7]'
               }`}
-              title="Edit Task ClickUp"
+              title="Edit Task"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>{isEditing ? 'Mode Batal Edit' : 'Edit Task'}</span>
@@ -552,7 +521,7 @@ export default function TaskDetailDrawer({
               target="_blank"
               rel="noreferrer"
               className="p-1.5 rounded-lg bg-[#24324A] text-white text-xs flex items-center gap-1 hover:bg-[#1A2536]"
-              title="Buka Asli di ClickUp"
+              title="Buka di ClickUp"
             >
               <span>ClickUp</span>
               <ExternalLink className="w-3.5 h-3.5 text-[#F26B5E]" />
@@ -974,8 +943,8 @@ export default function TaskDetailDrawer({
 
       <ConfirmModal
         isOpen={showConfirmDelete}
-        title="Hapus Task dari ClickUp"
-        message={`Apakah Anda yakin ingin menghapus task "${activeTask.task_name}"? Tindakan ini akan menghapus task secara permanen dari ClickUp Workspace.`}
+        title="Hapus Task"
+        message={`Apakah Anda yakin ingin menghapus task "${activeTask.task_name}"? Tindakan ini akan menghapus task dari aplikasi untuk semua user.`}
         confirmText="Hapus Task"
         cancelText="Batal"
         confirmVariant="danger"

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
+import { supabase } from '@/lib/supabase/client';
 
 import { X, Trash2 } from 'lucide-react';
 
@@ -57,15 +58,10 @@ export default function TasksPage() {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const deletedIdsRaw = localStorage.getItem('bilik_deleted_task_ids');
-      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
-
-      const res = await fetch('/api/clickup/tasks');
+      const res = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        const rawTasks: AgencyTask[] = Array.isArray(data.tasks) ? data.tasks : [];
-        const cleanTasks = rawTasks.filter((t) => !deletedIds.includes(t.id));
-        setTasks(cleanTasks);
+        setTasks(Array.isArray(data.tasks) ? data.tasks : []);
       } else {
         setTasks([]);
       }
@@ -80,6 +76,19 @@ export default function TasksPage() {
     fetchTasks();
   }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('tasks_page_task_cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
+        fetchTasks();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // 2-Way Status Update
   const handleStatusChange = async (taskId: string, newStatus: AgencyTask['status']) => {
     setTasks((prev) =>
@@ -90,16 +99,21 @@ export default function TasksPage() {
       setSelectedTask({ ...selectedTask, status: newStatus });
     }
 
-    setToastMessage('Menyingkronkan status ke ClickUp…');
+    setToastMessage('Menyimpan status ke aplikasi…');
     try {
-      await fetch('/api/clickup/tasks', {
+      await fetch('/api/supabase/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, status: newStatus }),
       });
-      setToastMessage('Status task berhasil diperbarui & disinkronkan ke ClickUp!');
+      setToastMessage('Status task berhasil diperbarui di aplikasi.');
+      fetch('/api/clickup/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, status: newStatus }),
+      }).catch(() => {});
     } catch {
-      setToastMessage('Gagal menyingkronkan status ke ClickUp');
+      setToastMessage('Gagal menyimpan status task');
     }
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -113,16 +127,21 @@ export default function TasksPage() {
       setSelectedTask({ ...selectedTask, priority: newPriority });
     }
 
-    setToastMessage('Menyingkronkan prioritas ke ClickUp…');
+    setToastMessage('Menyimpan prioritas ke aplikasi…');
     try {
-      await fetch('/api/clickup/tasks', {
+      await fetch('/api/supabase/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, priority: newPriority }),
       });
-      setToastMessage('Prioritas task berhasil diubah & disinkronkan!');
+      setToastMessage('Prioritas task berhasil diubah.');
+      fetch('/api/clickup/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, priority: newPriority }),
+      }).catch(() => {});
     } catch {
-      setToastMessage('Gagal menyingkronkan prioritas ke ClickUp');
+      setToastMessage('Gagal menyimpan prioritas task');
     }
     setTimeout(() => setToastMessage(null), 3000);
   };
@@ -133,23 +152,13 @@ export default function TasksPage() {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setToastMessage('Task berhasil dihapus.');
 
-    // 2. Persist deleted ID in localStorage
     try {
-      const deletedIdsRaw = localStorage.getItem('bilik_deleted_task_ids');
-      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
-      if (!deletedIds.includes(taskId)) {
-        deletedIds.push(taskId);
-        localStorage.setItem('bilik_deleted_task_ids', JSON.stringify(deletedIds));
-      }
-    } catch {
-      // ignore storage error
-    }
-
-    // 3. Delete from ClickUp API in background
-    try {
-      await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
+      await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(taskId)}`, {
         method: 'DELETE',
       });
+      await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
     } catch {
       // ignore network error
     }
@@ -163,13 +172,34 @@ export default function TasksPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/clickup/tasks', {
+      const now = new Date().toISOString();
+      const taskId = `app-${crypto.randomUUID()}`;
+      const res = await fetch('/api/supabase/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newTaskName,
+          id: taskId,
+          clickup_task_id: taskId,
+          project_id: '',
+          project_name: 'General',
+          task_name: newTaskName,
           description: newTaskDesc,
+          status: 'to_do',
           priority: newTaskPriority,
+          assignee_ids: [],
+          assignee_names: [],
+          assignee_avatars: [],
+          start_date: now,
+          due_date: new Date(Date.now() + 7 * 86400000).toISOString(),
+          tags: [],
+          custom_fields: [],
+          time_estimate_hours: 0,
+          time_tracked_hours: 0,
+          subtask_count: 0,
+          comments_count: 0,
+          clickup_url: '',
+          clickup_updated_at: now,
+          created_at: now,
         }),
       });
 
@@ -177,11 +207,11 @@ export default function TasksPage() {
         setNewTaskName('');
         setNewTaskDesc('');
         setIsModalOpen(false);
-        setToastMessage('Task baru berhasil dibuat di ClickUp!');
+        setToastMessage('Task baru berhasil dibuat di aplikasi.');
         setTimeout(() => setToastMessage(null), 3000);
         await fetchTasks();
       } else {
-        alert('Gagal membuat task di ClickUp');
+        alert('Gagal membuat task di aplikasi');
       }
     } catch {
       alert('Terjadi kesalahan jaringan');
@@ -219,9 +249,9 @@ export default function TasksPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">ClickUp Task Management</h1>
+          <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Task Management</h1>
           <p className="text-xs text-[#737680] mt-1">
-            Manajemen task agency real-time dengan sinkronisasi ClickUp backend API.
+            Manajemen task agency real-time dari aplikasi. ClickUp berjalan di latar belakang.
           </p>
         </div>
 
@@ -237,7 +267,7 @@ export default function TasksPage() {
 
           <button
             onClick={() => {
-              setToastMessage('Menyingkronkan data terbaru dari ClickUp Workspace...');
+              setToastMessage('Mengambil data terbaru dari aplikasi...');
               fetchTasks();
               setTimeout(() => setToastMessage(null), 2000);
             }}
@@ -338,9 +368,9 @@ export default function TasksPage() {
       {filteredTasks.length === 0 && !loading && (
         <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-12 text-center space-y-3 shadow-2xs">
           <CheckSquare className="w-10 h-10 text-[#737680] mx-auto opacity-40" />
-          <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Task di ClickUp</h3>
+          <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Task</h3>
           <p className="text-xs text-[#737680] max-w-sm mx-auto">
-            Tidak ada task yang ditemukan. Klik tombol <span className="font-semibold text-[#24324A]">+ Task Baru</span> untuk membuat task baru di ClickUp Workspace.
+            Tidak ada task yang ditemukan. Klik tombol <span className="font-semibold text-[#24324A]">+ Task Baru</span> untuk membuat task baru.
           </p>
         </div>
       )}
@@ -483,7 +513,7 @@ export default function TasksPage() {
       {viewMode === 'calendar' && (
         <div className="p-8 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs text-center py-12">
           <CalendarDays className="w-8 h-8 text-[#24324A] mx-auto mb-2" />
-          <h3 className="text-sm font-bold text-[#24324A]">Calendar View Task ClickUp</h3>
+          <h3 className="text-sm font-bold text-[#24324A]">Calendar View Task</h3>
           <p className="text-xs text-[#737680] mt-1">
             Menampilkan seluruh due date task berdasarkan jadwal bulan berjalan.
           </p>
@@ -509,7 +539,7 @@ export default function TasksPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
           <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 relative z-[101]">
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
-              <h3 className="text-sm font-extrabold text-[#24324A]">Buat Task Baru di ClickUp</h3>
+              <h3 className="text-sm font-extrabold text-[#24324A]">Buat Task Baru</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A]">
                 <X className="w-4 h-4" />
               </button>
@@ -579,7 +609,7 @@ export default function TasksPage() {
       <ConfirmModal
         isOpen={Boolean(deleteTargetTask)}
         title="Hapus Task dari ClickUp"
-        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.task_name}"? Task ini akan terhapus secara permanen dari ClickUp Workspace.` : ''}
+        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.task_name}"? Task ini akan terhapus dari aplikasi untuk semua user.` : ''}
         confirmText="Hapus Task"
         cancelText="Batal"
         confirmVariant="danger"

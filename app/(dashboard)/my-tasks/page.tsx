@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
+import { supabase } from '@/lib/supabase/client';
 
 export default function MyTasksPage() {
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
@@ -24,7 +25,7 @@ export default function MyTasksPage() {
   const fetchMyTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/clickup/tasks');
+      const res = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setTasks(Array.isArray(data.tasks) ? data.tasks : []);
@@ -42,6 +43,19 @@ export default function MyTasksPage() {
     fetchMyTasks();
   }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('my_tasks_task_cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
+        fetchMyTasks();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const handleStatusChange = async (taskId: string, newStatus: AgencyTask['status']) => {
     setTasks((prev) =>
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
@@ -50,11 +64,16 @@ export default function MyTasksPage() {
       setSelectedTask({ ...selectedTask, status: newStatus });
     }
     try {
-      await fetch('/api/clickup/tasks', {
+      await fetch('/api/supabase/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, status: newStatus }),
       });
+      fetch('/api/clickup/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, status: newStatus }),
+      }).catch(() => {});
     } catch {
       // ignore
     }
@@ -218,6 +237,10 @@ export default function MyTasksPage() {
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onStatusChange={handleStatusChange}
+        onTaskUpdated={(updatedTask) => {
+          setSelectedTask(updatedTask);
+          setTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+        }}
       />
     </div>
   );

@@ -36,6 +36,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
+import { supabase } from '@/lib/supabase/client';
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
 
 interface TeamMember {
@@ -353,8 +354,8 @@ export default function DashboardPage() {
 
       const liveProjects = Array.from(projectMap.values());
 
-      // 2. Fetch live ClickUp tasks
-      const tasksRes = await fetch('/api/clickup/tasks');
+      // 2. Fetch live app tasks
+      const tasksRes = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       const tasksData = await tasksRes.json();
       const liveTasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
 
@@ -394,6 +395,19 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard_task_cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
+        fetchDashboardData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Filtered tasks

@@ -675,8 +675,8 @@ export default function TeamWorkloadPage() {
         setCurrentUserRole('Member');
       }
 
-      // 2. Fetch live ClickUp tasks
-      const tasksRes = await fetch('/api/clickup/tasks');
+      // 2. Fetch live app tasks
+      const tasksRes = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       const tasksData = await tasksRes.json();
       const fetchedTasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
       setAllTasks(fetchedTasks);

@@ -24,12 +24,12 @@ export default function ActivityLogsPage() {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/clickup/tasks');
+      const res = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         const liveTasks: AgencyTask[] = Array.isArray(data.tasks) ? data.tasks : [];
 
-        // Build dynamic activity log items from real ClickUp tasks
+        // Build dynamic activity log items from app tasks.
         const generatedLogs: ActivityLogItem[] = liveTasks.map((t, idx) => {
           const assigneeName = t.assignee_names?.[0] || 'Dinur Pradipta';
           const avatar = t.assignee_avatars?.[0] || `https://ui-avatars.com/api/?name=${encodeURIComponent(assigneeName)}&background=24324A&color=fff`;
@@ -43,7 +43,7 @@ export default function ActivityLogsPage() {
             entity_type: 'Task',
             old_value: t.status === 'completed' ? 'In Progress' : 'To Do',
             new_value: t.status.toUpperCase(),
-            source: 'CLICKUP_API',
+            source: 'APP_REALTIME',
             timestamp: t.clickup_updated_at || new Date().toISOString(),
           };
         });
@@ -67,7 +67,7 @@ export default function ActivityLogsPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Activity Log & Audit Trail</h1>
           <p className="text-xs text-[#737680] mt-1">
-            Catatan lengkap perubahan status task, login user, sinkronisasi webhook ClickUp, dan modifikasi data.
+            Catatan lengkap perubahan status task, login user, sinkronisasi aplikasi, dan modifikasi data.
           </p>
         </div>
 

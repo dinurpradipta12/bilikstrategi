@@ -192,8 +192,55 @@ export default function CreateTaskModal({
     try {
       const selectedProject = projects.find((p) => p.id === data.project_id);
       const selectedMember = members.find((m) => m.id === String(data.assignee_id));
+      const now = new Date().toISOString();
+      const localId = `app-${crypto.randomUUID()}`;
+      const createdTask: AgencyTask = {
+        id: localId,
+        clickup_task_id: localId,
+        project_id: data.project_id,
+        project_name: selectedProject?.name || 'Project Aplikasi',
+        task_name: data.task_name,
+        description: data.description,
+        status: 'to_do',
+        priority: data.priority,
+        assignee_ids: selectedMember ? [selectedMember.id] : [],
+        assignee_names: selectedMember ? [selectedMember.name] : [],
+        assignee_avatars: selectedMember ? [selectedMember.avatar] : [],
+        start_date: now,
+        due_date: new Date(data.due_date).toISOString(),
+        tags: data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+        custom_fields: [],
+        time_estimate_hours: 8,
+        time_tracked_hours: 0,
+        parent_id: null,
+        subtask_count: 0,
+        comments_count: 0,
+        clickup_url: '',
+        clickup_updated_at: now,
+        created_at: now,
+      };
 
-      const res = await fetch('/api/clickup/tasks', {
+      const appRes = await fetch('/api/supabase/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createdTask),
+      });
+
+      if (!appRes.ok) {
+        const errData = await appRes.json().catch(() => ({}));
+        alert(`Gagal membuat task di aplikasi: ${errData.error || appRes.statusText}`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const appData = await appRes.json();
+      const savedTask: AgencyTask = appData.task || createdTask;
+
+      if (onTaskCreated) {
+        onTaskCreated(savedTask);
+      }
+
+      fetch('/api/clickup/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -204,44 +251,24 @@ export default function CreateTaskModal({
           assignees: data.assignee_id ? [data.assignee_id] : undefined,
           due_date: data.due_date,
         }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        alert(`Gagal membuat task di ClickUp: ${errData.error || res.statusText}`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const resData = await res.json();
-      const createdTask: AgencyTask = resData.task || {
-        id: resData.raw?.id || `tsk-${Date.now()}`,
-        clickup_task_id: resData.raw?.id || `cu-${Date.now()}`,
-        project_id: data.project_id,
-        project_name: selectedProject?.name || 'Project Aplikasi',
-        task_name: data.task_name,
-        description: data.description,
-        status: 'to_do',
-        priority: data.priority,
-        assignee_ids: selectedMember ? [selectedMember.id] : [],
-        assignee_names: selectedMember ? [selectedMember.name] : [],
-        assignee_avatars: selectedMember ? [selectedMember.avatar] : [],
-        start_date: new Date().toISOString(),
-        due_date: new Date(data.due_date).toISOString(),
-        tags: data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
-        custom_fields: [],
-        time_estimate_hours: 8,
-        time_tracked_hours: 0,
-        subtask_count: 0,
-        comments_count: 0,
-        clickup_url: 'https://app.clickup.com',
-        clickup_updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      };
-
-      if (onTaskCreated) {
-        onTaskCreated(createdTask);
-      }
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((resData) => {
+          if (!resData?.task?.id) return;
+          return fetch('/api/supabase/tasks', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...savedTask,
+              ...resData.task,
+              id: savedTask.id,
+              clickup_task_id: resData.task.clickup_task_id || resData.task.id,
+              project_id: data.project_id,
+              project_name: selectedProject?.name || savedTask.project_name,
+            }),
+          });
+        })
+        .catch(() => {});
 
       setSuccessToast(true);
       setTimeout(() => {
@@ -250,7 +277,7 @@ export default function CreateTaskModal({
         onClose();
       }, 1000);
     } catch {
-      alert('Terjadi kesalahan jaringan saat membuat task di ClickUp');
+      alert('Terjadi kesalahan jaringan saat membuat task di aplikasi');
     } finally {
       setIsSubmitting(false);
     }
@@ -396,7 +423,7 @@ export default function CreateTaskModal({
               disabled={isSubmitting}
               className="px-5 py-2 text-xs font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg transition-colors shadow-xs cursor-pointer"
             >
-              {isSubmitting ? 'Menyimpan ke ClickUp...' : 'Simpan & Sync Task'}
+              {isSubmitting ? 'Menyimpan ke aplikasi...' : 'Simpan Task'}
             </button>
           </div>
         </form>

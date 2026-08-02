@@ -29,7 +29,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
     async function loadSearchData() {
       try {
         const [tasksRes, projectsRes, clientsRes] = await Promise.all([
-          fetch('/api/clickup/tasks', { cache: 'no-store' }).catch(() => null),
+          fetch('/api/supabase/tasks', { cache: 'no-store' }).catch(() => null),
           fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
           fetch('/api/supabase/clients', { cache: 'no-store' }).catch(() => null),
         ]);

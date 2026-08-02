@@ -11,22 +11,22 @@ export default function NotificationsPage() {
   useEffect(() => {
     async function loadNotifications() {
       try {
-        // Fetch real task status or overdue items from ClickUp API
-        const res = await fetch('/api/clickup/tasks');
+        // Fetch real task status or overdue items from the app task cache.
+        const res = await fetch('/api/supabase/tasks', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           const tasks = data.tasks || [];
           const notifs: AgencyNotification[] = [];
 
-          // Generate real notifications based on real ClickUp tasks
+          // Generate real notifications based on app tasks.
           tasks.forEach((t: any) => {
-            if (t.due_date && Number(t.due_date) < Date.now() && t.status?.status !== 'closed' && t.status?.status !== 'complete') {
+            if (t.due_date && new Date(t.due_date).getTime() < Date.now() && t.status !== 'completed') {
               notifs.push({
                 id: 'notif-' + t.id,
                 user_id: 'user-1',
                 type: 'task_overdue',
-                title: '⚠️ Task Overdue di ClickUp',
-                message: `Task "${t.name}" pada project ${t.project_name || 'Bilik Strategi'} telah melewati batas waktu deadline.`,
+                title: 'Task Overdue',
+                message: `Task "${t.task_name || t.name}" pada project ${t.project_name || 'Bilik Strategi'} telah melewati batas waktu deadline.`,
                 entity_type: 'task',
                 entity_id: t.id,
                 is_read: false,

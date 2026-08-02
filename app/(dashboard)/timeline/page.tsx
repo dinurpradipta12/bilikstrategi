@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
+import { supabase } from '@/lib/supabase/client';
 
 interface DayColumn {
   dayName: string;
@@ -134,7 +135,7 @@ export default function TimelinePage() {
     setLoading(true);
     try {
       const [tasksRes, projectsRes] = await Promise.all([
-        fetch('/api/clickup/tasks').catch(() => null),
+        fetch('/api/supabase/tasks', { cache: 'no-store' }).catch(() => null),
         fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
       ]);
 
@@ -157,6 +158,19 @@ export default function TimelinePage() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('timeline_task_cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredTasks = tasks.filter((t) => {
