@@ -3,7 +3,7 @@
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -104,6 +104,7 @@ export default function ProjectDetailPage() {
   const projectId = params?.id as string;
   const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
   const [mounted, setMounted] = useState(false);
+  const saveMetaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [realProject, setRealProject] = useState<any>(null);
   const [realTasks, setRealTasks] = useState<any[]>([]);
@@ -199,17 +200,37 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     setMounted(true);
 
-    // Load persistent meta from localStorage
-    if (projectId) {
-      const savedMeta = localStorage.getItem(`bilik_project_meta_${projectId}`);
-      if (savedMeta) {
-        try {
-          setMeta(JSON.parse(savedMeta));
-        } catch {
-          // ignore error
+    async function loadProjectMeta() {
+      if (!projectId) return;
+
+      let loadedFromServer = false;
+      try {
+        const res = await fetch(`/api/supabase/project-meta?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.meta && typeof data.meta === 'object') {
+            setMeta(data.meta);
+            localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(data.meta));
+            loadedFromServer = true;
+          }
+        }
+      } catch {
+        // ignore and fallback to browser cache
+      }
+
+      if (!loadedFromServer) {
+        const savedMeta = localStorage.getItem(`bilik_project_meta_${projectId}`);
+        if (savedMeta) {
+          try {
+            setMeta(JSON.parse(savedMeta));
+          } catch {
+            // ignore error
+          }
         }
       }
     }
+
+    loadProjectMeta();
 
     // Load REAL Client Listing from ClickUp API & Custom Saved Clients (NO MOCK DATA)
     async function loadRealClients() {
@@ -313,15 +334,52 @@ export default function ProjectDetailPage() {
     }
 
     fetchClickUpMembers();
+
+    return undefined;
   }, [projectId]);
 
-  // Save meta to localStorage whenever meta changes
+  // Save meta to the shared Supabase-backed API first; localStorage is only a browser cache.
   const updateMeta = (newMeta: ProjectMeta) => {
     setMeta(newMeta);
     if (projectId) {
       localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(newMeta));
+
+      if (saveMetaTimerRef.current) {
+        clearTimeout(saveMetaTimerRef.current);
+      }
+
+      saveMetaTimerRef.current = setTimeout(() => {
+        fetch('/api/supabase/project-meta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId, meta: newMeta }),
+        })
+          .then(() =>
+            fetch('/api/supabase/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'update',
+                id: projectId,
+                description: newMeta.description,
+                status: newMeta.status,
+              }),
+            }).catch(() => {})
+          )
+          .catch((err) => {
+            console.warn('[ProjectDetail] Could not sync project meta to Supabase:', err);
+          });
+      }, 250);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (saveMetaTimerRef.current) {
+        clearTimeout(saveMetaTimerRef.current);
+      }
+    };
+  }, []);
 
   // Fetch Supabase projects, ClickUp projects & tasks
   useEffect(() => {
@@ -340,7 +398,7 @@ export default function ProjectDetailPage() {
         if (supaData) {
           foundProject = {
             id: String(supaData.id),
-            clickup_list_id: String(supaData.id),
+            clickup_list_id: String(supaData.clickup_list_id || supaData.id),
             name: supaData.name || 'Project',
             description: supaData.description || 'Project Bilik Strategi',
             client_name: supaData.client_name || 'Bilik Strategi Workspace',
@@ -420,6 +478,29 @@ export default function ProjectDetailPage() {
     if (projectId) {
       loadData();
     }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    const channel = supabase
+      .channel(`project_meta_${projectId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'project_meta', filter: `project_id=eq.${projectId}` },
+        (payload: { new?: { meta?: ProjectMeta } }) => {
+          const incomingMeta = payload.new?.meta;
+          if (incomingMeta && typeof incomingMeta === 'object') {
+            setMeta(incomingMeta);
+            localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(incomingMeta));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [projectId]);
 
   const currentProject = {
