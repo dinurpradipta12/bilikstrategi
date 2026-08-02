@@ -25,7 +25,10 @@ import {
   Tag,
   Clock,
   HardDrive,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
+import { createPortal as createPortalDom } from 'react-dom';
 
 interface AssetItem {
   id: string;
@@ -144,6 +147,7 @@ const DEFAULT_ASSETS: AssetItem[] = [
 ];
 
 export default function AssetManagementPage() {
+  const [mounted, setMounted] = useState(false);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -151,7 +155,7 @@ export default function AssetManagementPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // File Preview Modal State
+  // File Viewer Modal State
   const [viewingAsset, setViewingAsset] = useState<AssetItem | null>(null);
 
   // Add New Asset Modal State
@@ -162,9 +166,25 @@ export default function AssetManagementPage() {
   const [newFormat, setNewFormat] = useState<AssetItem['format']>('pdf');
   const [newSize, setNewSize] = useState('2.5 MB');
   const [newFileUrl, setNewFileUrl] = useState('');
+  const [newThumbnailUrl, setNewThumbnailUrl] = useState('');
   const [newTags, setNewTags] = useState('Ratecard, Pricing');
 
+  // Edit Asset Modal State
+  const [editingAsset, setEditingAsset] = useState<AssetItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState<AssetItem['category']>('ratecard');
+  const [editDescription, setEditDescription] = useState('');
+  const [editFormat, setEditFormat] = useState<AssetItem['format']>('pdf');
+  const [editSize, setEditSize] = useState('');
+  const [editFileUrl, setEditFileUrl] = useState('');
+  const [editThumbnailUrl, setEditThumbnailUrl] = useState('');
+  const [editTags, setEditTags] = useState('');
+
+  // Delete Asset Modal State
+  const [deletingAsset, setDeletingAsset] = useState<AssetItem | null>(null);
+
   useEffect(() => {
+    setMounted(true);
     const savedAssets = localStorage.getItem('bilik_asset_items');
     if (savedAssets) {
       try {
@@ -184,7 +204,10 @@ export default function AssetManagementPage() {
 
   const handleCopyLink = (asset: AssetItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const shareableUrl = window.location.origin + asset.fileUrl;
+    const shareableUrl = asset.fileUrl.startsWith('http')
+      ? asset.fileUrl
+      : window.location.origin + asset.fileUrl;
+
     navigator.clipboard.writeText(shareableUrl);
     setCopiedId(asset.id);
     setToastMessage(`Link "${asset.title}" berhasil disalin!`);
@@ -195,6 +218,7 @@ export default function AssetManagementPage() {
     }, 3000);
   };
 
+  // Create Asset Handler
   const handleCreateAsset = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -212,7 +236,7 @@ export default function AssetManagementPage() {
       format: newFormat,
       size: newSize.trim() || '3.0 MB',
       fileUrl: newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
-      thumbnailUrl: newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+      thumbnailUrl: newThumbnailUrl.trim() || newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
       uploadedBy: 'Workspace Admin',
       uploadedDate: new Date().toISOString().split('T')[0],
       tags: tagList.length > 0 ? tagList : ['Asset', 'Official'],
@@ -226,7 +250,71 @@ export default function AssetManagementPage() {
     setNewTitle('');
     setNewDescription('');
     setNewFileUrl('');
+    setNewThumbnailUrl('');
     setToastMessage(`Aset "${created.title}" berhasil ditambahkan!`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Open Edit Modal Handler
+  const handleOpenEditModal = (asset: AssetItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingAsset(asset);
+    setEditTitle(asset.title);
+    setEditCategory(asset.category);
+    setEditDescription(asset.description);
+    setEditFormat(asset.format);
+    setEditSize(asset.size);
+    setEditFileUrl(asset.fileUrl);
+    setEditThumbnailUrl(asset.thumbnailUrl || asset.fileUrl);
+    setEditTags(asset.tags.join(', '));
+  };
+
+  // Save Edited Asset Handler
+  const handleSaveEditedAsset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAsset || !editTitle.trim()) return;
+
+    const tagList = editTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const updatedList = assets.map((ast) => {
+      if (ast.id === editingAsset.id) {
+        return {
+          ...ast,
+          title: editTitle.trim(),
+          category: editCategory,
+          description: editDescription.trim(),
+          format: editFormat,
+          size: editSize.trim() || ast.size,
+          fileUrl: editFileUrl.trim() || ast.fileUrl,
+          thumbnailUrl: editThumbnailUrl.trim() || editFileUrl.trim() || ast.thumbnailUrl,
+          tags: tagList.length > 0 ? tagList : ast.tags,
+        };
+      }
+      return ast;
+    });
+
+    saveAssetsToStateAndStorage(updatedList);
+    setEditingAsset(null);
+    setToastMessage(`Perubahan aset "${editTitle}" berhasil disimpan!`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Delete Asset Handler
+  const handleDeleteAssetConfirm = () => {
+    if (!deletingAsset) return;
+
+    const updatedList = assets.filter((ast) => ast.id !== deletingAsset.id);
+    saveAssetsToStateAndStorage(updatedList);
+
+    if (viewingAsset?.id === deletingAsset.id) {
+      setViewingAsset(null);
+    }
+
+    setToastMessage(`Aset "${deletingAsset.title}" telah dihapus.`);
+    setDeletingAsset(null);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
@@ -293,9 +381,10 @@ export default function AssetManagementPage() {
       {/* Top Title Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[#24324A] text-white flex items-center justify-center shadow-sm">
-              <FolderArchive className="w-5 h-5 text-[#F26B5E]" />
+          <div className="flex items-center gap-3">
+            {/* Soft Peach Icon Container (No Black Background!) */}
+            <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+              <FolderArchive className="w-5.5 h-5.5" />
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Asset Management & Gallery</h1>
@@ -416,6 +505,27 @@ export default function AssetManagementPage() {
                     <span className="px-2 py-0.5 bg-black/60 backdrop-blur-xs text-white text-[10px] font-semibold rounded">
                       {ast.size}
                     </span>
+                  </div>
+
+                  {/* Quick Actions (Edit / Delete) Top Right */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => handleOpenEditModal(ast, e)}
+                      className="p-1.5 bg-white/90 hover:bg-white text-[#24324A] rounded-lg shadow-md hover:scale-105 transition-all cursor-pointer"
+                      title="Edit Asset"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingAsset(ast);
+                      }}
+                      className="p-1.5 bg-white/90 hover:bg-[#FFF0ED] text-[#D95858] rounded-lg shadow-md hover:scale-105 transition-all cursor-pointer"
+                      title="Hapus Asset"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {/* Quick View Hover Overlay */}
@@ -568,6 +678,23 @@ export default function AssetManagementPage() {
                         >
                           {copiedId === ast.id ? <Check className="w-4 h-4 text-[#4F9D78]" /> : <Copy className="w-4 h-4" />}
                         </button>
+
+                        <button
+                          onClick={(e) => handleOpenEditModal(ast, e)}
+                          className="p-2 bg-white border border-[#E8E8EC] text-[#737680] hover:text-[#24324A] hover:bg-[#EEF2F7] rounded-xl transition-all cursor-pointer"
+                          title="Edit Asset"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => setDeletingAsset(ast)}
+                          className="p-2 bg-white border border-[#E8E8EC] text-[#D95858] hover:bg-[#FFF0ED] rounded-xl transition-all cursor-pointer"
+                          title="Hapus Asset"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
                         <button
                           onClick={() => setViewingAsset(ast)}
                           className="px-3 py-1.5 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold text-xs flex items-center gap-1 cursor-pointer"
@@ -595,10 +722,10 @@ export default function AssetManagementPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 1: FILE VIEWER MODAL (LIHAT FILE) */}
+      {/* MODAL 1: FILE VIEWER MODAL (LIHAT FILE) - VIA PORTAL */}
       {/* ========================================================================= */}
-      {viewingAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fade-in">
+      {viewingAsset && mounted && createPortalDom(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setViewingAsset(null)}
@@ -609,8 +736,9 @@ export default function AssetManagementPage() {
 
             {/* Modal Header */}
             <div className="flex items-start gap-3 border-b border-[#E8E8EC] pb-4 pr-8">
-              <div className="w-12 h-12 rounded-xl bg-[#24324A] text-white flex items-center justify-center flex-shrink-0 shadow-md">
-                <FolderArchive className="w-6 h-6 text-[#F26B5E]" />
+              {/* Soft Peach Icon Badge Container */}
+              <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center flex-shrink-0 shadow-xs">
+                <FolderArchive className="w-6 h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -672,46 +800,67 @@ export default function AssetManagementPage() {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-2 flex items-center justify-end gap-3 border-t border-[#E8E8EC]">
-              <button
-                onClick={(e) => handleCopyLink(viewingAsset, e)}
-                className={`px-4 py-2.5 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  copiedId === viewingAsset.id
-                    ? 'bg-[#E6F4ED] border-[#4F9D78] text-[#4F9D78]'
-                    : 'bg-white border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7]'
-                }`}
-              >
-                {copiedId === viewingAsset.id ? <Check className="w-4 h-4 text-[#4F9D78]" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedId === viewingAsset.id ? 'Link Tersalin!' : 'Copy Public Link'}</span>
-              </button>
+            <div className="pt-2 flex items-center justify-between gap-3 border-t border-[#E8E8EC]">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => handleOpenEditModal(viewingAsset, e)}
+                  className="px-3 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#24324A] rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-[#EEF2F7] cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5 text-[#24324A]" />
+                  <span>Edit Asset</span>
+                </button>
+                <button
+                  onClick={() => setDeletingAsset(viewingAsset)}
+                  className="px-3 py-2 bg-[#FFF0ED] border border-[#F26B5E]/20 text-[#D95858] rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-[#FFE4DE] cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-[#D95858]" />
+                  <span>Hapus</span>
+                </button>
+              </div>
 
-              <a
-                href={viewingAsset.fileUrl}
-                target="_blank"
-                download
-                className="px-5 py-2.5 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm cursor-pointer"
-              >
-                <Download className="w-4 h-4 text-[#F26B5E]" />
-                <span>Download File</span>
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => handleCopyLink(viewingAsset, e)}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    copiedId === viewingAsset.id
+                      ? 'bg-[#E6F4ED] border-[#4F9D78] text-[#4F9D78]'
+                      : 'bg-white border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7]'
+                  }`}
+                >
+                  {copiedId === viewingAsset.id ? <Check className="w-4 h-4 text-[#4F9D78]" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedId === viewingAsset.id ? 'Link Tersalin!' : 'Copy Public Link'}</span>
+                </button>
+
+                <a
+                  href={viewingAsset.fileUrl}
+                  target="_blank"
+                  download
+                  className="px-5 py-2.5 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-[#F26B5E]" />
+                  <span>Download File</span>
+                </a>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: UPLOAD / TAMBAH ASSET BARU */}
+      {/* MODAL 2: UPLOAD / TAMBAH ASSET BARU - VIA PORTAL */}
       {/* ========================================================================= */}
-      {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      {showUploadModal && mounted && createPortalDom(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
-              <div className="w-10 h-10 rounded-xl bg-[#24324A] text-white flex items-center justify-center shadow-xs">
-                <Plus className="w-5 h-5 text-[#F26B5E]" />
+              {/* Soft Peach Icon Container */}
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+                <Plus className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-[#24324A]">Tambah Asset Baru</h3>
@@ -802,12 +951,24 @@ export default function AssetManagementPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-[#24324A] mb-1">URL Direct Link File / Preview</label>
+                <label className="block font-bold text-[#24324A] mb-1">URL Link Download / File *</label>
                 <input
                   type="url"
+                  required
                   placeholder="https://..."
                   value={newFileUrl}
                   onChange={(e) => setNewFileUrl(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">URL Cover / Thumbnail (Opsional)</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={newThumbnailUrl}
+                  onChange={(e) => setNewThumbnailUrl(e.target.value)}
                   className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
                 />
               </div>
@@ -830,7 +991,186 @@ export default function AssetManagementPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: EDIT ASSET MODAL - VIA PORTAL */}
+      {/* ========================================================================= */}
+      {editingAsset && mounted && createPortalDom(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button onClick={() => setEditingAsset(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
+              {/* Soft Peach Icon Container */}
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+                <Pencil className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Edit Informasi Asset</h3>
+                <p className="text-xs text-[#737680]">Ubah judul, cover, keterangan, atau link download.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEditedAsset} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Judul / Nama Asset *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Kategori *</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value as any)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
+                  >
+                    <option value="ratecard">Rate Card & Pricing</option>
+                    <option value="brand_guideline">Brand Guideline</option>
+                    <option value="proposal">Proposal & Deck</option>
+                    <option value="media_kit">Media Kit & KOL</option>
+                    <option value="contract">Legal & Contract</option>
+                    <option value="other">Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Format File *</label>
+                  <select
+                    value={editFormat}
+                    onChange={(e) => setEditFormat(e.target.value as any)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
+                  >
+                    <option value="pdf">PDF Document</option>
+                    <option value="pptx">PPTX PowerPoint</option>
+                    <option value="zip">ZIP Archive</option>
+                    <option value="png">PNG Image</option>
+                    <option value="docx">DOCX Word</option>
+                    <option value="mp4">MP4 Video</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Deskripsi Ringkas</label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Ukuran File</label>
+                  <input
+                    type="text"
+                    value={editSize}
+                    onChange={(e) => setEditSize(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[#24324A] mb-1">Tags (Pisahkan koma)</label>
+                  <input
+                    type="text"
+                    value={editTags}
+                    onChange={(e) => setEditTags(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">URL Link File / Download *</label>
+                <input
+                  type="url"
+                  required
+                  value={editFileUrl}
+                  onChange={(e) => setEditFileUrl(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">URL Cover Image / Thumbnail</label>
+                <input
+                  type="url"
+                  value={editThumbnailUrl}
+                  onChange={(e) => setEditThumbnailUrl(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingAsset(null)}
+                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#4F9D78]" />
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: DELETE CONFIRMATION MODAL - VIA PORTAL */}
+      {/* ========================================================================= */}
+      {deletingAsset && mounted && createPortalDom(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#D95858] border border-[#F26B5E]/30 flex items-center justify-center mx-auto shadow-xs">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-extrabold text-[#24324A]">Hapus Asset Ini?</h3>
+              <p className="text-xs text-[#737680] mt-1">
+                Apakah Anda yakin ingin menghapus <strong className="text-[#24324A]">{deletingAsset.title}</strong>? Tindakan ini tidak dapat dibatalkan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setDeletingAsset(null)}
+                className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer flex-1 text-xs"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteAssetConfirm}
+                className="px-4 py-2 bg-[#D95858] hover:bg-[#B91C1C] text-white rounded-xl font-extrabold cursor-pointer flex-1 text-xs shadow-sm"
+              >
+                Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
