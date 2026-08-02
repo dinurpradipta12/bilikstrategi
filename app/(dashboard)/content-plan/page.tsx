@@ -116,6 +116,7 @@ export default function ContentPlanPage() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSheet, setEditingSheet] = useState<ContentSheetItem | null>(null);
+  const [deletingSheet, setDeletingSheet] = useState<ContentSheetItem | null>(null);
 
   // Form State - Add/Edit Sheet
   const [formClientName, setFormClientName] = useState('');
@@ -183,26 +184,32 @@ export default function ContentPlanPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Delete Sheet
-  const handleDeleteSheet = async (sheet: ContentSheetItem) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus link Content Plan "${sheet.title}" untuk klien ${sheet.client_name}?`)) {
-      return;
-    }
+  // Trigger Custom Delete Confirmation Modal
+  const handleDeleteSheet = (sheet: ContentSheetItem) => {
+    setDeletingSheet(sheet);
+  };
 
-    const remaining = sheets.filter((s) => s.id !== sheet.id);
+  // Perform Actual Sheet Deletion
+  const confirmDeleteSheet = async () => {
+    if (!deletingSheet) return;
+    const sheetToDelete = deletingSheet;
+
+    const remaining = sheets.filter((s) => s.id !== sheetToDelete.id);
     setSheets(remaining);
-    if (selectedSheetId === sheet.id && remaining.length > 0) {
+    if (selectedSheetId === sheetToDelete.id && remaining.length > 0) {
       setSelectedSheetId(remaining[0].id);
     }
     localStorage.setItem('bilik_content_sheets', JSON.stringify(remaining));
 
     try {
-      await supabase.from('content_plan_sheets').delete().eq('id', sheet.id);
+      await supabase.from('content_plan_sheets').delete().eq('id', sheetToDelete.id);
     } catch (err) {
       console.warn('[ContentPlan] Supabase delete error:', err);
     }
 
-    setToastMessage(`Link Content Plan "${sheet.title}" berhasil dihapus.`);
+    setDeletingSheet(null);
+    if (editingSheet?.id === sheetToDelete.id) setEditingSheet(null);
+    setToastMessage(`Link Content Plan "${sheetToDelete.title}" berhasil dihapus.`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
@@ -958,6 +965,51 @@ export default function ContentPlanPage() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: CUSTOM DELETE CONFIRMATION MODAL - VIA PORTAL */}
+      {/* ========================================================================= */}
+      {deletingSheet && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
+            <button onClick={() => setDeletingSheet(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center flex-shrink-0 shadow-xs">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Hapus Tautan Google Sheets?</h3>
+                <p className="text-xs text-[#737680] mt-1 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus link Content Plan <strong className="text-[#24324A]">"{deletingSheet.title}"</strong> untuk klien <strong className="text-[#24324A]">{deletingSheet.client_name}</strong>?
+                  Tautan ini akan terhapus secara otomatis untuk seluruh anggota tim workspace.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E8E8EC] flex items-center justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setDeletingSheet(null)}
+                className="px-4 py-2.5 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSheet}
+                className="px-5 py-2.5 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Hapus Link</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body
