@@ -82,6 +82,7 @@ interface ActivityLogItem {
 
 interface ProjectMeta {
   description: string;
+  status?: 'planning' | 'in_progress' | 'on_hold' | 'completed';
   milestones: Milestone[];
   clientInfo: {
     name: string;
@@ -381,19 +382,21 @@ export default function ProjectDetailPage() {
     }
   }, [projectId]);
 
-  const currentProject = realProject || {
-    id: projectId,
-    clickup_list_id: projectId,
-    name: 'Project ' + projectId,
-    description: meta.description,
-    client_name: meta.clientInfo.company_name,
-    status: 'in_progress',
-    start_date: new Date().toISOString().split('T')[0],
-    due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-    progress_percentage: 0,
-    total_tasks: realTasks.length,
-    completed_tasks: realTasks.filter((t: any) => t.status?.type === 'closed' || t.status === 'completed').length,
-    team_lead_name: meta.teamMembers[0]?.name || 'Agency Team',
+  const currentProject = {
+    ...(realProject || {
+      id: projectId,
+      clickup_list_id: projectId,
+      name: 'Project ' + projectId,
+      description: meta.description,
+      client_name: meta.clientInfo.company_name,
+      start_date: new Date().toISOString().split('T')[0],
+      due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      progress_percentage: 0,
+      total_tasks: realTasks.length,
+      completed_tasks: realTasks.filter((t: any) => t.status?.type === 'closed' || t.status === 'completed').length,
+      team_lead_name: meta.teamMembers[0]?.name || 'Agency Team',
+    }),
+    status: meta.status || realProject?.status || 'in_progress',
   };
 
   // Toggle milestone status inline
@@ -472,8 +475,42 @@ export default function ProjectDetailPage() {
             </span>
           </div>
           <div>
-            <span className="text-[#737680] block text-[11px]">Status Overall</span>
-            <span className="font-bold text-[#24324A] capitalize">{currentProject.status.replace('_', ' ')}</span>
+            <span className="text-[#737680] block text-[11px] mb-1">Status Overall (Klik untuk Ubah)</span>
+            <select
+              value={currentProject.status}
+              onChange={(e) => {
+                const newStatus = e.target.value as any;
+                const newLog = {
+                  id: 'act-' + Date.now(),
+                  user_name: 'Dinur Pradipta',
+                  user_avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+                  action: 'UBAH STATUS',
+                  entity_name: currentProject.name,
+                  details: `Status project diubah menjadi "${newStatus.replace('_', ' ').toUpperCase()}"`,
+                  timestamp: new Date().toISOString(),
+                };
+                const updatedMeta = {
+                  ...meta,
+                  status: newStatus,
+                  activityLogs: [newLog, ...meta.activityLogs],
+                };
+                updateMeta(updatedMeta);
+              }}
+              className={`px-3 py-1 text-xs font-extrabold rounded-lg border appearance-none cursor-pointer outline-none transition-all ${
+                currentProject.status === 'completed'
+                  ? 'bg-[#E3F8E9] text-[#1D7434] border-[#B4ECC2]'
+                  : currentProject.status === 'in_progress'
+                  ? 'bg-[#EEF2F7] text-[#24324A] border-[#BDD7FF]'
+                  : currentProject.status === 'on_hold'
+                  ? 'bg-[#FFE8E8] text-[#C22929] border-[#FFB8B8]'
+                  : 'bg-[#FEF3D6] text-[#E6A23C] border-[#FCE4B3]'
+              }`}
+            >
+              <option value="in_progress">🚀 In Progress (Sedang Berjalan)</option>
+              <option value="planning">📝 Planning (Perencanaan)</option>
+              <option value="on_hold">⏸️ On Hold (Tertunda)</option>
+              <option value="completed">✅ Completed (Selesai 100%)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -1287,6 +1324,20 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                <div>
+                  <label className="block text-xs font-bold text-[#202124] mb-1">Status Project Overall</label>
+                  <select
+                    value={meta.status || currentProject.status}
+                    onChange={(e) => setMeta({ ...meta, status: e.target.value as any })}
+                    className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg font-bold text-[#24324A] focus:outline-none focus:border-[#24324A]"
+                  >
+                    <option value="in_progress">🚀 In Progress (Sedang Berjalan)</option>
+                    <option value="planning">📝 Planning (Perencanaan)</option>
+                    <option value="on_hold">⏸️ On Hold (Tertunda)</option>
+                    <option value="completed">✅ Completed (Selesai 100%)</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-[#202124] mb-1">Deskripsi Deliverable & Scope Pekerjaan</label>
                   <textarea
