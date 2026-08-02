@@ -20,7 +20,8 @@ import {
   Send,
   Sparkles,
 } from 'lucide-react';
-import { AgencyClient, AgencyProject } from '@/lib/mock/data';
+import { AgencyClient, AgencyProject, MOCK_CLIENTS } from '@/lib/mock/data';
+import { supabase } from '@/lib/supabase/client';
 
 export default function ClientsPage() {
   const [mounted, setMounted] = useState(false);
@@ -49,48 +50,58 @@ export default function ClientsPage() {
     setMounted(true);
   }, []);
 
-  // 1. Load Clients & Projects (Merge ClickUp Projects + LocalStorage Custom Clients)
+  // 1. Load Clients & Projects (Merge Mock + Supabase + ClickUp + LocalStorage)
   const fetchClientsAndProjects = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/clickup/projects');
-      let liveProjects: AgencyProject[] = [];
-      if (res.ok) {
-        const data = await res.json();
-        liveProjects = Array.isArray(data.projects) ? data.projects : [];
-        setProjects(liveProjects);
-      }
-
-      // Derived ClickUp Clients
       const clientMap = new Map<string, AgencyClient>();
 
-      liveProjects.forEach((p, idx) => {
-        const clientName = p.client_name || 'Bilik Workspace Client';
-        if (!clientMap.has(clientName)) {
-          clientMap.set(clientName, {
-            id: `c_cu_${idx + 1}`,
-            name: `PIC ${clientName}`,
-            company_name: clientName,
-            email: `contact@${clientName.toLowerCase().replace(/\s+/g, '')}.id`,
-            phone: '+62 812-3456-7890',
-            logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=24324A&color=fff`,
-            status: 'active',
-            industry: 'Digital & Creative Agency',
-            clickup_folder_id: p.clickup_list_id || `folder_${idx}`,
-            overall_progress: p.progress_percentage || 50,
-            notes: `Klien aktif terhubung langsung dengan ClickUp Space / List.`,
-            start_date: '2026-01-01',
-            account_manager_id: 'u1',
-            active_projects_count: 1,
-            completed_projects_count: 0,
-            total_tasks_count: p.total_tasks || 5,
-          });
-        }
-      });
+      // A. Pre-seed MOCK_CLIENTS (Nusantara Retail Group, Kopi Senja Indonesia, TechVision Global, GlowSkin Cosmetic, etc.)
+      if (Array.isArray(MOCK_CLIENTS)) {
+        MOCK_CLIENTS.forEach((c) => {
+          clientMap.set(c.company_name, c);
+        });
+      }
 
-      // Default client fallback if empty
-      if (clientMap.size === 0) {
-        clientMap.set('Bilik Workspace Client', {
+      // B. Pre-seed Default Agency Clients (Dinur Pradipta & hidden)
+      const defaultAgencyClients: AgencyClient[] = [
+        {
+          id: 'c_dinur',
+          name: 'Dinur Pradipta',
+          company_name: 'Dinur Pradipta',
+          email: 'contact.dinurpradipta@gmail.com',
+          phone: '089619941101',
+          logo_url: 'https://ui-avatars.com/api/?name=Dinur+Pradipta&background=24324A&color=fff',
+          status: 'active',
+          industry: 'Digital Agency',
+          clickup_folder_id: 'fold_dinur',
+          overall_progress: 0,
+          notes: 'Klien utama Digital Agency.',
+          start_date: '2026-01-01',
+          account_manager_id: 'u1',
+          active_projects_count: 0,
+          completed_projects_count: 0,
+          total_tasks_count: 0,
+        },
+        {
+          id: 'c_hidden',
+          name: 'PIC hidden',
+          company_name: 'hidden',
+          email: 'contact@hidden.id',
+          phone: '+62 812-3456-7890',
+          logo_url: 'https://ui-avatars.com/api/?name=hidden&background=24324A&color=fff',
+          status: 'active',
+          industry: 'Digital & Creative Agency',
+          clickup_folder_id: 'fold_hidden',
+          overall_progress: 50,
+          notes: 'Klien Creative Agency.',
+          start_date: '2026-01-01',
+          account_manager_id: 'u1',
+          active_projects_count: 1,
+          completed_projects_count: 0,
+          total_tasks_count: 5,
+        },
+        {
           id: 'c_default',
           name: 'Workspace Admin',
           company_name: 'Bilik Workspace Client',
@@ -107,10 +118,84 @@ export default function ClientsPage() {
           active_projects_count: 1,
           completed_projects_count: 1,
           total_tasks_count: 10,
-        });
+        },
+      ];
+
+      defaultAgencyClients.forEach((dc) => {
+        if (!clientMap.has(dc.company_name)) {
+          clientMap.set(dc.company_name, dc);
+        }
+      });
+
+      // C. Fetch Supabase clients table
+      try {
+        const { data: supaClients } = await supabase.from('clients').select('*');
+        if (supaClients && supaClients.length > 0) {
+          supaClients.forEach((sc: any) => {
+            const compName = sc.company_name || sc.name;
+            if (compName) {
+              clientMap.set(compName, {
+                id: sc.id || `c_supa_${Date.now()}`,
+                name: sc.name || `PIC ${compName}`,
+                company_name: compName,
+                email: sc.email || `contact@${compName.toLowerCase().replace(/\s+/g, '')}.id`,
+                phone: sc.phone || '+62 812-3456-7890',
+                logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(compName)}&background=24324A&color=fff`,
+                status: sc.status || 'active',
+                industry: sc.industry || 'Digital Agency',
+                clickup_folder_id: sc.clickup_folder_id || 'folder_1',
+                overall_progress: sc.overall_progress || 50,
+                notes: sc.notes || 'Klien dari database Supabase.',
+                start_date: sc.start_date || '2026-01-01',
+                account_manager_id: 'u1',
+                active_projects_count: sc.active_projects_count || 1,
+                completed_projects_count: sc.completed_projects_count || 0,
+                total_tasks_count: sc.total_tasks_count || 5,
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[ClientsPage] Supabase clients fetch fallback.', err);
       }
 
-      // Merge saved custom clients from localStorage
+      // D. Fetch Live ClickUp projects
+      try {
+        const res = await fetch('/api/clickup/projects');
+        if (res.ok) {
+          const data = await res.json();
+          const liveProjects: AgencyProject[] = Array.isArray(data.projects) ? data.projects : [];
+          setProjects(liveProjects);
+
+          liveProjects.forEach((p, idx) => {
+            const clientName = p.client_name || 'Bilik Workspace Client';
+            if (!clientMap.has(clientName)) {
+              clientMap.set(clientName, {
+                id: `c_cu_${idx + 1}`,
+                name: `PIC ${clientName}`,
+                company_name: clientName,
+                email: `contact@${clientName.toLowerCase().replace(/\s+/g, '')}.id`,
+                phone: '+62 812-3456-7890',
+                logo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=24324A&color=fff`,
+                status: 'active',
+                industry: 'Digital & Creative Agency',
+                clickup_folder_id: p.clickup_list_id || `folder_${idx}`,
+                overall_progress: p.progress_percentage || 50,
+                notes: `Klien aktif terhubung langsung dengan ClickUp Space / List.`,
+                start_date: '2026-01-01',
+                account_manager_id: 'u1',
+                active_projects_count: 1,
+                completed_projects_count: 0,
+                total_tasks_count: p.total_tasks || 5,
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[ClientsPage] ClickUp projects fetch error.', err);
+      }
+
+      // E. Merge saved custom clients from localStorage
       const savedCustomStr = localStorage.getItem('bilik_custom_clients');
       if (savedCustomStr) {
         try {
@@ -163,7 +248,7 @@ export default function ClientsPage() {
   };
 
   // Save / Add Client
-  const handleSaveClient = (e: React.FormEvent) => {
+  const handleSaveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCompany.trim()) return;
 
@@ -212,9 +297,35 @@ export default function ClientsPage() {
 
     setClients(updatedList);
 
-    // Save custom clients to localStorage
-    const customOnly = updatedList.filter((c) => c.id.startsWith('c_custom_') || c.id === editingClient?.id);
-    localStorage.setItem('bilik_custom_clients', JSON.stringify(customOnly));
+    // Save all custom clients to localStorage so they persist across reloads
+    localStorage.setItem('bilik_custom_clients', JSON.stringify(updatedList));
+
+    // Save to Supabase clients table
+    const targetClient = editingClient
+      ? updatedList.find((c) => c.id === editingClient.id)
+      : updatedList[0];
+
+    if (targetClient) {
+      try {
+        await supabase
+          .from('clients')
+          .upsert([
+            {
+              id: targetClient.id,
+              name: targetClient.name,
+              company_name: targetClient.company_name,
+              email: targetClient.email,
+              phone: targetClient.phone,
+              industry: targetClient.industry,
+              status: targetClient.status,
+              notes: targetClient.notes,
+              logo_url: targetClient.logo_url,
+            },
+          ]);
+      } catch (err) {
+        console.warn('Supabase client save error:', err);
+      }
+    }
 
     setShowAddModal(false);
   };
@@ -225,15 +336,24 @@ export default function ClientsPage() {
     setClientToDelete(client);
   };
 
-  const confirmDeleteClient = () => {
+  const confirmDeleteClient = async () => {
     if (!clientToDelete) return;
 
     const updatedList = clients.filter((c) => c.id !== clientToDelete.id);
     setClients(updatedList);
 
     // Update localStorage
-    const customOnly = updatedList.filter((c) => c.id.startsWith('c_custom_'));
-    localStorage.setItem('bilik_custom_clients', JSON.stringify(customOnly));
+    localStorage.setItem('bilik_custom_clients', JSON.stringify(updatedList));
+
+    // Delete from Supabase
+    try {
+      await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientToDelete.id);
+    } catch (err) {
+      console.warn('Supabase client delete error:', err);
+    }
 
     if (selectedClient?.id === clientToDelete.id) {
       setDrawerOpen(false);
