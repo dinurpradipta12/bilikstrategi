@@ -38,6 +38,18 @@ export default function Sidebar() {
   const [notifUnread, setNotifUnread] = useState<number>(0);
 
   useEffect(() => {
+    const isCollapsedSaved = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
+    setCollapsed(isCollapsedSaved);
+  }, []);
+
+  const handleToggleCollapsed = () => {
+    const nextState = !collapsed;
+    setCollapsed(nextState);
+    localStorage.setItem('bilik_sidebar_collapsed', String(nextState));
+    window.dispatchEvent(new Event('sidebar-toggle'));
+  };
+
+  useEffect(() => {
     async function loadClickUpProfile() {
       let username = 'Dinur Pradipta';
       let email = 'snllabsarchive@gmail.com';
@@ -168,8 +180,8 @@ export default function Sidebar() {
           </Link>
         )}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded-md text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] transition-colors flex-shrink-0"
+          onClick={handleToggleCollapsed}
+          className="p-1 rounded-md text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] transition-colors flex-shrink-0 cursor-pointer"
           title={collapsed ? 'Perluas Sidebar' : 'Perkecil Sidebar'}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

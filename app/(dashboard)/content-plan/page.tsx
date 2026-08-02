@@ -22,6 +22,9 @@ import {
   Send,
   Eye,
   Lock,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
@@ -92,6 +95,22 @@ export default function ContentPlanPage() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showContentModal, setShowContentModal] = useState(false);
+
+  // Zoom & Viewport Size Controls
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [viewportHeight, setViewportHeight] = useState<'compact' | 'normal' | 'tall'>('normal');
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 15, 200));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 15, 60));
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(100);
+  };
 
   // Form State - Add Sheet
   const [formClientName, setFormClientName] = useState('');
@@ -370,7 +389,63 @@ export default function ContentPlanPage() {
               <h2 className="text-base font-extrabold text-[#24324A] mt-1">{currentSheet.title}</h2>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Zoom Controls */}
+              <div className="flex items-center bg-white border border-[#E8E8EC] rounded-xl p-1 shadow-xs" title="Atur Perhitungan Skala Zoom Spreadsheet">
+                <button
+                  onClick={handleZoomOut}
+                  className="p-1 hover:bg-[#EEF2F7] text-[#24324A] rounded-lg transition-all cursor-pointer"
+                  title="Perkecil Tampilan (Zoom Out)"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleResetZoom}
+                  className="px-2 py-0.5 text-[11px] font-extrabold text-[#24324A] hover:bg-[#EEF2F7] rounded-md transition-all cursor-pointer"
+                  title="Reset Zoom ke 100%"
+                >
+                  {zoomLevel}%
+                </button>
+                <button
+                  onClick={handleZoomIn}
+                  className="p-1 hover:bg-[#EEF2F7] text-[#24324A] rounded-lg transition-all cursor-pointer"
+                  title="Perbesar Tampilan (Zoom In)"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Viewport Height Switcher */}
+              <div className="flex items-center bg-white border border-[#E8E8EC] rounded-xl p-1 text-[11px] font-extrabold shadow-xs">
+                <button
+                  onClick={() => setViewportHeight('compact')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    viewportHeight === 'compact' ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#737680] hover:text-[#24324A]'
+                  }`}
+                  title="Tinggi Ringkas (500px)"
+                >
+                  500px
+                </button>
+                <button
+                  onClick={() => setViewportHeight('normal')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    viewportHeight === 'normal' ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#737680] hover:text-[#24324A]'
+                  }`}
+                  title="Tinggi Standar (720px)"
+                >
+                  720px
+                </button>
+                <button
+                  onClick={() => setViewportHeight('tall')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    viewportHeight === 'tall' ? 'bg-[#24324A] text-white shadow-xs' : 'text-[#737680] hover:text-[#24324A]'
+                  }`}
+                  title="Tinggi Ekstra (900px)"
+                >
+                  900px
+                </button>
+              </div>
+
               <button
                 onClick={() => handleCopyLink(currentSheet)}
                 className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -392,7 +467,7 @@ export default function ContentPlanPage() {
                 title="Buka di tab browser baru"
               >
                 <ExternalLink className="w-3.5 h-3.5 text-[#F26B5E]" />
-                <span>Buka di Google Sheets</span>
+                <span>Buka di Sheets</span>
               </a>
 
               <button
@@ -401,19 +476,30 @@ export default function ContentPlanPage() {
                 title="Tampilkan layar penuh tanpa distraksi"
               >
                 <Maximize2 className="w-3.5 h-3.5 text-[#F26B5E]" />
-                <span>Focus Mode (Full Screen)</span>
+                <span>Focus Mode</span>
               </button>
             </div>
           </div>
 
-          {/* Embedded Google Sheets IFrame Viewport */}
-          <div className="w-full h-[680px] bg-white relative">
-            <iframe
-              src={currentSheet.embed_url || currentSheet.sheet_url}
-              title={currentSheet.title}
-              className="w-full h-full border-0"
-              allow="clipboard-write; auto-fill"
-            />
+          {/* Embedded Google Sheets IFrame Viewport with Zoom Support */}
+          <div
+            className={`w-full bg-white relative overflow-hidden transition-all duration-300 ${
+              viewportHeight === 'compact' ? 'h-[500px]' : viewportHeight === 'tall' ? 'h-[900px]' : 'h-[720px]'
+            }`}
+          >
+            <div
+              className="w-full h-full"
+              style={{
+                zoom: `${zoomLevel / 100}`,
+              }}
+            >
+              <iframe
+                src={currentSheet.embed_url || currentSheet.sheet_url}
+                title={currentSheet.title}
+                className="w-full h-full border-0"
+                allow="clipboard-write; auto-fill"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -436,6 +522,31 @@ export default function ContentPlanPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Focus Mode Zoom Controls */}
+              <div className="flex items-center bg-white/10 border border-white/20 rounded-xl p-1 text-xs">
+                <button
+                  onClick={handleZoomOut}
+                  className="p-1 hover:bg-white/20 text-white rounded-lg transition-all cursor-pointer"
+                  title="Perkecil Tampilan"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleResetZoom}
+                  className="px-2 py-0.5 text-[11px] font-extrabold text-white hover:bg-white/20 rounded-md transition-all cursor-pointer"
+                  title="Reset Zoom ke 100%"
+                >
+                  {zoomLevel}%
+                </button>
+                <button
+                  onClick={handleZoomIn}
+                  className="p-1 hover:bg-white/20 text-white rounded-lg transition-all cursor-pointer"
+                  title="Perbesar Tampilan"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               <button
                 onClick={() => setShowContentModal(true)}
                 className="px-3.5 py-1.5 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -464,14 +575,21 @@ export default function ContentPlanPage() {
             </div>
           </div>
 
-          {/* Fullscreen Iframe */}
-          <div className="flex-1 bg-white">
-            <iframe
-              src={currentSheet.embed_url || currentSheet.sheet_url}
-              title={currentSheet.title}
-              className="w-full h-full border-0"
-              allow="clipboard-write; auto-fill"
-            />
+          {/* Fullscreen Iframe with Zoom Support */}
+          <div className="flex-1 bg-white overflow-hidden">
+            <div
+              className="w-full h-full"
+              style={{
+                zoom: `${zoomLevel / 100}`,
+              }}
+            >
+              <iframe
+                src={currentSheet.embed_url || currentSheet.sheet_url}
+                title={currentSheet.title}
+                className="w-full h-full border-0"
+                allow="clipboard-write; auto-fill"
+              />
+            </div>
           </div>
         </div>,
         document.body
