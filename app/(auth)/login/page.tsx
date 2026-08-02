@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { Shield, CheckCircle2, ArrowRight, Users, Lock } from 'lucide-react';
+import logoBilikHitam from '@/src/logobilik-hitam.png';
 import clickupLogo from '@/src/clickup.png';
 
 export default function LoginPage() {
@@ -23,8 +24,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-xl overflow-hidden animate-fade-in space-y-6">
         {/* Brand Header */}
         <div className="p-8 text-center border-b border-[#E8E8EC] bg-[#FFFFFF]">
-          <div className="w-14 h-14 rounded-2xl bg-[#24324A] text-white font-extrabold text-2xl flex items-center justify-center mx-auto mb-3 shadow-md">
-            BS
+          <div className="mb-3 flex justify-center items-center">
+            <Image
+              src={logoBilikHitam}
+              alt="Bilik Strategi Logo"
+              className="h-12 w-auto object-contain mx-auto"
+              priority
+            />
           </div>
           <h1 className="text-xl font-extrabold text-[#24324A] tracking-tight">Bilik Strategi Workspace</h1>
           <p className="text-xs text-[#737680] mt-1">Agency Operations & ClickUp Project Management Engine</p>
