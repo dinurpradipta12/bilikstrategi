@@ -438,16 +438,34 @@ export default function TeamWorkloadPage() {
           logs.forEach((log: any) => {
             const userName = log.user_name;
             const dayName = log.day_name;
-            if (userName && dayName) {
+            const dateStr = log.date; // YYYY-MM-DD
+
+            if (userName) {
               if (!recapMap[userName]) recapMap[userName] = {};
-              const existing = recapMap[userName][dayName] || { regular: 0, overtime: 0, status: 'HADIR' };
-              const reg = Math.max(Number(existing.regular || 0), Number(log.regular_hours || 0));
-              const ot = Math.max(Number(existing.overtime || 0), Number(log.overtime_hours || 0));
-              recapMap[userName][dayName] = {
-                regular: parseFloat(reg.toFixed(2)),
-                overtime: parseFloat(ot.toFixed(2)),
-                status: log.status || 'HADIR',
-              };
+
+              // Store by YYYY-MM-DD if present
+              if (dateStr) {
+                const existingD = recapMap[userName][dateStr] || { regular: 0, overtime: 0, status: 'HADIR' };
+                const regD = Math.max(Number(existingD.regular || 0), Number(log.regular_hours || 0));
+                const otD = Math.max(Number(existingD.overtime || 0), Number(log.overtime_hours || 0));
+                recapMap[userName][dateStr] = {
+                  regular: parseFloat(regD.toFixed(2)),
+                  overtime: parseFloat(otD.toFixed(2)),
+                  status: log.status || 'HADIR',
+                };
+              }
+
+              // Also store by dayName ("Sun", "Mon", etc.)
+              if (dayName) {
+                const existing = recapMap[userName][dayName] || { regular: 0, overtime: 0, status: 'HADIR' };
+                const reg = Math.max(Number(existing.regular || 0), Number(log.regular_hours || 0));
+                const ot = Math.max(Number(existing.overtime || 0), Number(log.overtime_hours || 0));
+                recapMap[userName][dayName] = {
+                  regular: parseFloat(reg.toFixed(2)),
+                  overtime: parseFloat(ot.toFixed(2)),
+                  status: log.status || 'HADIR',
+                };
+              }
             }
           });
         }
@@ -459,8 +477,38 @@ export default function TeamWorkloadPage() {
     setTimesheetRecap(recapMap);
   };
 
+  // Real-time Event Listeners & Auto-Sync for Instant Check-Out Log Updates
   useEffect(() => {
     loadTimesheetRecap();
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.onmessage = () => {
+          loadTimesheetRecap();
+        };
+      } catch {}
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === 'bilik_timesheet_recap' ||
+        e.key === 'bilik_active_attendance' ||
+        e.key === 'bilik_team_active_store'
+      ) {
+        loadTimesheetRecap();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    const interval = setInterval(loadTimesheetRecap, 2000);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
   }, [activeTab]);
 
   const fetchTeamWorkload = async () => {
@@ -1140,7 +1188,21 @@ export default function TeamWorkloadPage() {
                   </thead>
                   <tbody className="divide-y divide-[#E8E8EC]">
                     {members.map((m) => {
-                      const userRecap = timesheetRecap[m.full_name] || {};
+                      // Case-insensitive & email/name fuzzy lookup for user recap
+                      const mName = m.full_name.toLowerCase().trim();
+                      const mEmail = (m.email || '').toLowerCase().trim();
+
+                      const userRecap: Record<string, any> = {};
+
+                      Object.keys(timesheetRecap).forEach((key) => {
+                        const kLower = key.toLowerCase().trim();
+                        const matchName = kLower === mName || mName.includes(kLower) || kLower.includes(mName);
+                        const matchEmail = mEmail && (kLower.includes(mEmail.split('@')[0]) || mEmail.includes(kLower));
+
+                        if (matchName || matchEmail) {
+                          Object.assign(userRecap, timesheetRecap[key]);
+                        }
+                      });
 
                       const getDayCell = (dayInfo: { dayName: string; dateStr: string }) => {
                         const dayData = userRecap[dayInfo.dateStr] || userRecap[dayInfo.dayName];
