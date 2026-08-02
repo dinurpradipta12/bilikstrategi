@@ -154,11 +154,11 @@ export async function POST(req: NextRequest) {
     body = await req.json();
     const row = taskToRow(body);
 
-    const mutation = existing?.id
-      ? supabase.from('task_cache').update(row).eq('id', existing.id)
-      : supabase.from('task_cache').upsert(row, { onConflict: 'clickup_task_id' });
-
-    const { data, error } = await mutation.select('*').single();
+    const { data, error } = await supabase
+      .from('task_cache')
+      .upsert(row, { onConflict: 'clickup_task_id' })
+      .select('*')
+      .single();
 
     if (error) throw error;
 

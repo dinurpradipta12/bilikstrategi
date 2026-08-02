@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
 
+import SyncUpButton from '@/components/syncup/SyncUpButton';
+
 interface HeaderProps {
   onOpenCommandMenu: () => void;
   onOpenCreateTask: () => void;
@@ -115,6 +117,9 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
 
       {/* Right: Quick Create, Notifications, Profile */}
       <div className="flex items-center gap-3">
+        {/* Start SyncUp Voice/Video Call Button */}
+        <SyncUpButton variant="header" />
+
         {/* Quick Create Task */}
         <button
           onClick={onOpenCreateTask}

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
+import SyncUpButton from '@/components/syncup/SyncUpButton';
 
 import { supabase } from '@/lib/supabase/client';
 
@@ -557,6 +558,8 @@ export default function ProjectDetailPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <SyncUpButton variant="header" roomTitle={`SyncUp - ${currentProject.name}`} />
+
             <button
               onClick={() => setIsEditOverviewOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E8EC] text-xs font-semibold text-[#24324A] rounded-xl hover:bg-[#F7F7F8] transition-colors cursor-pointer"
@@ -775,7 +778,24 @@ export default function ProjectDetailPage() {
           ) : (
             <div className="divide-y divide-[#E8E8EC]">
               {realTasks.map((t: any) => (
-                <div key={t.id} className="py-3.5 flex items-center justify-between gap-4 hover:bg-[#F7F7F8] px-2 rounded-lg transition-colors">
+                <div
+                  key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setSelectedTask(t);
+                    setIsTaskDrawerOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedTask(t);
+                      setIsTaskDrawerOpen(true);
+                    }
+                  }}
+                  className="py-3.5 flex items-center justify-between gap-4 hover:bg-[#F7F7F8] focus:bg-[#F7F7F8] focus:outline-none focus:ring-2 focus:ring-[#24324A]/20 px-2 rounded-lg transition-colors cursor-pointer"
+                  title="Buka detail task"
+                >
                   <div className="space-y-0.5">
                     <h4 className="text-xs font-bold text-[#202124] flex items-center gap-2">
                       <span>{t.name || t.task_name}</span>
@@ -791,8 +811,14 @@ export default function ProjectDetailPage() {
                     }`}>
                       {t.status?.status || t.status || 'to do'}
                     </span>
-                    {t.url && (
-                      <a href={t.url} target="_blank" rel="noreferrer" className="text-[#F26B5E] hover:underline text-[11px] flex items-center gap-1">
+                    {(t.url || t.clickup_url) && (
+                      <a
+                        href={t.url || t.clickup_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        className="text-[#F26B5E] hover:underline text-[11px] flex items-center gap-1"
+                      >
                         <span>ClickUp</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>

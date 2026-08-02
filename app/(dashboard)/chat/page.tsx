@@ -6,6 +6,8 @@ import {
   MessageCircle, X, Reply, ChevronRight,
   User, Sparkles, Bell, AtSign, Check, CheckCheck,
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import SyncUpButton from '@/components/syncup/SyncUpButton';
 import { AgencyChatMessage } from '@/lib/mock/data';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -796,12 +798,16 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <button onClick={() => fetchActiveMessages(activeChannelId, true)}
-              className="ml-4 flex-shrink-0 px-3 py-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8] text-[11px]
-                text-[#737680] flex items-center gap-1.5 transition-colors cursor-pointer">
-              <RefreshCw className={`w-3 h-3 ${loadingMessages ? 'animate-spin' : ''}`} />
-              Sync
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <SyncUpButton variant="header" roomTitle={`SyncUp - ${activeChannel?.name || 'Chat Room'}`} />
+
+              <button onClick={() => fetchActiveMessages(activeChannelId, true)}
+                className="px-3 py-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8] text-[11px]
+                  text-[#737680] flex items-center gap-1.5 transition-colors cursor-pointer">
+                <RefreshCw className={`w-3 h-3 ${loadingMessages ? 'animate-spin' : ''}`} />
+                Sync
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
