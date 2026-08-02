@@ -942,7 +942,7 @@ export default function TeamWorkloadPage() {
                             <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
                             <div>
                               <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
-                              <span className="text-[10px] text-[#F26B5E] font-extrabold block truncate max-w-[150px]" title={m.custom_role || m.role}>
+                              <span className="text-[11px] text-[#737680] font-medium block truncate max-w-[150px]" title={m.custom_role || m.role}>
                                 {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
                               </span>
                             </div>
