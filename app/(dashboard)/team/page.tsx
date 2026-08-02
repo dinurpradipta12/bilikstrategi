@@ -244,16 +244,58 @@ export default function TeamWorkloadPage() {
     return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Load live attendance timesheet recap from localStorage
-  useEffect(() => {
+  // Load live attendance timesheet recap from localStorage & Supabase DB for cross-device sync
+  const loadTimesheetRecap = async () => {
+    const recapMap: Record<string, Record<string, any>> = {};
+
+    // 1. Load from local browser storage first for instant feedback
     const recapStr = localStorage.getItem('bilik_timesheet_recap');
     if (recapStr) {
       try {
-        setTimesheetRecap(JSON.parse(recapStr));
-      } catch {
-        setTimesheetRecap({});
-      }
+        const parsed = JSON.parse(recapStr);
+        Object.assign(recapMap, parsed);
+      } catch {}
     }
+
+    // 2. Fetch from Supabase attendance_logs table so all domains & devices stay in sync
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+      const res = await fetch(`${url}/rest/v1/attendance_logs?select=*`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        cache: 'no-store',
+      });
+
+      if (res.ok) {
+        const logs = await res.json();
+        if (Array.isArray(logs)) {
+          logs.forEach((log: any) => {
+            const userName = log.user_name;
+            const dayName = log.day_name;
+            if (userName && dayName) {
+              if (!recapMap[userName]) recapMap[userName] = {};
+              const existing = recapMap[userName][dayName] || { regular: 0, overtime: 0, status: 'HADIR' };
+              const reg = Math.max(Number(existing.regular || 0), Number(log.regular_hours || 0));
+              const ot = Math.max(Number(existing.overtime || 0), Number(log.overtime_hours || 0));
+              recapMap[userName][dayName] = {
+                regular: parseFloat(reg.toFixed(2)),
+                overtime: parseFloat(ot.toFixed(2)),
+                status: log.status || 'HADIR',
+              };
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[Timesheet] Supabase logs sync warning:', err);
+    }
+
+    setTimesheetRecap(recapMap);
+  };
+
+  useEffect(() => {
+    loadTimesheetRecap();
   }, [activeTab]);
 
   const fetchTeamWorkload = async () => {
