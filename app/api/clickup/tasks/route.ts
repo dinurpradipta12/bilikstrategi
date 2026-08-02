@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const body = await req.json();
     const { taskId, status, priority, name, description } = body;
 
@@ -150,7 +151,7 @@ export async function PUT(req: NextRequest) {
     if (name) updatePayload.name = name;
     if (description !== undefined) updatePayload.description = description;
 
-    const updatedTask = await updateTask(taskId, updatePayload);
+    const updatedTask = await updateTask(taskId, updatePayload, token);
     return NextResponse.json({ task: mapClickUpTaskToAgencyTask(updatedTask), raw: updatedTask });
   } catch (error: any) {
     return NextResponse.json(
@@ -162,6 +163,7 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const token = req.cookies.get('clickup_access_token')?.value || process.env.CLICKUP_API_KEY || process.env.CLICKUP_PERSONAL_TOKEN;
     const { searchParams } = new URL(req.url);
     const taskId = searchParams.get('taskId');
 
@@ -169,7 +171,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'taskId wajib diisi' }, { status: 400 });
     }
 
-    await deleteTask(taskId);
+    await deleteTask(taskId, token);
     return NextResponse.json({ success: true, taskId });
   } catch (error: any) {
     return NextResponse.json(

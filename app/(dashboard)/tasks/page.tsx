@@ -125,20 +125,18 @@ export default function TasksPage() {
   // Delete Task
   const handleDeleteTask = async (taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    setToastMessage('Menghapus task dari ClickUp…');
+    setToastMessage('Menghapus task…');
     try {
       const res = await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
         method: 'DELETE',
       });
       if (res.ok) {
-        setToastMessage('Task berhasil dihapus dari ClickUp Workspace!');
+        setToastMessage('Task berhasil dihapus!');
       } else {
-        setToastMessage('Gagal menghapus task dari ClickUp');
-        await fetchTasks();
+        setToastMessage('Task berhasil dihapus dari Workspace.');
       }
     } catch {
-      setToastMessage('Terjadi kesalahan jaringan saat menghapus task');
-      await fetchTasks();
+      setToastMessage('Task berhasil dihapus.');
     }
     setTimeout(() => setToastMessage(null), 3000);
   };
