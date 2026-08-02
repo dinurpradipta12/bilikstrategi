@@ -1204,8 +1204,35 @@ export default function TeamWorkloadPage() {
                         }
                       });
 
-                      const getDayCell = (dayInfo: { dayName: string; dateStr: string }) => {
-                        const dayData = userRecap[dayInfo.dateStr] || userRecap[dayInfo.dayName];
+                      const getDayCell = (dayInfo: { dateObj: Date; dayName: string; dateStr: string }) => {
+                        const todayObj = new Date();
+                        todayObj.setHours(23, 59, 59, 999);
+                        const isFutureDate = dayInfo.dateObj > todayObj;
+
+                        // Future dates CANNOT have past attendance recap or ALPHA status
+                        if (isFutureDate) {
+                          return <span className="text-[#737680] font-normal">0h</span>;
+                        }
+
+                        // Strictly lookup by YYYY-MM-DD dateStr first to prevent date bleeding
+                        let dayData = userRecap[dayInfo.dateStr];
+
+                        // If not found by dateStr, only fallback to dayName ("Fri") if dayInfo is in current week and <= today
+                        if (!dayData) {
+                          const now = new Date();
+                          const currentWeekSun = new Date(now);
+                          currentWeekSun.setDate(now.getDate() - now.getDay());
+                          currentWeekSun.setHours(0, 0, 0, 0);
+
+                          const currentWeekSat = new Date(currentWeekSun);
+                          currentWeekSat.setDate(currentWeekSat.getDate() + 6);
+                          currentWeekSat.setHours(23, 59, 59, 999);
+
+                          if (dayInfo.dateObj >= currentWeekSun && dayInfo.dateObj <= currentWeekSat) {
+                            dayData = userRecap[dayInfo.dayName];
+                          }
+                        }
+
                         if (!dayData) {
                           return <span className="text-[#737680] font-normal">0h</span>;
                         }
@@ -1240,17 +1267,22 @@ export default function TeamWorkloadPage() {
                         );
                       };
 
-                      // Compute totals across all days in the active period
+                      // Compute totals across days up to today
                       let totalReg = 0;
                       let totalOT = 0;
 
+                      const todayEnd = new Date();
+                      todayEnd.setHours(23, 59, 59, 999);
+
                       activeDays.forEach((d) => {
-                        const dayData = userRecap[d.dateStr] || userRecap[d.dayName];
-                        if (typeof dayData === 'number') {
-                          totalReg += dayData;
-                        } else if (dayData) {
-                          totalReg += dayData.regular || 0;
-                          totalOT += dayData.overtime || 0;
+                        if (d.dateObj <= todayEnd) {
+                          const dayData = userRecap[d.dateStr] || userRecap[d.dayName];
+                          if (typeof dayData === 'number') {
+                            totalReg += dayData;
+                          } else if (dayData) {
+                            totalReg += dayData.regular || 0;
+                            totalOT += dayData.overtime || 0;
+                          }
                         }
                       });
 
