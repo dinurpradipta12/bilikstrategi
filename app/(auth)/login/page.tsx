@@ -3,6 +3,21 @@
 import React, { useState } from 'react';
 import { Shield, CheckCircle2, ArrowRight, Users, Lock } from 'lucide-react';
 
+const ClickUpLogo = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Top Chevron */}
+    <path
+      d="M16 38L30 49L50 28L70 49L84 38L50 4L16 38Z"
+      fill="currentColor"
+    />
+    {/* Bottom Checkmark */}
+    <path
+      d="M16 66L30 55L50 75L84 18L98 29L50 100L16 66Z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
@@ -45,10 +60,9 @@ export default function LoginPage() {
               <span className="text-[10px] font-bold text-[#24324A]">Anda</span>
             </div>
             <ArrowRight className="w-4 h-4 text-[#737680]" />
-            <div className="flex items-center gap-2 px-3 py-2 bg-[#7B68EE]/10 rounded-lg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/clickup.png" alt="ClickUp" className="w-4 h-4 object-contain" />
-              <span className="text-[10px] font-bold text-[#7B68EE]">ClickUp Login</span>
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#7B68EE]/10 rounded-lg text-[#7B68EE]">
+              <ClickUpLogo size={16} />
+              <span className="text-[10px] font-bold">ClickUp Login</span>
             </div>
             <ArrowRight className="w-4 h-4 text-[#737680]" />
             <div className="flex items-center gap-2 px-3 py-2 bg-[#4F9D78]/10 rounded-lg">
@@ -64,12 +78,9 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full py-4 bg-[#7B68EE] hover:bg-[#6C5CE7] text-white font-extrabold text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 cursor-pointer group disabled:opacity-70"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/clickup.png"
-              alt="ClickUp Logo"
-              className="w-7 h-7 object-contain flex-shrink-0 group-hover:scale-105 transition-transform"
-            />
+            <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+              <ClickUpLogo size={20} className="text-white" />
+            </div>
             <span>{loading ? 'Mengarahkan ke ClickUp.com...' : 'Masuk dengan Akun ClickUp'}</span>
             <ArrowRight className="w-4 h-4 text-white opacity-80 group-hover:translate-x-0.5 transition-transform" />
           </button>
