@@ -97,9 +97,6 @@ export default function ContentPlanPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Modals
-  const [showAddModal, setShowAddModal] = useState(false);
-
   // Zoom & Viewport Size Controls
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [viewportHeight, setViewportHeight] = useState<'compact' | 'normal' | 'tall'>('normal');
@@ -116,12 +113,98 @@ export default function ContentPlanPage() {
     setZoomLevel(100);
   };
 
-  // Form State - Add Sheet
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingSheet, setEditingSheet] = useState<ContentSheetItem | null>(null);
+
+  // Form State - Add/Edit Sheet
   const [formClientName, setFormClientName] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formSheetUrl, setFormSheetUrl] = useState('');
   const [formPlatform, setFormPlatform] = useState('Instagram & TikTok');
   const [formLogoUrl, setFormLogoUrl] = useState('');
+
+  // Open Edit Modal for a Sheet
+  const handleOpenEditModal = (sheet: ContentSheetItem) => {
+    setEditingSheet(sheet);
+    setFormClientName(sheet.client_name);
+    setFormTitle(sheet.title);
+    setFormSheetUrl(sheet.sheet_url);
+    setFormPlatform(sheet.platform);
+    setFormLogoUrl(sheet.logo_url || '');
+  };
+
+  // Update existing sheet
+  const handleUpdateSheet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSheet || !formClientName.trim() || !formSheetUrl.trim()) return;
+
+    const embedUrl = convertToEmbedUrl(formSheetUrl.trim());
+    const logoUrlToUse = formLogoUrl.trim() || `https://ui-avatars.com/api/?name=${encodeURIComponent(formClientName.trim())}&background=FFF0ED&color=F26B5E&font-size=0.4`;
+
+    const updatedSheet: ContentSheetItem = {
+      ...editingSheet,
+      client_name: formClientName.trim(),
+      title: formTitle.trim() || `Content Plan ${formClientName.trim()}`,
+      sheet_url: formSheetUrl.trim(),
+      embed_url: embedUrl,
+      platform: formPlatform,
+      logo_url: logoUrlToUse,
+      updated_at: new Date().toISOString().split('T')[0],
+    };
+
+    const updatedList = sheets.map((s) => (s.id === editingSheet.id ? updatedSheet : s));
+    setSheets(updatedList);
+    localStorage.setItem('bilik_content_sheets', JSON.stringify(updatedList));
+
+    try {
+      await supabase
+        .from('content_plan_sheets')
+        .update({
+          client_name: updatedSheet.client_name,
+          title: updatedSheet.title,
+          sheet_url: updatedSheet.sheet_url,
+          embed_url: updatedSheet.embed_url,
+          platform: updatedSheet.platform,
+          logo_url: updatedSheet.logo_url,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingSheet.id);
+    } catch (err) {
+      console.warn('[ContentPlan] Supabase update error:', err);
+    }
+
+    setEditingSheet(null);
+    setFormClientName('');
+    setFormTitle('');
+    setFormSheetUrl('');
+    setFormLogoUrl('');
+    setToastMessage(`Content Plan "${updatedSheet.title}" berhasil diperbarui!`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Delete Sheet
+  const handleDeleteSheet = async (sheet: ContentSheetItem) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus link Content Plan "${sheet.title}" untuk klien ${sheet.client_name}?`)) {
+      return;
+    }
+
+    const remaining = sheets.filter((s) => s.id !== sheet.id);
+    setSheets(remaining);
+    if (selectedSheetId === sheet.id && remaining.length > 0) {
+      setSelectedSheetId(remaining[0].id);
+    }
+    localStorage.setItem('bilik_content_sheets', JSON.stringify(remaining));
+
+    try {
+      await supabase.from('content_plan_sheets').delete().eq('id', sheet.id);
+    } catch (err) {
+      console.warn('[ContentPlan] Supabase delete error:', err);
+    }
+
+    setToastMessage(`Link Content Plan "${sheet.title}" berhasil dihapus.`);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Handle Logo Upload File Conversion to Base64
   const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -482,6 +565,25 @@ export default function ContentPlanPage() {
                 <span>Buka di Sheets</span>
               </a>
 
+              {/* Edit & Delete Action Buttons */}
+              <button
+                onClick={() => handleOpenEditModal(currentSheet)}
+                className="px-3 py-1.5 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#EEF2F7] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Edit nama, judul, URL, atau logo sheet ini"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-[#24324A]" />
+                <span>Edit Link</span>
+              </button>
+
+              <button
+                onClick={() => handleDeleteSheet(currentSheet)}
+                className="px-3 py-1.5 bg-[#FFF0ED] border border-[#F26B5E]/30 text-[#F26B5E] hover:bg-[#F26B5E] hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Hapus tautan sheet ini dari workspace"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Link</span>
+              </button>
+
               <button
                 onClick={() => setIsFocusMode(true)}
                 className="px-4 py-1.5 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
@@ -723,6 +825,137 @@ export default function ContentPlanPage() {
                   <FileSpreadsheet className="w-3.5 h-3.5 text-[#F26B5E]" />
                   <span>Hubungkan Sheet</span>
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: EDIT GOOGLE SHEETS LINK - VIA PORTAL */}
+      {/* ========================================================================= */}
+      {editingSheet && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+            <button onClick={() => setEditingSheet(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-[#E8E8EC] pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center shadow-xs">
+                <Edit3 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Edit Tautan Google Sheets</h3>
+                <p className="text-xs text-[#737680]">Ubah rincian nama, judul, URL, atau logo sheet.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateSheet} className="space-y-3.5 text-xs">
+              {/* Upload Icon / Logo Klien */}
+              <div className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl space-y-2">
+                <label className="block font-bold text-[#24324A]">Upload / Ubah Logo Klien</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-white border border-[#E8E8EC] p-1 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs">
+                    {formLogoUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={formLogoUrl} alt="Logo Preview" className="w-full h-full object-contain rounded-lg" />
+                    ) : (
+                      <Building2 className="w-6 h-6 text-[#737680]" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoFileUpload}
+                      className="w-full text-[11px] text-[#737680] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-[#24324A] file:text-white hover:file:bg-[#1A2536] cursor-pointer"
+                    />
+                    <input
+                      type="url"
+                      placeholder="atau paste URL logo image (https://...)"
+                      value={formLogoUrl}
+                      onChange={(e) => setFormLogoUrl(e.target.value)}
+                      className="w-full p-2 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-medium outline-none focus:border-[#24324A]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Nama Klien / Brand *</label>
+                <input
+                  type="text"
+                  required
+                  value={formClientName}
+                  onChange={(e) => setFormClientName(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Judul Spreadsheet *</label>
+                <input
+                  type="text"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">URL Link Google Sheets *</label>
+                <input
+                  type="url"
+                  required
+                  value={formSheetUrl}
+                  onChange={(e) => setFormSheetUrl(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#24324A] mb-1">Kanal Platform</label>
+                <select
+                  value={formPlatform}
+                  onChange={(e) => setFormPlatform(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
+                >
+                  <option value="Instagram & TikTok">Instagram & TikTok</option>
+                  <option value="Instagram Reels">Instagram Reels</option>
+                  <option value="LinkedIn & Article">LinkedIn & Article</option>
+                  <option value="All Social Channels">All Social Channels</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSheet(editingSheet)}
+                  className="px-3 py-2 bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 hover:bg-[#F26B5E] hover:text-white rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Link</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSheet(null)}
+                    className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5 text-[#F26B5E]" />
+                    <span>Simpan Perubahan</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
