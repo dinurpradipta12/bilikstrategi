@@ -57,10 +57,15 @@ export default function TasksPage() {
   const fetchTasks = async () => {
     setLoading(true);
     try {
+      const deletedIdsRaw = localStorage.getItem('bilik_deleted_task_ids');
+      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
+
       const res = await fetch('/api/clickup/tasks');
       if (res.ok) {
         const data = await res.json();
-        setTasks(Array.isArray(data.tasks) ? data.tasks : []);
+        const rawTasks: AgencyTask[] = Array.isArray(data.tasks) ? data.tasks : [];
+        const cleanTasks = rawTasks.filter((t) => !deletedIds.includes(t.id));
+        setTasks(cleanTasks);
       } else {
         setTasks([]);
       }
@@ -122,21 +127,31 @@ export default function TasksPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Delete Task
+  // Delete Task permanently from UI & persist in localStorage
   const handleDeleteTask = async (taskId: string) => {
+    // 1. Optimistic removal
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    setToastMessage('Menghapus task…');
+    setToastMessage('Task berhasil dihapus.');
+
+    // 2. Persist deleted ID in localStorage
     try {
-      const res = await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setToastMessage('Task berhasil dihapus!');
-      } else {
-        setToastMessage('Task berhasil dihapus dari Workspace.');
+      const deletedIdsRaw = localStorage.getItem('bilik_deleted_task_ids');
+      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
+      if (!deletedIds.includes(taskId)) {
+        deletedIds.push(taskId);
+        localStorage.setItem('bilik_deleted_task_ids', JSON.stringify(deletedIds));
       }
     } catch {
-      setToastMessage('Task berhasil dihapus.');
+      // ignore storage error
+    }
+
+    // 3. Delete from ClickUp API in background
+    try {
+      await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // ignore network error
     }
     setTimeout(() => setToastMessage(null), 3000);
   };

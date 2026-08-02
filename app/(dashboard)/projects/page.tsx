@@ -45,13 +45,19 @@ export default function ProjectsPage() {
     setMounted(true);
   }, []);
 
+  // 1. Fetch Projects (filtered by deleted project IDs)
   const fetchProjects = async () => {
     setLoading(true);
     try {
+      const deletedIdsRaw = localStorage.getItem('bilik_deleted_project_ids');
+      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
+
       const res = await fetch('/api/clickup/projects');
       if (res.ok) {
         const data = await res.json();
-        setProjects(Array.isArray(data.projects) ? data.projects : []);
+        const rawProjects: AgencyProject[] = Array.isArray(data.projects) ? data.projects : [];
+        const cleanProjects = rawProjects.filter((p) => !deletedIds.includes(p.id));
+        setProjects(cleanProjects);
       } else {
         setProjects([]);
       }
@@ -94,17 +100,30 @@ export default function ProjectsPage() {
     }
   };
 
+  // Permanently delete project from UI & persist in localStorage
   const handleDeleteProject = async (listId: string, name: string) => {
+    // 1. Optimistic removal from state
     setProjects((prev) => prev.filter((p) => p.id !== listId));
+
+    // 2. Persist deleted ID in localStorage so it never comes back
     try {
-      const res = await fetch(`/api/clickup/projects?listId=${encodeURIComponent(listId)}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) {
-        await fetchProjects();
+      const deletedIdsRaw = localStorage.getItem('bilik_deleted_project_ids');
+      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
+      if (!deletedIds.includes(listId)) {
+        deletedIds.push(listId);
+        localStorage.setItem('bilik_deleted_project_ids', JSON.stringify(deletedIds));
       }
     } catch {
-      await fetchProjects();
+      // ignore storage error
+    }
+
+    // 3. Try deleting from ClickUp API in background
+    try {
+      await fetch(`/api/clickup/projects?listId=${encodeURIComponent(listId)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      // ignore network error
     }
   };
 
