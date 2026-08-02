@@ -46,6 +46,11 @@ export default function TeamWorkloadPage() {
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
 
+  // Active Sessions Live Ticker & Capacity State
+  const [activeSessions, setActiveSessions] = useState<Record<string, { checkInTimestamp: number; checkInTime: string; projectName?: string }>>({});
+  const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
+  const [capacities, setCapacities] = useState<Record<string, number>>({});
+
   // Check URL query string for ?tab=timesheet
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -55,7 +60,100 @@ export default function TeamWorkloadPage() {
         setActiveTab(tabParam as any);
       }
     }
+
+    const savedCap = localStorage.getItem('bilik_member_capacities');
+    if (savedCap) {
+      try { setCapacities(JSON.parse(savedCap)); } catch {}
+    }
   }, []);
+
+  // Sync live check-in sessions for real-time AKTIF ticker
+  const syncLiveSessions = async () => {
+    const sessionMap: Record<string, { checkInTimestamp: number; checkInTime: string; projectName?: string }> = {};
+
+    const myActiveStr = localStorage.getItem('bilik_active_attendance');
+    if (myActiveStr) {
+      try {
+        const parsed = JSON.parse(myActiveStr);
+        if (parsed.user_name && parsed.checkInTimestamp) {
+          sessionMap[parsed.user_name.toLowerCase().trim()] = {
+            checkInTimestamp: parsed.checkInTimestamp,
+            checkInTime: parsed.checkInTime || '',
+            projectName: parsed.selectedProject,
+          };
+        }
+      } catch {}
+    }
+
+    const teamStoreStr = localStorage.getItem('bilik_team_active_store');
+    if (teamStoreStr) {
+      try {
+        const parsed = JSON.parse(teamStoreStr);
+        Object.keys(parsed).forEach((key) => {
+          const item = parsed[key];
+          if (item && item.checkInTimestamp) {
+            sessionMap[key.toLowerCase().trim()] = {
+              checkInTimestamp: item.checkInTimestamp,
+              checkInTime: item.checkInTime || '',
+              projectName: item.selectedProject,
+            };
+          }
+        });
+      } catch {}
+    }
+
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+      const restRes = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        cache: 'no-store',
+      });
+      if (restRes.ok) {
+        const data = await restRes.json();
+        if (Array.isArray(data)) {
+          data.forEach((row: any) => {
+            if (row.user_name && row.check_in_timestamp) {
+              sessionMap[row.user_name.toLowerCase().trim()] = {
+                checkInTimestamp: Number(row.check_in_timestamp),
+                checkInTime: row.check_in_time || '',
+                projectName: row.selected_project,
+              };
+            }
+          });
+        }
+      }
+    } catch {}
+
+    setActiveSessions(sessionMap);
+  };
+
+  useEffect(() => {
+    syncLiveSessions();
+    const interval = setInterval(() => {
+      setNowTimestamp(Date.now());
+      syncLiveSessions();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getLiveOnlineTimeStr = (memberName: string) => {
+    const clean = memberName.toLowerCase().trim();
+    const sessionKey = Object.keys(activeSessions).find(
+      (k) => k === clean || clean.includes(k) || k.includes(clean)
+    );
+    if (!sessionKey || !activeSessions[sessionKey]) return null;
+
+    const startMs = activeSessions[sessionKey].checkInTimestamp;
+    const diffSec = Math.max(0, Math.floor((nowTimestamp - startMs) / 1000));
+
+    const hrs = Math.floor(diffSec / 3600);
+    const mins = Math.floor((diffSec % 3600) / 60);
+    const secs = diffSec % 60;
+
+    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   // Load live attendance timesheet recap from localStorage
   useEffect(() => {
@@ -119,6 +217,12 @@ export default function TeamWorkloadPage() {
 
       // 3. Map members with workload stats
       const now = new Date();
+      const savedCapsStr = localStorage.getItem('bilik_member_capacities');
+      let currentCaps: Record<string, number> = {};
+      if (savedCapsStr) {
+        try { currentCaps = JSON.parse(savedCapsStr); } catch {}
+      }
+
       const mappedMembers: TeamMemberWorkload[] = clickUpMembers.map((m: any) => {
         const memberName = m.username || (m.email ? m.email.split('@')[0] : 'Team Member');
         const assignedTasks = fetchedTasks.filter((t: any) =>
@@ -130,7 +234,7 @@ export default function TeamWorkloadPage() {
         const overdueTasks = activeTasks.filter((t: any) => new Date(t.due_date) < now);
 
         const hoursTracked = assignedTasks.reduce((acc: number, t: any) => acc + (t.time_tracked_hours || 4), 0);
-        const capacity = 40;
+        const capacity = currentCaps[String(m.id)] || currentCaps[memberName] || 40;
 
         let workloadStatus: 'low' | 'balanced' | 'high' | 'over_capacity' = 'balanced';
         if (hoursTracked > capacity || activeTasks.length > 8) workloadStatus = 'over_capacity';
@@ -185,12 +289,23 @@ export default function TeamWorkloadPage() {
 
   const isAdminOrOwner = currentUserRole === 'Owner' || currentUserRole === 'Admin';
 
-  const handleCapacityChange = (memberId: string, newCapacity: number) => {
+  const handleCapacityChange = (memberId: string, memberName: string, newCapacity: number) => {
     if (!isAdminOrOwner) return;
+
+    const savedCapsStr = localStorage.getItem('bilik_member_capacities');
+    let currentCaps: Record<string, number> = {};
+    if (savedCapsStr) {
+      try { currentCaps = JSON.parse(savedCapsStr); } catch {}
+    }
+
+    currentCaps[memberId] = newCapacity;
+    currentCaps[memberName] = newCapacity;
+    setCapacities(currentCaps);
+    localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
 
     setMembers((prev) =>
       prev.map((m) => {
-        if (m.id === memberId) {
+        if (m.id === memberId || m.full_name === memberName) {
           let workloadStatus = m.workload_status;
           if (m.hours_tracked > newCapacity) workloadStatus = 'over_capacity';
           return { ...m, capacity_hours: newCapacity, workload_status: workloadStatus };
@@ -369,7 +484,14 @@ export default function TeamWorkloadPage() {
                     <div className="grid grid-cols-3 gap-2 py-3 border-y border-[#E8E8EC] text-center text-xs">
                       <div>
                         <span className="text-[#737680] text-[10px] block uppercase font-semibold">Aktif</span>
-                        <span className="font-bold text-[#202124] text-sm">{user.assigned_tasks_count}</span>
+                        {getLiveOnlineTimeStr(user.full_name) ? (
+                          <span className="font-extrabold text-[#4F9D78] text-[10px] flex items-center justify-center gap-1 bg-[#4F9D78]/10 py-1 px-1 rounded-lg border border-[#4F9D78]/30 shadow-2xs mt-0.5" title="User sedang Check-In Online">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] animate-ping flex-shrink-0" />
+                            <span>Online ({getLiveOnlineTimeStr(user.full_name)})</span>
+                          </span>
+                        ) : (
+                          <span className="font-bold text-[#737680] text-sm block mt-0.5">0</span>
+                        )}
                       </div>
                       <div>
                         <span className="text-[#737680] text-[10px] block uppercase font-semibold">Overdue</span>
@@ -382,20 +504,31 @@ export default function TeamWorkloadPage() {
                     </div>
 
                     {/* Hours Tracked vs Capacity Progress */}
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between font-semibold">
-                        <span className="text-[#737680]">Jam Kerja Terpakai:</span>
-                        <span className="text-[#24324A]">{user.hours_tracked} jam / {user.capacity_hours} jam</span>
-                      </div>
-                      <div className="w-full bg-[#EEF2F7] h-2 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            user.hours_tracked > user.capacity_hours ? 'bg-[#D95858]' : 'bg-[#24324A]'
-                          }`}
-                          style={{ width: `${Math.min(100, (user.hours_tracked / user.capacity_hours) * 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
+                    {(() => {
+                      const userRecap = timesheetRecap[user.full_name] || {};
+                      let checkedInHours = 0;
+                      Object.values(userRecap).forEach((d: any) => {
+                        if (typeof d === 'number') checkedInHours += d;
+                        else if (d) checkedInHours += (d.regular || 0) + (d.overtime || 0);
+                      });
+                      const displayHours = parseFloat(checkedInHours.toFixed(2));
+                      return (
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex justify-between font-semibold">
+                            <span className="text-[#737680]">Jam Kerja Terpakai (Presensi):</span>
+                            <span className="text-[#24324A]">{displayHours} jam / {user.capacity_hours} jam</span>
+                          </div>
+                          <div className="w-full bg-[#EEF2F7] h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                displayHours > user.capacity_hours ? 'bg-[#D95858]' : 'bg-[#4F9D78]'
+                              }`}
+                              style={{ width: `${Math.min(100, (displayHours / user.capacity_hours) * 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Capacity Hours Setting (Restricted to Admin/Owner) */}
                     <div className="flex items-center justify-between text-xs pt-2">
@@ -405,7 +538,7 @@ export default function TeamWorkloadPage() {
                           <input
                             type="number"
                             value={user.capacity_hours}
-                            onChange={(e) => handleCapacityChange(user.id, parseInt(e.target.value) || 40)}
+                            onChange={(e) => handleCapacityChange(user.id, user.full_name, parseInt(e.target.value) || 40)}
                             className="w-16 px-2 py-1 border border-[#24324A] rounded text-center text-xs font-bold text-[#24324A] bg-[#FFFFFF] shadow-2xs"
                             title="Edit Kapasitas (Khusus Admin/Owner)"
                           />
