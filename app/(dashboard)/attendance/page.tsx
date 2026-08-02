@@ -63,12 +63,14 @@ export default function AttendancePage() {
     id: string;
     username: string;
     avatar: string;
+    email: string;
     role: 'Owner' | 'Admin' | 'Member';
   }>({
     id: 'user-1',
-    username: 'Dinur Pradipta',
-    avatar: 'https://ui-avatars.com/api/?name=Dinur+Pradipta&background=24324A&color=fff',
-    role: 'Owner',
+    username: 'User',
+    avatar: 'https://ui-avatars.com/api/?name=User&background=24324A&color=fff',
+    email: '',
+    role: 'Member', // Default to Member for safety
   });
 
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -113,23 +115,65 @@ export default function AttendancePage() {
   const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
   const [showAdminResetModal, setShowAdminResetModal] = useState<boolean>(false);
 
+  // Helper function to strictly check if user is Admin or Owner
+  const checkIsAdminOrOwner = (userEmail?: string, userName?: string, userRole?: string): boolean => {
+    const emailClean = (userEmail || '').toLowerCase().trim();
+    const nameClean = (userName || '').toLowerCase().trim();
+    const roleClean = (userRole || '').toLowerCase().trim();
+
+    // 1. Super Admin / Owner
+    if (emailClean.includes('dinurpradipta12@gmail.com') || nameClean === 'dinur pradipta' || roleClean === 'owner') {
+      return true;
+    }
+
+    // 2. Check if admin mode was enabled for this user in localStorage 'bilik_team_custom_info'
+    if (typeof window !== 'undefined') {
+      try {
+        const customStr = localStorage.getItem('bilik_team_custom_info');
+        if (customStr) {
+          const map = JSON.parse(customStr);
+          const matched = Object.entries(map).find(([k]: [string, any]) => {
+            const kClean = k.toLowerCase().trim();
+            return kClean === nameClean || (emailClean && kClean === emailClean);
+          });
+          if (matched && matched[1]) {
+            const info: any = matched[1];
+            if (info.is_admin || (info.role || '').toLowerCase().includes('admin') || (info.role || '').toLowerCase().includes('owner')) {
+              return true;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return roleClean === 'admin';
+  };
+
   // 1. Fetch User Profile, Projects, & Team Members on Mount
   useEffect(() => {
     async function loadUserAndData() {
       try {
+        let activeUsername = '';
+        let activeEmail = '';
+        let resolvedUserRole: 'Owner' | 'Admin' | 'Member' = 'Member';
+
         const userRes = await fetch('/api/clickup/user');
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
+            activeUsername = userData.user.username || '';
+            activeEmail = userData.user.email || '';
             const roleNum = userData.user.role;
-            const roleStr = roleNum === 1 ? 'Owner' : roleNum === 2 ? 'Admin' : 'Member';
+            resolvedUserRole = roleNum === 1 ? 'Owner' : roleNum === 2 ? 'Admin' : 'Member';
+
             setCurrentUser({
               id: String(userData.user.id),
-              username: userData.user.username,
+              username: activeUsername,
               avatar:
                 userData.user.profilePicture ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.user.username)}&background=24324A&color=fff`,
-              role: roleStr,
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(activeUsername || 'User')}&background=24324A&color=fff`,
+              email: activeEmail,
+              role: resolvedUserRole,
             });
           }
         }
@@ -144,7 +188,6 @@ export default function AttendancePage() {
 
         // Fetch ClickUp team members for Admin panel & Role resolution
         const teamRes = await fetch('/api/clickup/teams');
-        let resolvedUserRole: 'Owner' | 'Admin' | 'Member' = 'Owner';
 
         if (teamRes.ok) {
           const teamData = await teamRes.json();
@@ -153,15 +196,24 @@ export default function AttendancePage() {
           // Find current user in workspace members to resolve exact role
           const matchedMember = clickUpMembers.find((m: any) => {
             const mName = (m.username || '').toLowerCase().trim();
-            const uName = (currentUser.username || '').toLowerCase().trim();
-            return mName === uName || mName.includes(uName) || uName.includes(mName);
+            const uName = (activeUsername || '').toLowerCase().trim();
+            const mEmail = (m.email || '').toLowerCase().trim();
+            const uEmail = (activeEmail || '').toLowerCase().trim();
+            return (
+              (uName && (mName === uName || mName.includes(uName) || uName.includes(mName))) ||
+              (uEmail && mEmail === uEmail)
+            );
           });
 
           if (matchedMember) {
             resolvedUserRole = matchedMember.role === 1 ? 'Owner' : matchedMember.role === 2 ? 'Admin' : 'Member';
           }
 
-          // Real base active team list (defaults to offline unless real check-in performed)
+          // Check if admin mode was enabled in custom info
+          if (checkIsAdminOrOwner(activeEmail, activeUsername, resolvedUserRole)) {
+            resolvedUserRole = activeEmail.includes('dinurpradipta12') || activeUsername.toLowerCase() === 'dinur pradipta' ? 'Owner' : 'Admin';
+          }
+
           const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
             return {
               id: String(m.id),
@@ -181,7 +233,6 @@ export default function AttendancePage() {
 
           setTeamStatusList(baseTeam);
 
-          // Immediately sync live real-time status with Supabase for all team members
           setTimeout(() => {
             syncRealTimeTeamAttendance();
           }, 100);
@@ -879,7 +930,7 @@ export default function AttendancePage() {
 
   // Compute active team count
   const onlineCount = teamStatusList.filter((m) => m.isOnline).length;
-  const isAdminOrOwner = currentUser.role === 'Owner' || currentUser.role === 'Admin';
+  const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.username, currentUser.role);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12 relative">
@@ -955,25 +1006,17 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* Main Layout: Left Timer + Right Settings & Admin Live Team Panel */}
+      {/* Main Presensi Dashboard Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Giant Live Timer Card + Personal Settings (7 cols) */}
+        {/* Left: Clock & Check In/Out Card (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xs flex flex-col justify-between relative overflow-hidden min-h-[360px]">
-            {/* Top Status & Date */}
-            <div className="flex items-center justify-between">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xs relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
               <div className="flex items-center gap-2">
-                <span
-                  className={`w-3 h-3 rounded-full ${
-                    isCheckedIn ? 'bg-[#4F9D78] animate-ping' : 'bg-[#737680]'
-                  }`}
-                />
-                <span className="text-xs font-bold text-[#24324A]">
-                  {isCheckedIn ? 'Status: SEDANG BEKERJA (LIVE)' : 'Status: BELUM CHECK-IN'}
-                </span>
+                <Clock className="w-4 h-4 text-[#24324A]" />
+                <h3 className="text-sm font-extrabold text-[#24324A]">Waktu Kerja & Presensi Live</h3>
               </div>
-
-              <div className="flex items-center gap-1.5 text-xs text-[#737680] font-semibold bg-[#F7F7F8] px-3 py-1 rounded-lg border border-[#E8E8EC]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-[#737680]">
                 <Calendar className="w-3.5 h-3.5 text-[#24324A]" />
                 <span>{currentDateStr || 'Hari ini'}</span>
               </div>
@@ -1042,7 +1085,7 @@ export default function AttendancePage() {
                 className="w-10 h-10 rounded-full object-cover border-2 border-[#24324A]"
               />
               <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-bold text-[#24324A] truncate">{currentUser.username}</h4>
+                <h4 className="text-xs font-bold text-[#24324A] truncate">{currentUser.username || 'User'}</h4>
                 <p className="text-[10px] text-[#737680]">Bilik Strategi ({currentUser.role})</p>
               </div>
             </div>
@@ -1195,47 +1238,52 @@ export default function AttendancePage() {
         {/* Header & Tab Selector */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#E8E8EC] pb-4">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-[#F7F7F8] p-1 rounded-xl border border-[#E8E8EC]">
-              <button
-                type="button"
-                onClick={() => setHistoryTab('my-history')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  historyTab === 'my-history'
-                    ? 'bg-[#24324A] text-white shadow-xs'
-                    : 'text-[#737680] hover:text-[#24324A]'
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Riwayat Saya</span>
-              </button>
+            {isAdminOrOwner ? (
+              <div className="flex items-center gap-1.5 bg-[#F7F7F8] p-1 rounded-xl border border-[#E8E8EC]">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('my-history')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    historyTab === 'my-history'
+                      ? 'bg-[#24324A] text-white shadow-xs'
+                      : 'text-[#737680] hover:text-[#24324A]'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Riwayat Saya</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setHistoryTab('team-history');
-                  fetchAllUsersHistory();
-                }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  historyTab === 'team-history'
-                    ? 'bg-[#24324A] text-white shadow-xs'
-                    : 'text-[#737680] hover:text-[#24324A]'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5 text-[#F26B5E]" />
-                <span>Monitor History Tim (Semua User)</span>
-                {isAdminOrOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryTab('team-history');
+                    fetchAllUsersHistory();
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    historyTab === 'team-history'
+                      ? 'bg-[#24324A] text-white shadow-xs'
+                      : 'text-[#737680] hover:text-[#24324A]'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-[#F26B5E]" />
+                  <span>Monitor History Tim (Semua User)</span>
                   <span className="px-1.5 py-0.5 bg-[#4F9D78] text-white text-[9px] font-extrabold rounded-md">
                     Admin
                   </span>
-                )}
-              </button>
-            </div>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-[#24324A]" />
+                <h3 className="text-sm font-extrabold text-[#24324A]">Riwayat Presensi & Pengajuan Izin Saya</h3>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => handleExportCSV(historyTab === 'team-history' ? allUsersHistory : history)}
+              onClick={() => handleExportCSV(isAdminOrOwner && historyTab === 'team-history' ? allUsersHistory : history)}
               className="px-3 py-1.5 bg-white border border-[#E8E8EC] hover:bg-[#F7F7F8] text-[#24324A] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
               title="Download Data Presensi ke CSV/Excel"
             >
@@ -1256,13 +1304,13 @@ export default function AttendancePage() {
             )}
 
             <span className="text-xs font-bold text-[#737680] bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC]">
-              {historyTab === 'team-history' ? allUsersHistory.length : history.length} Entri
+              {isAdminOrOwner && historyTab === 'team-history' ? allUsersHistory.length : history.length} Entri
             </span>
           </div>
         </div>
 
-        {/* Filters bar for Team History Mode */}
-        {historyTab === 'team-history' && (
+        {/* Filters bar for Team History Mode (Admin Only) */}
+        {isAdminOrOwner && historyTab === 'team-history' && (
           <div className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
             <div className="flex flex-wrap items-center gap-2 flex-1">
               <div className="flex items-center gap-1.5 font-bold text-[#24324A]">
