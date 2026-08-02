@@ -232,45 +232,56 @@ export default function ProjectDetailPage() {
 
     loadProjectMeta();
 
-    // Load REAL Client Listing from ClickUp API & Custom Saved Clients (NO MOCK DATA)
+    // Load the same client list used by /clients, with local cache as a fallback.
     async function loadRealClients() {
       const map = new Map<string, any>();
 
-      // 1. Fetch real ClickUp projects / client groups
+      const addClient = (client: any) => {
+        const companyName = client.company_name || client.name;
+        if (!companyName) return;
+
+        map.set(companyName.toLowerCase(), {
+          id: client.id || companyName,
+          name: client.name || `PIC ${companyName}`,
+          company_name: companyName,
+          industry: client.industry || 'Digital Agency',
+          email: client.email || `contact@${companyName.toLowerCase().replace(/\s+/g, '')}.id`,
+        });
+      };
+
+      // 1. Fetch real Client Listing data from shared Supabase API.
       try {
-        const res = await fetch('/api/clickup/projects');
+        const res = await fetch('/api/supabase/clients', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data.projects)) {
-            data.projects.forEach((p: any, idx: number) => {
-              const cName = p.client_name || p.name;
-              if (cName && !map.has(cName.toLowerCase())) {
-                map.set(cName.toLowerCase(), {
-                  id: `c_cu_${p.id || idx}`,
-                  name: cName === 'Agency Client Group' ? 'Client Partner' : `PIC ${cName}`,
-                  company_name: cName,
-                  industry: 'Brand & Creative',
-                  email: `contact@${cName.toLowerCase().replace(/\s+/g, '')}.com`,
-                });
-              }
-            });
+          if (Array.isArray(data.clients)) {
+            data.clients.forEach(addClient);
           }
         }
       } catch {
         // ignore
       }
 
-      // 2. Merge custom clients created by user from localStorage
+      // 2. Fallback/merge cached client listing from browser storage.
+      const savedClientsStr = localStorage.getItem('bilik_agency_clients_db');
+      if (savedClientsStr) {
+        try {
+          const savedClients = JSON.parse(savedClientsStr);
+          if (Array.isArray(savedClients)) {
+            savedClients.forEach(addClient);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 3. Merge legacy custom clients created from older project modal versions.
       const savedCustomStr = localStorage.getItem('bilik_custom_clients');
       if (savedCustomStr) {
         try {
           const customList = JSON.parse(savedCustomStr);
           if (Array.isArray(customList)) {
-            customList.forEach((c) => {
-              if (c.company_name) {
-                map.set(c.company_name.toLowerCase(), c);
-              }
-            });
+            customList.forEach(addClient);
           }
         } catch {
           // ignore
@@ -280,7 +291,10 @@ export default function ProjectDetailPage() {
       const all = Array.from(map.values());
       setExistingClientsList(all);
       if (all.length > 0) {
-        setSelectedListingClientId(all[0].id || all[0].company_name);
+        const currentClient = all.find(
+          (client) => client.company_name?.toLowerCase() === meta.clientInfo.company_name.toLowerCase()
+        );
+        setSelectedListingClientId((currentClient || all[0]).id || (currentClient || all[0]).company_name);
       }
     }
     loadRealClients();
@@ -1724,7 +1738,7 @@ export default function ProjectDetailPage() {
                       // Save meta to project
                       updateMeta(meta);
 
-                      // If manual mode, automatically push to Client Listing (localStorage)
+                      // If manual mode, automatically push to Client Listing.
                       if (clientMode === 'manual' && meta.clientInfo.company_name) {
                         const newCustomClient = {
                           id: 'c_custom_' + Date.now(),
@@ -1752,6 +1766,30 @@ export default function ProjectDetailPage() {
                         }
                         if (!customList.some((c: any) => c.company_name.toLowerCase() === meta.clientInfo.company_name.toLowerCase())) {
                           localStorage.setItem('bilik_custom_clients', JSON.stringify([newCustomClient, ...customList]));
+
+                          const savedClientsStr = localStorage.getItem('bilik_agency_clients_db');
+                          let savedClients = [];
+                          if (savedClientsStr) {
+                            try { savedClients = JSON.parse(savedClientsStr); } catch {}
+                          }
+                          const mergedClients = [
+                            newCustomClient,
+                            ...savedClients.filter((c: any) => c.company_name?.toLowerCase() !== newCustomClient.company_name.toLowerCase()),
+                          ];
+                          localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mergedClients));
+                          setExistingClientsList((prev) => [
+                            newCustomClient,
+                            ...prev.filter((c) => c.company_name.toLowerCase() !== newCustomClient.company_name.toLowerCase()),
+                          ]);
+                          setSelectedListingClientId(newCustomClient.id);
+
+                          fetch('/api/supabase/clients', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newCustomClient),
+                          }).catch((err) => {
+                            console.warn('[ProjectDetail] Could not sync manual client to Client Listing:', err);
+                          });
                         }
                       }
 
