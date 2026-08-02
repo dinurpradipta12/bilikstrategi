@@ -208,8 +208,6 @@ export default function ProjectsPage() {
         name: newProjectName.trim(),
         description: newProjectDesc.trim(),
         status: 'in_progress',
-        client_name: 'Bilik Strategi Workspace',
-        progress: 0,
       }]);
 
       await fetch('/api/supabase/projects', {

@@ -35,6 +35,8 @@ import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ACTIVITY_LOGS
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
+import { supabase } from '@/lib/supabase/client';
+
 type ProjectTab = 'overview' | 'tasks' | 'timeline' | 'team' | 'files' | 'activity' | 'feedback';
 
 interface Milestone {
@@ -321,46 +323,88 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // Fetch ClickUp projects & tasks
+  // Fetch Supabase projects, ClickUp projects & tasks
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      let foundProject: any = null;
+
+      // 1. Try fetching from Supabase DB
       try {
-        const res = await fetch('/api/clickup/projects');
-        if (res.ok) {
-          const data = await res.json();
-          const found = data.projects?.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
-          if (found) {
-            setRealProject(found);
-            if (found.description && found.description !== 'Project di ClickUp Workspace') {
-              setMeta((prev) => ({ ...prev, description: found.description }));
-            }
-          } else {
-            // fallback mock match
-            const mock = MOCK_PROJECTS.find((p) => p.id === projectId);
-            if (mock) {
-              setRealProject(mock);
-            } else {
-              setRealProject({
-                id: projectId,
-                clickup_list_id: projectId,
-                name: 'Project ClickUp #' + projectId,
-                description: 'Project di ClickUp Workspace',
-                client_name: 'Internal Agency',
-                status: 'planning',
-                start_date: new Date().toISOString().split('T')[0],
-                due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-                progress_percentage: 0,
-                total_tasks: 0,
-                completed_tasks: 0,
-                overdue_tasks: 0,
-                team_lead_name: 'Agency Lead',
-              });
+        const { data: supaData } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectId)
+          .single();
+
+        if (supaData) {
+          foundProject = {
+            id: String(supaData.id),
+            clickup_list_id: String(supaData.id),
+            name: supaData.name || 'Project',
+            description: supaData.description || 'Project Bilik Strategi',
+            client_name: supaData.client_name || 'Bilik Strategi Workspace',
+            status: supaData.status || 'in_progress',
+            start_date: supaData.start_date || new Date().toISOString().split('T')[0],
+            due_date: supaData.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+            progress_percentage: supaData.progress || 0,
+            total_tasks: 0,
+            completed_tasks: 0,
+            overdue_tasks: 0,
+            team_lead_name: 'Dinur Pradipta',
+          };
+        }
+      } catch {}
+
+      // 2. Try fetching from shared server API
+      if (!foundProject) {
+        try {
+          const apiRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (Array.isArray(apiJson.projects)) {
+              foundProject = apiJson.projects.find((p: any) => p.id === projectId);
             }
           }
-        }
+        } catch {}
+      }
 
-        // Fetch tasks
+      // 3. Try fetching from ClickUp API
+      if (!foundProject) {
+        try {
+          const res = await fetch('/api/clickup/projects');
+          if (res.ok) {
+            const data = await res.json();
+            foundProject = data.projects?.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
+          }
+        } catch {}
+      }
+
+      if (foundProject) {
+        setRealProject(foundProject);
+        if (foundProject.description && foundProject.description !== 'Project di ClickUp Workspace') {
+          setMeta((prev) => ({ ...prev, description: foundProject.description }));
+        }
+      } else {
+        const mock = MOCK_PROJECTS.find((p) => p.id === projectId);
+        setRealProject(mock || {
+          id: projectId,
+          clickup_list_id: projectId,
+          name: 'Project ' + projectId,
+          description: meta.description,
+          client_name: meta.clientInfo.company_name,
+          start_date: new Date().toISOString().split('T')[0],
+          due_date: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          progress_percentage: 0,
+          total_tasks: 0,
+          completed_tasks: 0,
+          overdue_tasks: 0,
+          team_lead_name: 'Dinur Pradipta',
+        });
+      }
+
+      // Fetch tasks
+      try {
         const taskRes = await fetch(`/api/clickup/tasks?listId=${projectId}`);
         if (taskRes.ok) {
           const taskData = await taskRes.json();
@@ -368,14 +412,9 @@ export default function ProjectDetailPage() {
             setRealTasks(taskData.tasks);
           }
         }
-      } catch {
-        // fallback
-        const mock = MOCK_PROJECTS.find((p) => p.id === projectId) || MOCK_PROJECTS[0];
-        setRealProject(mock);
-        setRealTasks(MOCK_TASKS.filter((t) => t.project_id === mock.id));
-      } finally {
-        setLoading(false);
-      }
+      } catch {}
+
+      setLoading(false);
     }
 
     if (projectId) {
