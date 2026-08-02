@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { MOCK_USERS } from '@/lib/mock/data';
 
@@ -132,6 +133,7 @@ export default function Sidebar() {
     { name: 'Presensi Live', href: '/attendance', icon: Clock },
     { name: 'Client Listing', href: '/clients', icon: Building2 },
     { name: 'Asset Management', href: '/assets', icon: FolderArchive },
+    { name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
     { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
     { name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { name: 'Activity Log', href: '/activity-logs', icon: History },
