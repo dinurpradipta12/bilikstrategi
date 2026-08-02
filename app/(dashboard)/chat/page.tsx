@@ -71,16 +71,8 @@ function renderMentionedText(text: string, members: Array<{ username: string }> 
   if (!text || !text.includes('@')) return text;
 
   const memberNames = members.map((m) => m.username).filter(Boolean);
-  const defaultNames = [
-    'Dinur Pradipta',
-    'Syaiful Akhsin',
-    'Doni Setiawan',
-    'Amalia Fitriani',
-    'Mohammad Nuris Bayu Samodro',
-    'Mohammad Nuris',
-    'Mei Indraningrum',
-  ];
-  const allNames = Array.from(new Set([...memberNames, ...defaultNames])).sort((a, b) => b.length - a.length);
+  const allNames = Array.from(new Set(memberNames)).sort((a, b) => b.length - a.length);
+  if (allNames.length === 0) return text;
 
   const escaped = allNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const regex = new RegExp(`(@(?:${escaped}))`, 'gi');

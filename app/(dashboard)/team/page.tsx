@@ -647,8 +647,8 @@ export default function TeamWorkloadPage() {
 
       // Fetch authenticated user profile & resolve exact workspace role
       const savedUserStr = localStorage.getItem('bilik_current_user');
-      let loggedInEmail = 'contact.dinurpradipta@gmail.com';
-      let loggedInName = 'Dinur mp';
+      let loggedInEmail = '';
+      let loggedInName = 'Bilik Strategi';
       if (savedUserStr) {
         try {
           const u = JSON.parse(savedUserStr);

@@ -11,7 +11,7 @@ import {
   CheckSquare,
   RefreshCw,
 } from 'lucide-react';
-import { MOCK_TASKS, MOCK_PROJECTS, AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
 export default function MyTasksPage() {

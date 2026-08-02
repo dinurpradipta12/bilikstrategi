@@ -615,8 +615,6 @@ export default function ProjectsPage() {
                         {c.company_name || c.name}
                       </option>
                     ))}
-                    <option value="Ruang Sosmed">Ruang Sosmed</option>
-                    <option value="Nusantara Retail Group">Nusantara Retail Group</option>
                   </select>
                 </div>
 
@@ -643,10 +641,7 @@ export default function ProjectsPage() {
                     onChange={(e) => setNewTeamLeadName(e.target.value)}
                     className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white font-semibold"
                   >
-                    <option value="Dinur Pradipta">Dinur Pradipta (Owner)</option>
-                    <option value="Dinur mp">Dinur mp (Member)</option>
-                    <option value="Syaiful Akhsin">Syaiful Akhsin (Senior Designer)</option>
-                    <option value="Bagus Setiawan">Bagus Setiawan (Social Media Specialist)</option>
+                    <option value="Dinur Pradipta">Dinur Pradipta</option>
                   </select>
                 </div>
 

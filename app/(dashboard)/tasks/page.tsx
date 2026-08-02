@@ -16,7 +16,7 @@ import {
   CheckCircle2,
   RefreshCw,
 } from 'lucide-react';
-import { MOCK_TASKS, MOCK_PROJECTS, MOCK_USERS, AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
 import { X, Trash2 } from 'lucide-react';
@@ -198,6 +198,14 @@ export default function TasksPage() {
     return matchesSearch && matchesStatus && matchesPriority && matchesProject;
   });
 
+  const projectOptions = Array.from(
+    new Map(
+      tasks
+        .filter((task) => task.project_id && task.project_name)
+        .map((task) => [task.project_id, task.project_name])
+    ).entries()
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Toast Notification */}
@@ -319,8 +327,8 @@ export default function TasksPage() {
             className="px-3 py-1.5 text-xs font-semibold border border-[#E8E8EC] rounded-lg bg-[#FFFFFF] text-[#24324A]"
           >
             <option value="all">Semua Project</option>
-            {MOCK_PROJECTS.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+            {projectOptions.map(([projectId, projectName]) => (
+              <option key={projectId} value={projectId}>{projectName}</option>
             ))}
           </select>
         </div>

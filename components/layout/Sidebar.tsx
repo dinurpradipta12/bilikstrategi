@@ -23,15 +23,14 @@ import {
   ShieldCheck,
   FileSpreadsheet,
 } from 'lucide-react';
-import { MOCK_USERS } from '@/lib/mock/data';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [userProfile, setUserProfile] = useState({
-    name: MOCK_USERS[0].full_name,
+    name: 'Bilik Strategi',
     role: 'owner',
-    avatar: MOCK_USERS[0].avatar_url,
+    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
 
   const [chatUnread, setChatUnread] = useState<number>(0);

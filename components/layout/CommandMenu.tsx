@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Search, PlusCircle, CheckSquare, Briefcase, Users, MessageSquare, Settings, X, ArrowRight } from 'lucide-react';
-import { MOCK_PROJECTS, MOCK_TASKS, MOCK_CLIENTS } from '@/lib/mock/data';
 
 interface CommandMenuProps {
   isOpen: boolean;
@@ -16,10 +15,54 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    async function loadSearchData() {
+      try {
+        const [tasksRes, projectsRes, clientsRes] = await Promise.all([
+          fetch('/api/clickup/tasks', { cache: 'no-store' }).catch(() => null),
+          fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
+          fetch('/api/supabase/clients', { cache: 'no-store' }).catch(() => null),
+        ]);
+
+        if (tasksRes?.ok) {
+          const data = await tasksRes.json();
+          setTasks(Array.isArray(data.tasks) ? data.tasks : []);
+        } else {
+          setTasks([]);
+        }
+
+        if (projectsRes?.ok) {
+          const data = await projectsRes.json();
+          setProjects(Array.isArray(data.projects) ? data.projects : []);
+        } else {
+          setProjects([]);
+        }
+
+        if (clientsRes?.ok) {
+          const data = await clientsRes.json();
+          setClients(Array.isArray(data.clients) ? data.clients : []);
+        } else {
+          setClients([]);
+        }
+      } catch {
+        setTasks([]);
+        setProjects([]);
+        setClients([]);
+      }
+    }
+
+    loadSearchData();
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -41,9 +84,10 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
 
   if (!isOpen || !mounted) return null;
 
-  const filteredTasks = MOCK_TASKS.filter(t => t.task_name.toLowerCase().includes(query.toLowerCase()));
-  const filteredProjects = MOCK_PROJECTS.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
-  const filteredClients = MOCK_CLIENTS.filter(c => c.company_name.toLowerCase().includes(query.toLowerCase()));
+  const normalizedQuery = query.toLowerCase();
+  const filteredTasks = tasks.filter((t) => (t.task_name || t.name || '').toLowerCase().includes(normalizedQuery));
+  const filteredProjects = projects.filter((p) => (p.name || '').toLowerCase().includes(normalizedQuery));
+  const filteredClients = clients.filter((c) => (c.company_name || c.name || '').toLowerCase().includes(normalizedQuery));
 
   const handleNavigate = (path: string) => {
     router.push(path);
@@ -133,8 +177,8 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                       className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] text-left"
                     >
                       <CheckSquare className="w-4 h-4 text-[#4F9D78] mr-3 flex-shrink-0" />
-                      <span className="truncate text-[#202124]">{t.task_name}</span>
-                      <span className="ml-auto text-xs px-2 py-0.5 bg-[#EEF2F7] rounded text-[#24324A] uppercase">{t.status}</span>
+                      <span className="truncate text-[#202124]">{t.task_name || t.name}</span>
+                      <span className="ml-auto text-xs px-2 py-0.5 bg-[#EEF2F7] rounded text-[#24324A] uppercase">{t.status || 'to do'}</span>
                     </button>
                   ))}
                 </div>
@@ -151,7 +195,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                     >
                       <Briefcase className="w-4 h-4 text-[#24324A] mr-3 flex-shrink-0" />
                       <span className="truncate font-medium">{p.name}</span>
-                      <span className="ml-auto text-xs text-[#737680]">{p.client_name}</span>
+                      <span className="ml-auto text-xs text-[#737680]">{p.client_name || p.status || ''}</span>
                     </button>
                   ))}
                 </div>
@@ -167,8 +211,8 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                       className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] text-left"
                     >
                       <Users className="w-4 h-4 text-[#F26B5E] mr-3 flex-shrink-0" />
-                      <span className="truncate font-medium">{c.company_name}</span>
-                      <span className="ml-auto text-xs text-[#737680]">{c.industry}</span>
+                      <span className="truncate font-medium">{c.company_name || c.name}</span>
+                      <span className="ml-auto text-xs text-[#737680]">{c.industry || ''}</span>
                     </button>
                   ))}
                 </div>

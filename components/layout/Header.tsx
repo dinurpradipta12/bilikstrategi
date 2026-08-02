@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Bell, ChevronDown, Sparkles, LogOut, Settings } from 'lucide-react';
-import { MOCK_USERS, MOCK_NOTIFICATIONS } from '@/lib/mock/data';
+import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -14,20 +13,19 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [userProfile, setUserProfile] = useState({
-    name: MOCK_USERS[0].full_name,
-    email: MOCK_USERS[0].email,
+    name: 'Bilik Strategi',
+    email: '',
     role: 'owner',
-    avatar: MOCK_USERS[0].avatar_url,
+    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
 
-  const isMock = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
-  const unreadNotifications = MOCK_NOTIFICATIONS.filter((n) => !n.is_read);
+  const unreadNotifications: any[] = [];
 
   useEffect(() => {
     async function loadClickUpProfile() {
-      let currentEmail = MOCK_USERS[0].email;
-      let currentName = MOCK_USERS[0].full_name;
-      let currentAvatar = MOCK_USERS[0].avatar_url;
+      let currentEmail = '';
+      let currentName = 'Bilik Strategi';
+      let currentAvatar = '';
 
       const savedUserStr = localStorage.getItem('bilik_current_user');
       if (savedUserStr) {
@@ -113,13 +111,6 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
           </kbd>
         </button>
 
-        {/* Demo Mode Badge */}
-        {isMock && (
-          <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF0ED] text-[#F26B5E] text-[11px] font-semibold rounded-md border border-[#F26B5E]/20 animate-pulse">
-            <Sparkles className="w-3.5 h-3.5" />
-            Demo Mode Active
-          </span>
-        )}
       </div>
 
       {/* Right: Quick Create, Notifications, Profile */}
@@ -156,13 +147,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
                 </Link>
               </div>
               <div className="divide-y divide-[#E8E8EC] max-h-60 overflow-y-auto">
-                {MOCK_NOTIFICATIONS.map((n) => (
-                  <div key={n.id} className="py-2 hover:bg-[#F7F7F8] px-1 rounded transition-colors">
-                    <p className="font-semibold text-[#202124] truncate">{n.title}</p>
-                    <p className="text-[#737680] text-[11px] line-clamp-2 mt-0.5">{n.message}</p>
-                    <span className="text-[10px] text-[#737680] mt-1 block">30 menit yang lalu</span>
-                  </div>
-                ))}
+                <div className="py-6 text-center text-[#737680]">Belum ada notifikasi.</div>
               </div>
             </div>
           )}

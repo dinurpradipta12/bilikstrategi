@@ -58,10 +58,10 @@ export default function DashboardPage() {
 
   // Currently Logged-in User State (Personal View)
   const [currentUser, setCurrentUser] = useState({
-    username: 'Dinur mp',
-    email: 'contact.dinurpradipta@gmail.com',
+    username: 'Bilik Strategi',
+    email: '',
     role: 'Member',
-    avatar: 'https://ui-avatars.com/api/?name=Dinur+mp&background=24324A&color=fff',
+    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
 
   const checkIsAdminOrOwner = (userEmail: string, userName: string, defaultRole: string) => {
@@ -287,8 +287,8 @@ export default function DashboardPage() {
         const role = isSuperOwner ? 'Owner / Workspace Admin' : (u.role || 'Member');
 
         setCurrentUser({
-          username: u.username || (isSuperOwner ? 'Dinur Pradipta' : 'Dinur mp'),
-          email: u.email || (isSuperOwner ? 'snllabsarchive@gmail.com' : 'contact.dinurpradipta@gmail.com'),
+          username: u.username || (isSuperOwner ? 'Dinur Pradipta' : 'Bilik Strategi'),
+          email: u.email || (isSuperOwner ? 'snllabsarchive@gmail.com' : ''),
           role: role,
           avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username || 'User')}&background=24324A&color=fff`,
         });

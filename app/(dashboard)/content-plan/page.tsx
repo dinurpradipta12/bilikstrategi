@@ -725,7 +725,7 @@ export default function ContentPlanPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: PT Nusantara Retail"
+                  placeholder="Masukkan nama klien atau brand"
                   value={formClientName}
                   onChange={(e) => setFormClientName(e.target.value)}
                   className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"

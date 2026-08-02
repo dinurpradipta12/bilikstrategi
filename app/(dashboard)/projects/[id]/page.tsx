@@ -31,7 +31,6 @@ import {
   Star,
   Building2,
 } from 'lucide-react';
-import { MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ACTIVITY_LOGS } from '@/lib/mock/data';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 
@@ -131,59 +130,17 @@ export default function ProjectDetailPage() {
   // Project Meta persistent state
   const [meta, setMeta] = useState<ProjectMeta>({
     description: 'Deskripsi deliverable & scope pekerjaan project ini belum diatur. Gunakan tombol Edit untuk memperbarui.',
-    milestones: [
-      { id: 'm1', name: 'Kickoff Meeting & Brief Approval', date: '2026-08-05', start_date: '2026-08-01', due_date: '2026-08-05', status: 'completed' },
-      { id: 'm2', name: 'Konsep Visual & Key Visual Approval', date: '2026-08-12', start_date: '2026-08-06', due_date: '2026-08-12', status: 'completed' },
-      { id: 'm3', name: 'Produksi Asset 3D & Deliverables', date: '2026-08-24', start_date: '2026-08-13', due_date: '2026-08-24', status: 'in_progress' },
-      { id: 'm4', name: 'Final Launch & Handover Ke Klien', date: '2026-08-31', start_date: '2026-08-25', due_date: '2026-08-31', status: 'pending' },
-    ],
+    milestones: [],
     clientInfo: {
-      name: 'Client Partner',
-      company_name: 'Agency Client Group',
-      industry: 'Brand & Creative',
-      email: 'contact@clientcompany.com',
+      name: '',
+      company_name: '',
+      industry: '',
+      email: '',
     },
-    teamMembers: [
-      { id: 'u1', name: 'Dinur Pradipta', role: 'Project Lead', email: 'dinur@bilikstrategi.id', avatar_url: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg' },
-      { id: 'u2', name: 'Dinur mp', role: 'Member', email: 'contact.dinurpradipta@gmail.com', avatar_url: 'https://ui-avatars.com/api/?name=Dinur%20mp&background=24324A&color=F26B5E&font-size=0.4&bold=true' },
-      { id: 'u3', name: 'Syaiful Akhsin', role: 'Senior Designer', email: 'syaiful@bilikstrategi.id', avatar_url: 'https://ui-avatars.com/api/?name=Syaiful%20Akhsin&background=24324A&color=F26B5E&font-size=0.4&bold=true' },
-    ],
-    files: [
-      { id: 'f1', name: 'Brief_Project_Scope_v1.pdf', url: 'https://app.clickup.com', type: 'PDF Document', added_at: '2026-07-10' },
-      { id: 'f2', name: 'Key_Visual_Design_Asset.figma', url: 'https://figma.com', type: 'Figma Design', added_at: '2026-07-18' },
-    ],
-    feedback: [
-      { id: 'fb1', author: 'Budi Santoso', company: 'Nusantara Retail Group', comment: 'Desain visual awal sangat menarik! Ditunggu hasil render 3D berikutnya.', date: '2026-07-20', rating: 5 },
-    ],
-    activityLogs: [
-      {
-        id: 'act-1',
-        user_name: 'Dinur Pradipta',
-        user_avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
-        action: 'BUAT TASK',
-        entity_name: 'contoh task dulu edit 2',
-        details: 'Membuat task baru di ClickUp List',
-        timestamp: '2026-08-02T00:15:00Z',
-      },
-      {
-        id: 'act-2',
-        user_name: 'Dinur mp',
-        user_avatar: 'https://ui-avatars.com/api/?name=Dinur%20mp&background=24324A&color=F26B5E&font-size=0.4&bold=true',
-        action: 'SELESAIKAN MILESTONE',
-        entity_name: 'Kickoff Meeting & Brief Approval',
-        details: 'Mengubah status milestone menjadi Selesai (100%)',
-        timestamp: '2026-08-01T14:30:00Z',
-      },
-      {
-        id: 'act-3',
-        user_name: 'Syaiful Akhsin',
-        user_avatar: 'https://ui-avatars.com/api/?name=Syaiful%20Akhsin&background=24324A&color=F26B5E&font-size=0.4&bold=true',
-        action: 'TAMBAH SUBTASK',
-        entity_name: 'Penyusunan referensi visual moodboard',
-        details: 'Menambahkan subtask baru ke ClickUp Task',
-        timestamp: '2026-07-31T10:00:00Z',
-      },
-    ],
+    teamMembers: [],
+    files: [],
+    feedback: [],
+    activityLogs: [],
   });
 
   interface ClickUpMember {
@@ -458,8 +415,7 @@ export default function ProjectDetailPage() {
           setMeta((prev) => ({ ...prev, description: foundProject.description }));
         }
       } else {
-        const mock = MOCK_PROJECTS.find((p) => p.id === projectId);
-        setRealProject(mock || {
+        setRealProject({
           id: projectId,
           clickup_list_id: projectId,
           name: 'Project ' + projectId,
