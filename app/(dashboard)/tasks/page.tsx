@@ -382,10 +382,10 @@ export default function TasksPage() {
                         onChange={(e) => handlePriorityChange(t.id, e.target.value as any)}
                         className="px-2 py-0.5 text-[10px] font-bold rounded uppercase bg-[#F7F7F8] border border-[#E8E8EC]"
                       >
-                        <option value="urgent">Urgent 🔴</option>
-                        <option value="high">High 🟠</option>
-                        <option value="normal">Normal 🔵</option>
-                        <option value="low">Low ⚪</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="high">High</option>
+                        <option value="normal">Normal</option>
+                        <option value="low">Low</option>
                       </select>
                     </td>
                     <td className="py-3.5 px-4">
@@ -514,10 +514,10 @@ export default function TasksPage() {
                   onChange={(e) => setNewTaskPriority(e.target.value as any)}
                   className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white"
                 >
-                  <option value="urgent">🔴 Urgent</option>
-                  <option value="high">🟠 High</option>
-                  <option value="normal">🔵 Normal</option>
-                  <option value="low">⚪ Low</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
                 </select>
               </div>
 

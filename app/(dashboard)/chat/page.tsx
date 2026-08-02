@@ -725,7 +725,7 @@ export default function ChatPage() {
             {dmChannels.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 px-3 mb-1.5">
-                  <p className="text-[9px] font-extrabold text-[#737680] uppercase tracking-widest whitespace-nowrap">👤 Direct Messages</p>
+                  <p className="text-[9px] font-extrabold text-[#737680] uppercase tracking-widest whitespace-nowrap">Direct Messages</p>
                   <div className="flex-1 h-px bg-[#E8E8EC]" />
                 </div>
                 <div className="space-y-0.5">

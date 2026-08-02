@@ -582,12 +582,12 @@ export default function AssetManagementPage() {
         {/* Category Filter Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
           {[
-            { id: 'all', label: '📁 Semua Asset' },
-            { id: 'ratecard', label: '📊 Rate Card & Pricing' },
-            { id: 'brand_guideline', label: '🎨 Brand Guidelines' },
-            { id: 'proposal', label: '📽️ Proposal & Pitch Deck' },
-            { id: 'media_kit', label: '📸 Media Kit & KOL' },
-            { id: 'contract', label: '📄 Legal & Contract' },
+            { id: 'all', label: 'Semua Asset' },
+            { id: 'ratecard', label: 'Rate Card & Pricing' },
+            { id: 'brand_guideline', label: 'Brand Guidelines' },
+            { id: 'proposal', label: 'Proposal & Pitch Deck' },
+            { id: 'media_kit', label: 'Media Kit & KOL' },
+            { id: 'contract', label: 'Legal & Contract' },
           ].map((cat) => (
             <button
               key={cat.id}

@@ -1095,7 +1095,7 @@ export default function DashboardPage() {
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
                                   isOnline ? 'bg-[#EEF2F7] text-[#4F9D78] border-[#4F9D78]/30' : 'bg-[#F7F7F8] text-[#737680] border-[#E8E8EC]'
                                 }`}>
-                                  {isOnline ? `🟢 Online Check-In (${onlineTime})` : '⚪ Offline'}
+                                  {isOnline ? `Online Check-In (${onlineTime})` : 'Offline'}
                                 </span>
                                 <span className="font-extrabold text-[#24324A]">{realTrackedHours}h</span>
                               </div>

@@ -888,7 +888,7 @@ export default function AttendancePage() {
                   className="w-full py-4 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
                 >
                   <Play className="w-5 h-5 fill-white" />
-                  <span>🟢 CHECK-IN (MULAI BEKERJA)</span>
+                  <span>CHECK-IN (MULAI BEKERJA)</span>
                 </button>
               ) : (
                 <button
@@ -897,7 +897,7 @@ export default function AttendancePage() {
                   className="w-full py-4 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
                 >
                   <Square className="w-5 h-5 fill-white" />
-                  <span>🔴 CHECK-OUT (SELESAI & SIMPAN KE TIMESHEET)</span>
+                  <span>CHECK-OUT (SELESAI & SIMPAN KE TIMESHEET)</span>
                 </button>
               )}
             </div>
@@ -1114,15 +1114,15 @@ export default function AttendancePage() {
                       )}
                       {(rec.status === 'IZIN' || rec.status === 'SAKIT' || rec.status === 'CUTI') && (
                         <span className="px-2.5 py-1 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded-lg font-bold">
-                          📝 {rec.status}
+                          {rec.status}
                         </span>
                       )}
                     </td>
                     <td className="py-3 px-4 font-mono text-[#4F9D78] font-bold">
-                      {rec.check_in_time !== '-' ? `🟢 ${rec.check_in_time}` : '-'}
+                      {rec.check_in_time !== '-' ? rec.check_in_time : '-'}
                     </td>
                     <td className="py-3 px-4 font-mono text-[#F26B5E] font-bold">
-                      {rec.check_out_time !== '-' ? `🔴 ${rec.check_out_time}` : '-'}
+                      {rec.check_out_time !== '-' ? rec.check_out_time : '-'}
                     </td>
                     <td className="py-3 px-4 text-center font-bold text-[#24324A] bg-[#EEF2F7]/50 rounded-lg">
                       {rec.duration_hours} Jam

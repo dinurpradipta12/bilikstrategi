@@ -830,9 +830,9 @@ export default function TeamWorkloadPage() {
                 className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
                 title="Ganti Mode Role Pengguna"
               >
-                <option value="Owner">Owner 👑 (Admin Edit)</option>
-                <option value="Admin">Admin 🛡️ (Admin Edit)</option>
-                <option value="Member">Member 👤 (Read Only)</option>
+                <option value="Owner">Owner (Admin Edit)</option>
+                <option value="Admin">Admin (Admin Edit)</option>
+                <option value="Member">Member (Read Only)</option>
               </select>
             </div>
           )}
