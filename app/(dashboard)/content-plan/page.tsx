@@ -41,52 +41,7 @@ export interface ContentSheetItem {
   updated_at?: string;
 }
 
-const DEFAULT_SHEETS: ContentSheetItem[] = [
-  {
-    id: 'sheet-001',
-    client_name: 'Nusantara Retail Group',
-    title: 'Instagram & TikTok Content Plan Q3 2026',
-    sheet_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
-    embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
-    platform: 'Instagram & TikTok',
-    status: 'active',
-    logo_url: 'https://ui-avatars.com/api/?name=Nusantara+Retail&background=FFF0ED&color=F26B5E&font-size=0.4',
-    updated_at: '2026-08-01',
-  },
-  {
-    id: 'sheet-002',
-    client_name: 'Kopi Senja Indonesia',
-    title: 'Reels Grid & Daily Story Editorial Plan',
-    sheet_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
-    embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
-    platform: 'Instagram Reels',
-    status: 'active',
-    logo_url: 'https://ui-avatars.com/api/?name=Kopi+Senja&background=E6F4ED&color=4F9D78&font-size=0.4',
-    updated_at: '2026-07-29',
-  },
-  {
-    id: 'sheet-003',
-    client_name: 'TechVision Global',
-    title: 'B2B LinkedIn & Thought Leadership Articles',
-    sheet_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
-    embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
-    platform: 'LinkedIn & Blog',
-    status: 'active',
-    logo_url: 'https://ui-avatars.com/api/?name=Tech+Vision&background=EEF2F7&color=24324A&font-size=0.4',
-    updated_at: '2026-07-25',
-  },
-  {
-    id: 'sheet-004',
-    client_name: 'Bilik Strategi Official',
-    title: 'Agency Master Social Media Content Calendar',
-    sheet_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
-    embed_url: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false',
-    platform: 'All Social Channels',
-    status: 'active',
-    logo_url: '/landscape.png',
-    updated_at: '2026-08-02',
-  },
-];
+const DEFAULT_SHEETS: ContentSheetItem[] = [];
 
 export default function ContentPlanPage() {
   const [mounted, setMounted] = useState(false);

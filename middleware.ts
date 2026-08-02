@@ -2,25 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const config = {
   matcher: [
-    '/dashboard/:path*',
-    '/projects/:path*',
-    '/tasks/:path*',
-    '/my-tasks/:path*',
-    '/clients/:path*',
-    '/team/:path*',
-    '/calendar/:path*',
-    '/timeline/:path*',
-    '/chat/:path*',
-    '/notifications/:path*',
-    '/activity-logs/:path*',
-    '/settings/:path*',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - login (auth page)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|login).*)',
   ],
 };
 
 export function middleware(req: NextRequest) {
   const loggedIn = req.cookies.get('clickup_logged_in')?.value;
+  const token = req.cookies.get('clickup_access_token')?.value;
 
-  if (!loggedIn) {
+  if (!loggedIn && !token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 

@@ -10,8 +10,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // 1. Strict Authentication Check for All Dashboard Routes
+    const checkAuth = () => {
+      const hasCookieLoggedIn =
+        document.cookie.includes('clickup_logged_in=true') ||
+        document.cookie.includes('clickup_access_token');
+      const hasLocalStorageLoggedIn =
+        localStorage.getItem('clickup_logged_in') === 'true' ||
+        !!localStorage.getItem('bilik_current_user');
+
+      if (!hasCookieLoggedIn && !hasLocalStorageLoggedIn) {
+        setIsAuthenticated(false);
+        window.location.href = '/login';
+      } else {
+        setIsAuthenticated(true);
+      }
+    };
+
+    checkAuth();
+
+    // 2. Sidebar Collapsed State Listener
     const checkState = () => {
       const isCollapsed = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
       setSidebarCollapsed(isCollapsed);
@@ -26,6 +47,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.removeEventListener('storage', checkState);
     };
   }, []);
+
+  if (isAuthenticated === false) {
+    return (
+      <div className="min-h-screen bg-[#24324A] flex items-center justify-center text-white">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold tracking-wide">Mengarahkan ke Halaman Login...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex">
