@@ -135,7 +135,7 @@ export default function TimelinePage() {
     try {
       const [tasksRes, projectsRes] = await Promise.all([
         fetch('/api/clickup/tasks').catch(() => null),
-        fetch('/api/clickup/projects').catch(() => null),
+        fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
       ]);
 
       if (tasksRes?.ok) {

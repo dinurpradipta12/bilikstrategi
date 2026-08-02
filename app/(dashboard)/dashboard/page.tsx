@@ -324,10 +324,34 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch live ClickUp projects
-      const projectsRes = await fetch('/api/clickup/projects');
-      const projectsData = await projectsRes.json();
-      const liveProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
+      // 1. Fetch app projects first, then merge ClickUp projects when available.
+      const [appProjectsRes, clickupProjectsRes] = await Promise.all([
+        fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/clickup/projects', { cache: 'no-store' }).catch(() => null),
+      ]);
+
+      const projectMap = new Map<string, AgencyProject>();
+
+      if (appProjectsRes?.ok) {
+        const projectsData = await appProjectsRes.json();
+        const appProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
+        appProjects.forEach((p: AgencyProject) => {
+          projectMap.set(String(p.id), p);
+        });
+      }
+
+      if (clickupProjectsRes?.ok) {
+        const projectsData = await clickupProjectsRes.json();
+        const clickupProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
+        clickupProjects.forEach((p: AgencyProject) => {
+          const id = String(p.id);
+          if (!projectMap.has(id)) {
+            projectMap.set(id, p);
+          }
+        });
+      }
+
+      const liveProjects = Array.from(projectMap.values());
 
       // 2. Fetch live ClickUp tasks
       const tasksRes = await fetch('/api/clickup/tasks');

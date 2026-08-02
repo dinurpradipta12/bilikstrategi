@@ -392,7 +392,7 @@ export default function ProjectDetailPage() {
           if (apiRes.ok) {
             const apiJson = await apiRes.json();
             if (Array.isArray(apiJson.projects)) {
-              foundProject = apiJson.projects.find((p: any) => p.id === projectId);
+              foundProject = apiJson.projects.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
             }
           }
         } catch {}
