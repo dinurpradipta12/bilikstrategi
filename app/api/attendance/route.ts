@@ -85,8 +85,22 @@ export async function POST(req: Request) {
       globalActiveCheckIns.clear();
 
       try {
-        await supabase.from('attendance_logs').delete().neq('id', '');
-        await supabase.from('active_sessions').delete().neq('user_name', '');
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+        // Delete all rows from attendance_logs and active_sessions
+        await fetch(`${url}/rest/v1/attendance_logs?created_at=gt.1970-01-01T00:00:00Z`, {
+          method: 'DELETE',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        }).catch(() => {});
+
+        await fetch(`${url}/rest/v1/active_sessions?updated_at=gt.1970-01-01T00:00:00Z`, {
+          method: 'DELETE',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        }).catch(() => {});
+
+        await supabase.from('attendance_logs').delete().gt('created_at', '1970-01-01T00:00:00Z');
+        await supabase.from('active_sessions').delete().gt('updated_at', '1970-01-01T00:00:00Z');
       } catch (dbErr) {
         console.warn('[Attendance API] Supabase reset_all error', dbErr);
       }

@@ -273,6 +273,26 @@ export default function AttendancePage() {
       }
 
       fetchAllUsersHistory();
+
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('bilik_attendance_channel');
+          bc.onmessage = (event) => {
+            if (event.data?.type === 'RESET_ALL') {
+              setHistory([]);
+              setAllUsersHistory([]);
+              setIsCheckedIn(false);
+              setCheckInTime(null);
+              setCheckInTimestamp(null);
+              setElapsedSeconds(0);
+              localStorage.removeItem('bilik_attendance_history');
+              localStorage.removeItem('bilik_timesheet_recap');
+              localStorage.removeItem('bilik_active_attendance');
+              localStorage.removeItem('bilik_team_active_store');
+            }
+          };
+        } catch {}
+      }
     }
 
     loadUserAndData();
@@ -284,8 +304,12 @@ export default function AttendancePage() {
       const res = await fetch('/api/attendance');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.history) && data.history.length > 0) {
+        if (Array.isArray(data.history)) {
           setAllUsersHistory(data.history);
+          if (data.history.length === 0) {
+            setHistory([]);
+            localStorage.removeItem('bilik_attendance_history');
+          }
           return;
         }
       }
@@ -295,11 +319,12 @@ export default function AttendancePage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (dbLogs && dbLogs.length > 0) {
+      if (dbLogs) {
         setAllUsersHistory(dbLogs as AttendanceRecord[]);
-      } else {
-        const historyState = localStorage.getItem('bilik_attendance_history');
-        if (historyState) setAllUsersHistory(JSON.parse(historyState));
+        if (dbLogs.length === 0) {
+          setHistory([]);
+          localStorage.removeItem('bilik_attendance_history');
+        }
       }
     } catch (err) {
       console.warn('[Attendance] Fetch all users history error', err);
@@ -316,8 +341,21 @@ export default function AttendancePage() {
       });
 
       try {
-        await supabase.from('attendance_logs').delete().neq('id', '');
-        await supabase.from('active_sessions').delete().neq('user_name', '');
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
+
+        await fetch(`${url}/rest/v1/attendance_logs?created_at=gt.1970-01-01T00:00:00Z`, {
+          method: 'DELETE',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        }).catch(() => {});
+
+        await fetch(`${url}/rest/v1/active_sessions?updated_at=gt.1970-01-01T00:00:00Z`, {
+          method: 'DELETE',
+          headers: { apikey: key, Authorization: `Bearer ${key}` },
+        }).catch(() => {});
+
+        await supabase.from('attendance_logs').delete().gt('created_at', '1970-01-01T00:00:00Z');
+        await supabase.from('active_sessions').delete().gt('updated_at', '1970-01-01T00:00:00Z');
       } catch (dbErr) {
         console.warn('[Attendance] Supabase delete error', dbErr);
       }
@@ -338,7 +376,7 @@ export default function AttendancePage() {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         try {
           const bc = new BroadcastChannel('bilik_attendance_channel');
-          bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+          bc.postMessage({ type: 'RESET_ALL' });
           bc.close();
         } catch {}
       }
