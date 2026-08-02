@@ -520,11 +520,44 @@ export default function AttendancePage() {
         // ignore
       }
 
-      setTeamStatusList((prev) =>
-        prev.map((m) => {
-          const mNameClean = (m.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const mEmailPrefix = (m.email || '').split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-          const currentClean = (currentUser.username || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      setTeamStatusList((prev) => {
+        const baseMembers = prev.length > 0 ? [...prev] : [buildCurrentUserMember()];
+
+        supabaseActiveList.forEach((active: any) => {
+          const activeNameClean = normalizeMemberKey(active.user_name);
+          const exists = baseMembers.some((m) => {
+            const memberNameClean = normalizeMemberKey(m.name);
+            const memberEmailPrefix = normalizeMemberKey((m.email || '').split('@')[0]);
+            return (
+              activeNameClean === memberNameClean ||
+              activeNameClean === memberEmailPrefix ||
+              (activeNameClean.length > 3 && memberNameClean.includes(activeNameClean)) ||
+              (memberNameClean.length > 3 && activeNameClean.includes(memberNameClean))
+            );
+          });
+
+          if (!exists && activeNameClean) {
+            baseMembers.push(buildMemberFromActiveSession(active));
+          }
+        });
+
+        const hasCurrentUser = baseMembers.some((m) => {
+          const memberNameClean = normalizeMemberKey(m.name);
+          const memberEmailClean = (m.email || '').toLowerCase().trim();
+          return (
+            memberNameClean === normalizeMemberKey(currentUser.username) ||
+            (!!currentUser.email && memberEmailClean === currentUser.email.toLowerCase().trim())
+          );
+        });
+
+        if (!hasCurrentUser && currentUser.username && currentUser.username !== 'User') {
+          baseMembers.push(buildCurrentUserMember());
+        }
+
+        return baseMembers.map((m) => {
+          const mNameClean = normalizeMemberKey(m.name);
+          const mEmailPrefix = normalizeMemberKey((m.email || '').split('@')[0]);
+          const currentClean = normalizeMemberKey(currentUser.username);
 
           const isMe = mNameClean.length > 2 && (mNameClean === currentClean || mNameClean.includes(currentClean) || currentClean.includes(mNameClean));
 
@@ -541,7 +574,7 @@ export default function AttendancePage() {
           }
 
           const active = supabaseActiveList.find((a: any) => {
-            const aNameClean = (a.user_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const aNameClean = normalizeMemberKey(a.user_name);
             return (
               aNameClean === mNameClean ||
               aNameClean === mEmailPrefix ||
@@ -567,10 +600,10 @@ export default function AttendancePage() {
             checkInTime: undefined,
             checkInTimestamp: undefined,
             project: undefined,
-            statusText: 'Belum Check-In',
-          };
-        })
-      );
+              statusText: 'Belum Check-In',
+            };
+        });
+      });
     } catch (err) {
       console.warn('[Attendance] Live sync error', err);
     }
