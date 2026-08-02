@@ -121,8 +121,8 @@ export default function AttendancePage() {
     const nameClean = (userName || '').toLowerCase().trim();
     const roleClean = (userRole || '').toLowerCase().trim();
 
-    // 1. Super Admin / Owner
-    if (emailClean.includes('dinurpradipta12@gmail.com') || nameClean === 'dinur pradipta' || roleClean === 'owner') {
+    // 1. Super Admin / Owner (Official ClickUp Workspace Owner)
+    if (emailClean.includes('snllabsarchive@gmail.com') || nameClean === 'dinur pradipta' || roleClean === 'owner') {
       return true;
     }
 
@@ -211,7 +211,7 @@ export default function AttendancePage() {
 
           // Check if admin mode was enabled in custom info
           if (checkIsAdminOrOwner(activeEmail, activeUsername, resolvedUserRole)) {
-            resolvedUserRole = activeEmail.includes('dinurpradipta12') || activeUsername.toLowerCase() === 'dinur pradipta' ? 'Owner' : 'Admin';
+            resolvedUserRole = activeEmail.includes('snllabsarchive') || activeUsername.toLowerCase() === 'dinur pradipta' ? 'Owner' : 'Admin';
           }
 
           const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
