@@ -18,9 +18,9 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { RefreshCw, X, Trash2 } from 'lucide-react';
-import { MOCK_PROJECTS, AgencyProject } from '@/lib/mock/data';
-
+import { AgencyProject } from '@/lib/mock/data';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar';
 
@@ -45,59 +45,208 @@ export default function ProjectsPage() {
     setMounted(true);
   }, []);
 
-  // 1. Fetch Projects (filtered by deleted project IDs)
+  // 1. Fetch Projects (combining Supabase DB, Shared Server Store, and ClickUp)
   const fetchProjects = async () => {
     setLoading(true);
-    try {
-      const deletedIdsRaw = localStorage.getItem('bilik_deleted_project_ids');
-      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
+    let combinedProjects: AgencyProject[] = [];
+    const deletedIdsRaw = typeof window !== 'undefined' ? localStorage.getItem('bilik_deleted_project_ids') : null;
+    const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
 
-      const res = await fetch('/api/clickup/projects');
-      if (res.ok) {
-        const data = await res.json();
-        const rawProjects: AgencyProject[] = Array.isArray(data.projects) ? data.projects : [];
-        const cleanProjects = rawProjects.filter((p) => !deletedIds.includes(p.id));
-        setProjects(cleanProjects);
-      } else {
-        setProjects([]);
+    // a. Fetch from shared server API store
+    try {
+      const apiRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
+      if (apiRes.ok) {
+        const apiData = await apiRes.json();
+        if (Array.isArray(apiData.projects)) {
+          combinedProjects.push(...apiData.projects);
+        }
       }
-    } catch {
-      setProjects([]);
-    } finally {
-      setLoading(false);
+    } catch {}
+
+    // b. Fetch from Supabase direct table
+    try {
+      const { data: dbData } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (dbData && dbData.length > 0) {
+        dbData.forEach((dp: any) => {
+          if (!combinedProjects.some((cp) => cp.id === String(dp.id))) {
+            combinedProjects.push({
+              id: String(dp.id),
+              name: dp.name || 'Project',
+              client_id: dp.client_id || 'c1',
+              client_name: dp.client_name || 'Bilik Strategi Workspace',
+              clickup_space_id: '',
+              clickup_folder_id: '',
+              clickup_list_id: String(dp.id),
+              team_lead_id: 'u1',
+              team_lead_name: 'Dinur Pradipta',
+              member_ids: [],
+              status: dp.status || 'in_progress',
+              progress_percentage: dp.progress || 0,
+              total_tasks: 0,
+              completed_tasks: 0,
+              overdue_tasks: 0,
+              start_date: dp.start_date || new Date().toISOString().split('T')[0],
+              due_date: dp.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+              description: dp.description || '',
+            });
+          }
+        });
+      }
+    } catch {}
+
+    // c. Fetch ClickUp Projects
+    try {
+      const cuRes = await fetch('/api/clickup/projects');
+      if (cuRes.ok) {
+        const cuData = await cuRes.json();
+        const cuProjects: AgencyProject[] = Array.isArray(cuData.projects) ? cuData.projects : [];
+        cuProjects.forEach((cp) => {
+          if (!combinedProjects.some((p) => p.id === cp.id)) {
+            combinedProjects.push(cp);
+          }
+        });
+      }
+    } catch {}
+
+    const cleanProjects = combinedProjects.filter((p) => !deletedIds.includes(p.id));
+    setProjects(cleanProjects);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bilik_agency_projects_db', JSON.stringify(cleanProjects));
     }
+    setLoading(false);
   };
 
   useEffect(() => {
     fetchProjects();
+
+    // 1. Fast background interval (5s)
+    const interval = setInterval(() => {
+      fetchProjects();
+    }, 5000);
+
+    // 2. BroadcastChannel
+    let bc: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        bc = new BroadcastChannel('bilik_projects_channel');
+        bc.onmessage = () => {
+          fetchProjects();
+        };
+      } catch {}
+    }
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        clearInterval(interval);
+        if (bc) bc.close();
+      };
+    }
+
+    // 3. Supabase Realtime Channel
+    const channel = supabase
+      .channel('realtime_projects_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'projects' },
+        () => {
+          fetchProjects();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      if (bc) bc.close();
+      supabase.removeChannel(channel);
+    };
   }, []);
 
+  // Create Project: App First Realtime (never fails on ClickUp auth)
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
 
     setSubmitting(true);
+
+    const generateUUID = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return 'b0eebc99-9c0b-4ef8-bb6d-' + Date.now().toString(16).padStart(12, '0');
+    };
+
+    const newId = generateUUID();
+    const newProjectObj: AgencyProject = {
+      id: newId,
+      name: newProjectName.trim(),
+      client_id: 'c1',
+      client_name: 'Bilik Strategi Workspace',
+      clickup_space_id: '',
+      clickup_folder_id: '',
+      clickup_list_id: newId,
+      team_lead_id: 'u1',
+      team_lead_name: 'Dinur Pradipta',
+      member_ids: [],
+      status: 'in_progress',
+      progress_percentage: 0,
+      total_tasks: 0,
+      completed_tasks: 0,
+      overdue_tasks: 0,
+      start_date: new Date().toISOString().split('T')[0],
+      due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      description: newProjectDesc.trim() || 'Project Baru Bilik Strategi',
+    };
+
+    // 1. Immediately save to Supabase DB & Server Store
     try {
-      const res = await fetch('/api/clickup/projects', {
+      await supabase.from('projects').upsert([{
+        id: newId,
+        name: newProjectName.trim(),
+        description: newProjectDesc.trim(),
+        status: 'in_progress',
+        client_name: 'Bilik Strategi Workspace',
+        progress: 0,
+      }]);
+
+      await fetch('/api/supabase/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newProjectName, content: newProjectDesc }),
+        body: JSON.stringify(newProjectObj),
       });
-
-      if (res.ok) {
-        setNewProjectName('');
-        setNewProjectDesc('');
-        setIsModalOpen(false);
-        await fetchProjects();
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        alert(`Gagal membuat project di ClickUp: ${errorData.error || res.statusText}`);
-      }
-    } catch {
-      alert('Terjadi kesalahan jaringan saat membuat project');
-    } finally {
-      setSubmitting(false);
+    } catch (err) {
+      console.warn('[ProjectsPage] Could not save project to Supabase:', err);
     }
+
+    // 2. Fire-and-forget ClickUp sync in background (never blocks user)
+    fetch('/api/clickup/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newProjectName, content: newProjectDesc }),
+    }).catch(() => {});
+
+    // 3. Update local state & storage
+    const updated = [newProjectObj, ...projects.filter((p) => p.id !== newId)];
+    setProjects(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bilik_agency_projects_db', JSON.stringify(updated));
+
+      if ('BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('bilik_projects_channel');
+          bc.postMessage({ type: 'PROJECTS_UPDATED' });
+          bc.close();
+        } catch {}
+      }
+    }
+
+    setNewProjectName('');
+    setNewProjectDesc('');
+    setIsModalOpen(false);
+    setSubmitting(false);
   };
 
   // Permanently delete project from UI & persist in localStorage
@@ -113,8 +262,24 @@ export default function ProjectsPage() {
         deletedIds.push(listId);
         localStorage.setItem('bilik_deleted_project_ids', JSON.stringify(deletedIds));
       }
+
+      await supabase.from('projects').delete().eq('id', listId);
+      await fetch('/api/supabase/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: listId }),
+      });
     } catch {
       // ignore storage error
+    }
+
+    // Broadcast
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_projects_channel');
+        bc.postMessage({ type: 'PROJECTS_UPDATED' });
+        bc.close();
+      } catch {}
     }
 
     // 3. Try deleting from ClickUp API in background
