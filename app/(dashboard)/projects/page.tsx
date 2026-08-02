@@ -38,12 +38,33 @@ export default function ProjectsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newClientName, setNewClientName] = useState('Bilik Strategi Workspace');
+  const [newStatus, setNewStatus] = useState('in_progress');
+  const [newTeamLeadName, setNewTeamLeadName] = useState('Dinur Pradipta');
+  const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newDueDate, setNewDueDate] = useState(() => new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
+  const [clientsList, setClientsList] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    fetch('/api/supabase/clients')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.clients && Array.isArray(data.clients)) {
+          setClientsList(data.clients);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const formatDateDisplay = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime()) || d.getFullYear() <= 1970) return dateStr || '-';
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   // 1. Fetch Projects (combining Supabase DB, Shared Server Store, and ClickUp)
   const fetchProjects = async () => {
@@ -82,7 +103,7 @@ export default function ProjectsPage() {
               clickup_folder_id: '',
               clickup_list_id: String(dp.id),
               team_lead_id: 'u1',
-              team_lead_name: 'Dinur Pradipta',
+              team_lead_name: dp.team_lead_name || 'Dinur Pradipta',
               member_ids: [],
               status: dp.status || 'in_progress',
               progress_percentage: dp.progress || 0,
@@ -184,20 +205,20 @@ export default function ProjectsPage() {
       id: newId,
       name: newProjectName.trim(),
       client_id: 'c1',
-      client_name: 'Bilik Strategi Workspace',
+      client_name: newClientName.trim() || 'Bilik Strategi Workspace',
       clickup_space_id: '',
       clickup_folder_id: '',
       clickup_list_id: newId,
       team_lead_id: 'u1',
-      team_lead_name: 'Dinur Pradipta',
+      team_lead_name: newTeamLeadName.trim() || 'Dinur Pradipta',
       member_ids: [],
-      status: 'in_progress',
+      status: newStatus as any,
       progress_percentage: 0,
       total_tasks: 0,
       completed_tasks: 0,
       overdue_tasks: 0,
-      start_date: new Date().toISOString().split('T')[0],
-      due_date: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      start_date: newStartDate || new Date().toISOString().split('T')[0],
+      due_date: newDueDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       description: newProjectDesc.trim() || 'Project Baru Bilik Strategi',
     };
 
@@ -216,7 +237,7 @@ export default function ProjectsPage() {
     fetch('/api/clickup/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newProjectName, content: newProjectDesc }),
+      body: JSON.stringify({ name: newProjectName, content: newProjectDesc, due_date: newDueDate }),
     }).catch(() => {});
 
     // 3. Update local state & storage
@@ -241,11 +262,10 @@ export default function ProjectsPage() {
   };
 
   // Permanently delete project from UI & persist in localStorage
-  const handleDeleteProject = async (listId: string, name: string) => {
-    // 1. Optimistic removal from state
-    setProjects((prev) => prev.filter((p) => p.id !== listId));
+  const handleDeleteProject = async (listId: string, projectName: string) => {
+    const updated = projects.filter((p) => p.id !== listId && p.clickup_list_id !== listId);
+    setProjects(updated);
 
-    // 2. Persist deleted ID in localStorage so it never comes back
     try {
       const deletedIdsRaw = localStorage.getItem('bilik_deleted_project_ids');
       const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
@@ -253,8 +273,8 @@ export default function ProjectsPage() {
         deletedIds.push(listId);
         localStorage.setItem('bilik_deleted_project_ids', JSON.stringify(deletedIds));
       }
+      localStorage.setItem('bilik_agency_projects_db', JSON.stringify(updated));
 
-      await supabase.from('projects').delete().eq('id', listId);
       await fetch('/api/supabase/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,7 +451,7 @@ export default function ProjectsPage() {
                       </a>
                       <span className="text-[11px] font-normal text-[#737680] block truncate max-w-xs">{project.description}</span>
                     </td>
-                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.client_name}</td>
+                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.client_name || 'Bilik Strategi Workspace'}</td>
                     <td className="py-3.5 px-4">
                       <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase ${
                         project.status === 'in_progress' ? 'bg-[#EEF2F7] text-[#24324A]' :
@@ -449,9 +469,9 @@ export default function ProjectsPage() {
                         <span className="text-[11px] font-bold text-[#202124]">{project.progress_percentage}%</span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.team_lead_name}</td>
+                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.team_lead_name || 'Dinur Pradipta'}</td>
                     <td className="py-3.5 px-4 text-[#737680]">
-                      {new Date(project.due_date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {formatDateDisplay(project.due_date)}
                     </td>
                     <td className="py-3.5 px-4 text-center font-medium">
                       <span className="text-[#4F9D78] font-bold">{project.completed_tasks}</span>/{project.total_tasks}
@@ -496,20 +516,20 @@ export default function ProjectsPage() {
 
                 <div className="space-y-3">
                   {projectsInStatus.map((p) => (
-                    <Link
+                    <a
                       key={p.id}
                       href={`/projects/${p.id}`}
-                      className="block p-4 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl hover:border-[#24324A] transition-all shadow-2xs group"
+                      className="block p-4 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl hover:border-[#24324A] transition-all shadow-2xs group cursor-pointer"
                     >
-                      <span className="text-[10px] font-bold text-[#F26B5E] uppercase tracking-wider block">{p.client_name}</span>
+                      <span className="text-[10px] font-bold text-[#F26B5E] uppercase tracking-wider block">{p.client_name || 'Bilik Strategi Workspace'}</span>
                       <h4 className="text-sm font-bold text-[#24324A] mt-1 group-hover:text-[#F26B5E] transition-colors">{p.name}</h4>
                       <p className="text-xs text-[#737680] mt-1 line-clamp-2">{p.description}</p>
 
                       <div className="mt-4 pt-3 border-t border-[#E8E8EC] flex items-center justify-between text-xs text-[#737680]">
-                        <span>Due: {new Date(p.due_date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })}</span>
+                        <span>Due: {formatDateDisplay(p.due_date)}</span>
                         <span className="font-bold text-[#4F9D78]">{p.progress_percentage}% Done</span>
                       </div>
-                    </Link>
+                    </a>
                   ))}
                 </div>
               </div>
@@ -527,7 +547,7 @@ export default function ProjectsPage() {
               <div key={p.id} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-[#24324A]">{p.name}</span>
-                  <span className="text-[#737680]">{p.start_date} s/d {p.due_date}</span>
+                  <span className="text-[#737680]">{p.start_date} s/d {formatDateDisplay(p.due_date)}</span>
                 </div>
                 <div className="w-full bg-[#EEF2F7] h-4 rounded-lg overflow-hidden relative">
                   <div
@@ -556,11 +576,14 @@ export default function ProjectsPage() {
 
       {/* Modal Tambah Project Baru */}
       {isModalOpen && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 relative z-[101]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 relative z-[101] my-8">
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
-              <h3 className="text-sm font-extrabold text-[#24324A]">Buat Project Baru di ClickUp</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A]">
+              <div>
+                <h3 className="text-sm font-extrabold text-[#24324A]">Buat Project Baru</h3>
+                <p className="text-[11px] text-[#737680]">Lengkapi detail project untuk membuat List di ClickUp & Supabase DB</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A] p-1 rounded-lg">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -578,29 +601,100 @@ export default function ProjectsPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-[#24324A] mb-1">Klien / Partner Agency *</label>
+                  <select
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white"
+                  >
+                    <option value="Bilik Strategi Workspace">Bilik Strategi Workspace (Internal)</option>
+                    {clientsList.map((c) => (
+                      <option key={c.id || c.company_name} value={c.company_name || c.name}>
+                        {c.company_name || c.name}
+                      </option>
+                    ))}
+                    <option value="Ruang Sosmed">Ruang Sosmed</option>
+                    <option value="Nusantara Retail Group">Nusantara Retail Group</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#24324A] mb-1">Status Initial Project</label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white font-semibold"
+                  >
+                    <option value="in_progress">🚀 In Progress (Sedang Berjalan)</option>
+                    <option value="planning">📝 Planning (Perencanaan)</option>
+                    <option value="on_hold">⏸️ On Hold (Tertunda)</option>
+                    <option value="completed">✅ Completed (Selesai)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-[#24324A] mb-1">Team Lead PIC *</label>
+                  <select
+                    value={newTeamLeadName}
+                    onChange={(e) => setNewTeamLeadName(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white font-semibold"
+                  >
+                    <option value="Dinur Pradipta">Dinur Pradipta (Owner)</option>
+                    <option value="Dinur mp">Dinur mp (Member)</option>
+                    <option value="Syaiful Akhsin">Syaiful Akhsin (Senior Designer)</option>
+                    <option value="Bagus Setiawan">Bagus Setiawan (Social Media Specialist)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#24324A] mb-1">Deadline / Due Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newDueDate}
+                    onChange={(e) => setNewDueDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A]"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block font-semibold text-[#24324A] mb-1">Deskripsi Project</label>
+                <label className="block font-semibold text-[#24324A] mb-1">Tanggal Mulai (Start Date)</label>
+                <input
+                  type="date"
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-[#24324A] mb-1">Deskripsi & Scope Pekerjaan</label>
                 <textarea
                   rows={3}
-                  placeholder="Deskripsi singkat scope pekerjaan..."
+                  placeholder="Deskripsi singkat deliverable & scope project..."
                   value={newProjectDesc}
                   onChange={(e) => setNewProjectDesc(e.target.value)}
                   className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A]"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E8E8EC]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E8E8EC]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-[#737680] hover:bg-[#F7F7F8] rounded-xl"
+                  className="px-4 py-2 text-xs font-semibold text-[#737680] hover:bg-[#F7F7F8] rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 text-xs font-semibold bg-[#24324A] hover:bg-[#1a2536] text-white rounded-xl disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold bg-[#24324A] hover:bg-[#1a2536] text-white rounded-xl disabled:opacity-50 cursor-pointer shadow-xs"
                 >
                   {submitting ? 'Menyimpan…' : 'Buat Project'}
                 </button>

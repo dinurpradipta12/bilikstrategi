@@ -71,7 +71,9 @@ export async function POST(req: NextRequest) {
       description: projectData.description || projectData.content || '',
       status: projectData.status || 'in_progress',
       client_name: projectData.client_name || 'Bilik Strategi Workspace',
+      team_lead_name: projectData.team_lead_name || 'Dinur Pradipta',
       progress: projectData.progress || 0,
+      start_date: projectData.start_date || new Date().toISOString().split('T')[0],
       due_date: projectData.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       created_at: new Date().toISOString(),
     };
