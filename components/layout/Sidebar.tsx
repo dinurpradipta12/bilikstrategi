@@ -113,25 +113,41 @@ export default function Sidebar() {
     const handleStorage = () => loadClickUpProfile();
     window.addEventListener('storage', handleStorage);
 
-    // Check if badges were previously read/cleared by user
-    const isChatRead = localStorage.getItem('bilik_chat_read') === 'true';
-    const isNotifRead = localStorage.getItem('bilik_notif_read') === 'true';
+    // Read real-time unread badge counts (defaults to 0 when no unread messages/notifs exist)
+    const savedChatUnread = Number(localStorage.getItem('bilik_chat_unread_count') || '0');
+    const savedNotifUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
 
-    setChatUnread(isChatRead ? 0 : 3);
-    setNotifUnread(isNotifRead ? 0 : 2);
+    setChatUnread(savedChatUnread);
+    setNotifUnread(savedNotifUnread);
 
-    return () => window.removeEventListener('storage', handleStorage);
+    const handleUnreadUpdate = (e: any) => {
+      if (e.detail?.type === 'chat' && typeof e.detail?.count === 'number') {
+        setChatUnread(e.detail.count);
+        localStorage.setItem('bilik_chat_unread_count', String(e.detail.count));
+      }
+      if (e.detail?.type === 'notification' && typeof e.detail?.count === 'number') {
+        setNotifUnread(e.detail.count);
+        localStorage.setItem('bilik_notif_unread_count', String(e.detail.count));
+      }
+    };
+
+    window.addEventListener('unread-badge-update', handleUnreadUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('unread-badge-update', handleUnreadUpdate);
+    };
   }, []);
 
   // Clear unread badge immediately when user visits the respective page
   useEffect(() => {
     if (pathname.startsWith('/chat')) {
       setChatUnread(0);
-      localStorage.setItem('bilik_chat_read', 'true');
+      localStorage.setItem('bilik_chat_unread_count', '0');
     }
     if (pathname.startsWith('/notifications')) {
       setNotifUnread(0);
-      localStorage.setItem('bilik_notif_read', 'true');
+      localStorage.setItem('bilik_notif_unread_count', '0');
     }
   }, [pathname]);
 
