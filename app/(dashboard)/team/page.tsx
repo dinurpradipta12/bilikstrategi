@@ -787,8 +787,16 @@ export default function TeamWorkloadPage() {
                   >
                     {/* Member Banner */}
                     <div className="flex items-center gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover border border-[#E8E8EC]" />
+                      <div className="relative flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={user.avatar_url} alt={user.full_name} className="w-12 h-12 rounded-full object-cover border border-[#E8E8EC]" />
+                        {getLiveOnlineTimeStr(user.full_name) && (
+                          <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center" title={`Online Check-In (${getLiveOnlineTimeStr(user.full_name)})`}>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4F9D78] opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#4F9D78] border-2 border-white"></span>
+                          </span>
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-bold text-[#24324A] truncate">{user.full_name}</h3>
                         <p className="text-xs text-[#737680] capitalize flex items-center gap-1">
@@ -1190,10 +1198,26 @@ export default function TeamWorkloadPage() {
                         <tr key={m.id} className="hover:bg-[#F7F7F8] transition-colors">
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-3">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={m.avatar_url} alt={m.full_name} className="w-7 h-7 rounded-full border border-[#E8E8EC]" />
+                              <div className="relative flex-shrink-0">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={m.avatar_url} alt={m.full_name} className="w-7.5 h-7.5 rounded-full border border-[#E8E8EC] object-cover" />
+                                {getLiveOnlineTimeStr(m.full_name) && (
+                                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center" title={`Online Check-In (${getLiveOnlineTimeStr(m.full_name)})`}>
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4F9D78] opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#4F9D78] border-2 border-white"></span>
+                                  </span>
+                                )}
+                              </div>
                               <div>
-                                <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-[#24324A] block truncate max-w-[150px]">{m.full_name}</span>
+                                  {getLiveOnlineTimeStr(m.full_name) && (
+                                    <span className="px-1.5 py-0.2 bg-[#4F9D78]/10 text-[#4F9D78] border border-[#4F9D78]/30 rounded text-[9px] font-extrabold flex items-center gap-1" title={`Check-In sejak ${getLiveOnlineTimeStr(m.full_name)}`}>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] animate-pulse"></span>
+                                      <span>ON ({getLiveOnlineTimeStr(m.full_name)})</span>
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[11px] text-[#737680] font-medium block truncate max-w-[150px]" title={m.custom_role || m.role}>
                                   {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
                                 </span>
