@@ -105,6 +105,14 @@ export default function AttendancePage() {
   // Live Team Active Presensi List (Admin View)
   const [teamStatusList, setTeamStatusList] = useState<TeamMemberStatus[]>([]);
 
+  // Admin Features & Multi-User Attendance History Monitor
+  const [allUsersHistory, setAllUsersHistory] = useState<AttendanceRecord[]>([]);
+  const [historyTab, setHistoryTab] = useState<'my-history' | 'team-history'>('my-history');
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
+  const [showAdminResetModal, setShowAdminResetModal] = useState<boolean>(false);
+
   // 1. Fetch User Profile, Projects, & Team Members on Mount
   useEffect(() => {
     async function loadUserAndData() {
@@ -212,10 +220,117 @@ export default function AttendancePage() {
           setHistory([]);
         }
       }
+
+      fetchAllUsersHistory();
     }
 
     loadUserAndData();
   }, []);
+
+  // Fetch all users history for Admin view
+  const fetchAllUsersHistory = async () => {
+    try {
+      const res = await fetch('/api/attendance');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.history) && data.history.length > 0) {
+          setAllUsersHistory(data.history);
+          return;
+        }
+      }
+
+      const { data: dbLogs } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (dbLogs && dbLogs.length > 0) {
+        setAllUsersHistory(dbLogs as AttendanceRecord[]);
+      } else {
+        const historyState = localStorage.getItem('bilik_attendance_history');
+        if (historyState) setAllUsersHistory(JSON.parse(historyState));
+      }
+    } catch (err) {
+      console.warn('[Attendance] Fetch all users history error', err);
+    }
+  };
+
+  // Master Admin Reset Handler: Clear All Attendance History Across All Users
+  const handleAdminMasterResetAll = async () => {
+    try {
+      await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_all' }),
+      });
+
+      try {
+        await supabase.from('attendance_logs').delete().neq('id', '');
+        await supabase.from('active_sessions').delete().neq('user_name', '');
+      } catch (dbErr) {
+        console.warn('[Attendance] Supabase delete error', dbErr);
+      }
+
+      localStorage.removeItem('bilik_attendance_history');
+      localStorage.removeItem('bilik_timesheet_recap');
+      localStorage.removeItem('bilik_active_attendance');
+      localStorage.removeItem('bilik_team_active_store');
+
+      setHistory([]);
+      setAllUsersHistory([]);
+      setIsCheckedIn(false);
+      setCheckInTime(null);
+      setCheckInTimestamp(null);
+      setElapsedSeconds(0);
+      setShowAdminResetModal(false);
+
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('bilik_attendance_channel');
+          bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+          bc.close();
+        } catch {}
+      }
+
+      setLastCheckOutNotice({
+        type: 'success',
+        message: '🗑️ Seluruh Riwayat Presensi & Pengajuan Izin semua user telah berhasil di-reset bersih!',
+      });
+    } catch (err) {
+      console.error('[Attendance] Master reset error', err);
+      alert('Gagal melakukan reset data presensi.');
+    }
+  };
+
+  // Export CSV for Attendance History
+  const handleExportCSV = (recordsToExport: AttendanceRecord[]) => {
+    if (recordsToExport.length === 0) {
+      alert('Tidak ada data presensi untuk diexport.');
+      return;
+    }
+
+    const headers = ['Nama User', 'Tanggal', 'Hari', 'Status', 'Jam Masuk', 'Jam Keluar', 'Durasi Total (Jam)', 'Lembur (Jam)', 'Project/Catatan'];
+    const rows = recordsToExport.map((r) => [
+      `"${r.user_name || 'User'}"`,
+      `"${r.date}"`,
+      `"${r.day_name}"`,
+      `"${r.status}"`,
+      `"${r.check_in_time}"`,
+      `"${r.check_out_time}"`,
+      r.duration_hours,
+      r.overtime_hours,
+      `"${(r.notes || '').replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Rekap_Presensi_Bilik_Strategi_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // 2. Real-time Clock & Elapsed Timer Ticker (Self + Team Members)
   useEffect(() => {
@@ -783,6 +898,18 @@ export default function AttendancePage() {
         </div>
 
         <div className="flex items-center gap-2.5 self-start md:self-auto flex-nowrap">
+          {isAdminOrOwner && (
+            <button
+              type="button"
+              onClick={() => setShowAdminResetModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 h-10 bg-[#FFF0ED] border border-[#F26B5E]/30 text-[#F26B5E] hover:bg-[#F26B5E] hover:text-white rounded-xl text-xs font-extrabold transition-all shadow-2xs cursor-pointer whitespace-nowrap"
+              title="Reset seluruh riwayat presensi semua user di workspace (Khusus Admin)"
+            >
+              <X className="w-4 h-4" />
+              <span>Reset Presensi (Admin)</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setShowLeaveModal(true)}
@@ -1063,82 +1190,235 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* History Log Table */}
+      {/* History Log Table with Admin Multi-User View */}
       <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
+        {/* Header & Tab Selector */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[#E8E8EC] pb-4">
           <div className="flex items-center gap-2">
-            <History className="w-4 h-4 text-[#24324A]" />
-            <h3 className="text-sm font-extrabold text-[#24324A]">Riwayat Presensi & Pengajuan Izin Saya</h3>
+            <div className="flex items-center gap-1.5 bg-[#F7F7F8] p-1 rounded-xl border border-[#E8E8EC]">
+              <button
+                type="button"
+                onClick={() => setHistoryTab('my-history')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  historyTab === 'my-history'
+                    ? 'bg-[#24324A] text-white shadow-xs'
+                    : 'text-[#737680] hover:text-[#24324A]'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Riwayat Saya</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryTab('team-history');
+                  fetchAllUsersHistory();
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  historyTab === 'team-history'
+                    ? 'bg-[#24324A] text-white shadow-xs'
+                    : 'text-[#737680] hover:text-[#24324A]'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-[#F26B5E]" />
+                <span>Monitor History Tim (Semua User)</span>
+                {isAdminOrOwner && (
+                  <span className="px-1.5 py-0.5 bg-[#4F9D78] text-white text-[9px] font-extrabold rounded-md">
+                    Admin
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-          <span className="text-xs font-bold text-[#737680]">{history.length} Entri Dicatat</span>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleExportCSV(historyTab === 'team-history' ? allUsersHistory : history)}
+              className="px-3 py-1.5 bg-white border border-[#E8E8EC] hover:bg-[#F7F7F8] text-[#24324A] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Download Data Presensi ke CSV/Excel"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-[#4F9D78]" />
+              <span>Export CSV</span>
+            </button>
+
+            {isAdminOrOwner && (
+              <button
+                type="button"
+                onClick={() => setShowAdminResetModal(true)}
+                className="px-3 py-1.5 bg-[#FFF0ED] border border-[#F26B5E]/30 hover:bg-[#F26B5E] text-[#F26B5E] hover:text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer"
+                title="Reset seluruh riwayat presensi semua user"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Reset Riwayat Tim</span>
+              </button>
+            )}
+
+            <span className="text-xs font-bold text-[#737680] bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC]">
+              {historyTab === 'team-history' ? allUsersHistory.length : history.length} Entri
+            </span>
+          </div>
         </div>
 
-        {history.length === 0 ? (
-          <div className="text-center py-8 text-xs text-[#737680] space-y-1">
-            <p className="font-bold text-[#24324A]">Belum ada riwayat presensi</p>
-            <p>Klik tombol Check-In atau Form Izin di atas untuk mulai mencatat presensi pertama Anda.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#F7F7F8] border-b border-[#E8E8EC] text-[#737680] font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4">Tanggal</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Jam Masuk</th>
-                  <th className="py-3 px-4">Jam Keluar</th>
-                  <th className="py-3 px-4 text-center">Durasi Total</th>
-                  <th className="py-3 px-4 text-center">Lembur (OT)</th>
-                  <th className="py-3 px-4">Project / Catatan</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E8E8EC]">
-                {history.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-[#F7F7F8] transition-colors">
-                    <td className="py-3 px-4 font-bold text-[#24324A]">
-                      {rec.date} ({rec.day_name})
-                    </td>
-                    <td className="py-3 px-4">
-                      {rec.status === 'HADIR' && (
-                        <span className="px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] border border-[#4F9D78]/30 rounded-lg font-bold">
-                          ✓ HADIR
-                        </span>
-                      )}
-                      {rec.status === 'ALPHA' && (
-                        <span className="px-2.5 py-1 bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/30 rounded-lg font-bold">
-                          ⚠️ ALPHA (&lt;1h)
-                        </span>
-                      )}
-                      {rec.status === 'LEMBUR' && (
-                        <span className="px-2.5 py-1 bg-[#E6A23C]/10 text-[#B87C24] border border-[#E6A23C]/30 rounded-lg font-bold">
-                          🔥 LEMBUR ({rec.overtime_hours}h)
-                        </span>
-                      )}
-                      {(rec.status === 'IZIN' || rec.status === 'SAKIT' || rec.status === 'CUTI') && (
-                        <span className="px-2.5 py-1 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded-lg font-bold">
-                          {rec.status}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[#4F9D78] font-bold">
-                      {rec.check_in_time !== '-' ? rec.check_in_time : '-'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[#F26B5E] font-bold">
-                      {rec.check_out_time !== '-' ? rec.check_out_time : '-'}
-                    </td>
-                    <td className="py-3 px-4 text-center font-bold text-[#24324A] bg-[#EEF2F7]/50 rounded-lg">
-                      {rec.duration_hours} Jam
-                    </td>
-                    <td className="py-3 px-4 text-center font-extrabold text-[#E6A23C]">
-                      {rec.overtime_hours > 0 ? `+${rec.overtime_hours} Jam` : '-'}
-                    </td>
-                    <td className="py-3 px-4 text-[#737680] max-w-xs truncate">{rec.notes}</td>
-                  </tr>
+        {/* Filters bar for Team History Mode */}
+        {historyTab === 'team-history' && (
+          <div className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2 flex-1">
+              <div className="flex items-center gap-1.5 font-bold text-[#24324A]">
+                <User className="w-3.5 h-3.5 text-[#F26B5E]" />
+                <span>Filter User:</span>
+              </div>
+              <select
+                value={selectedUserFilter}
+                onChange={(e) => setSelectedUserFilter(e.target.value)}
+                className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg text-xs font-semibold outline-none focus:border-[#24324A]"
+              >
+                <option value="ALL">Semua Anggota Tim</option>
+                {Array.from(new Set(allUsersHistory.map((r) => r.user_name || 'User'))).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+
+              <div className="flex items-center gap-1.5 font-bold text-[#24324A] ml-2">
+                <span>Status:</span>
+              </div>
+              <select
+                value={selectedStatusFilter}
+                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg text-xs font-semibold outline-none focus:border-[#24324A]"
+              >
+                <option value="ALL">Semua Status</option>
+                <option value="HADIR">HADIR</option>
+                <option value="ALPHA">ALPHA (&lt;1h)</option>
+                <option value="LEMBUR">LEMBUR</option>
+                <option value="IZIN">IZIN</option>
+                <option value="SAKIT">SAKIT</option>
+                <option value="CUTI">CUTI</option>
+              </select>
+            </div>
+
+            <div className="relative max-w-xs w-full">
+              <input
+                type="text"
+                placeholder="Cari nama user / catatan..."
+                value={historySearchQuery}
+                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-xs font-medium outline-none focus:border-[#24324A]"
+              />
+            </div>
           </div>
         )}
+
+        {/* Table Body Component */}
+        {(() => {
+          const displayList = historyTab === 'my-history'
+            ? history
+            : allUsersHistory.filter((rec) => {
+                const matchUser = selectedUserFilter === 'ALL' || (rec.user_name || '').toLowerCase() === selectedUserFilter.toLowerCase();
+                const matchStatus = selectedStatusFilter === 'ALL' || rec.status === selectedStatusFilter;
+                const matchSearch =
+                  !historySearchQuery.trim() ||
+                  (rec.user_name || '').toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+                  (rec.notes || '').toLowerCase().includes(historySearchQuery.toLowerCase()) ||
+                  (rec.date || '').includes(historySearchQuery);
+                return matchUser && matchStatus && matchSearch;
+              });
+
+          if (displayList.length === 0) {
+            return (
+              <div className="text-center py-10 text-xs text-[#737680] space-y-1">
+                <p className="font-bold text-[#24324A]">Belum ada riwayat presensi yang terekam</p>
+                <p>
+                  {historyTab === 'team-history'
+                    ? 'Tidak ada data presensi tim yang cocok dengan filter pencarian.'
+                    : 'Klik tombol Check-In atau Form Izin di atas untuk mulai mencatat presensi pertama Anda.'}
+                </p>
+              </div>
+            );
+          }
+
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-[#F7F7F8] border-b border-[#E8E8EC] text-[#737680] font-bold uppercase tracking-wider">
+                    {historyTab === 'team-history' && <th className="py-3 px-4">Anggota Tim</th>}
+                    <th className="py-3 px-4">Tanggal</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Jam Masuk</th>
+                    <th className="py-3 px-4">Jam Keluar</th>
+                    <th className="py-3 px-4 text-center">Durasi Total</th>
+                    <th className="py-3 px-4 text-center">Lembur (OT)</th>
+                    <th className="py-3 px-4">Project / Catatan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E8E8EC]">
+                  {displayList.map((rec) => (
+                    <tr key={rec.id} className="hover:bg-[#F7F7F8] transition-colors">
+                      {historyTab === 'team-history' && (
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={
+                                rec.user_avatar ||
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(rec.user_name || 'User')}&background=24324A&color=fff`
+                              }
+                              alt={rec.user_name}
+                              className="w-7 h-7 rounded-full object-cover border border-[#24324A]"
+                            />
+                            <span className="font-extrabold text-[#24324A]">{rec.user_name || 'User'}</span>
+                          </div>
+                        </td>
+                      )}
+                      <td className="py-3 px-4 font-bold text-[#24324A]">
+                        {rec.date} ({rec.day_name})
+                      </td>
+                      <td className="py-3 px-4">
+                        {rec.status === 'HADIR' && (
+                          <span className="px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] border border-[#4F9D78]/30 rounded-lg font-bold">
+                            ✓ HADIR
+                          </span>
+                        )}
+                        {rec.status === 'ALPHA' && (
+                          <span className="px-2.5 py-1 bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/30 rounded-lg font-bold">
+                            ⚠️ ALPHA (&lt;1h)
+                          </span>
+                        )}
+                        {rec.status === 'LEMBUR' && (
+                          <span className="px-2.5 py-1 bg-[#E6A23C]/10 text-[#B87C24] border border-[#E6A23C]/30 rounded-lg font-bold">
+                            🔥 LEMBUR ({rec.overtime_hours}h)
+                          </span>
+                        )}
+                        {(rec.status === 'IZIN' || rec.status === 'SAKIT' || rec.status === 'CUTI') && (
+                          <span className="px-2.5 py-1 bg-[#7B68EE]/10 text-[#7B68EE] border border-[#7B68EE]/30 rounded-lg font-bold">
+                            {rec.status}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[#4F9D78] font-bold">
+                        {rec.check_in_time !== '-' ? rec.check_in_time : '-'}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[#F26B5E] font-bold">
+                        {rec.check_out_time !== '-' ? rec.check_out_time : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-center font-bold text-[#24324A] bg-[#EEF2F7]/50 rounded-lg">
+                        {rec.duration_hours} Jam
+                      </td>
+                      <td className="py-3 px-4 text-center font-extrabold text-[#E6A23C]">
+                        {rec.overtime_hours > 0 ? `+${rec.overtime_hours} Jam` : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-[#737680] max-w-xs truncate">{rec.notes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modal Form Pengajuan Izin / Sakit / Cuti */}
@@ -1226,6 +1506,52 @@ export default function AttendancePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Admin Confirmation: Reset Semua Presensi Tim */}
+      {showAdminResetModal && createPortal(
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
+            <button
+              onClick={() => setShowAdminResetModal(false)}
+              className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-4 border-b border-[#E8E8EC] pb-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#F26B5E] border border-[#F26B5E]/30 flex items-center justify-center flex-shrink-0 shadow-xs">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-[#24324A]">Reset Semua Riwayat Presensi Tim?</h3>
+                <p className="text-xs text-[#737680] mt-1 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus <strong className="text-[#24324A]">SELURUH riwayat presensi & pengajuan izin milik SEMUA anggota tim</strong>?
+                  Tindakan ini berlaku ke seluruh user workspace dan <strong className="text-[#F26B5E]">TIDAK DAPAT DIBATALKAN</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowAdminResetModal(false)}
+                className="px-4 py-2.5 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleAdminMasterResetAll}
+                className="px-5 py-2.5 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+                <span>Hapus & Reset Semua Data</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body

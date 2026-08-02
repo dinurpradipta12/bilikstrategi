@@ -20,35 +20,39 @@ const globalAttendanceHistory: any[] = [];
 
 export async function GET() {
   try {
-    // 1. Fetch from Supabase DB active_sessions (Direct live query, no caching)
-    const { data: dbSessions, error } = await supabase
-      .from('active_sessions')
-      .select('*');
+    // 1. Fetch active sessions from Supabase DB
+    const { data: dbSessions } = await supabase.from('active_sessions').select('*');
 
-    if (!error && dbSessions) {
-      const activeList: ActiveCheckIn[] = dbSessions.map((row) => ({
-        user_name: row.user_name,
-        user_avatar: row.user_avatar,
-        checkInTime: row.check_in_time,
-        checkInTimestamp: Number(row.check_in_timestamp),
-        selectedProject: row.selected_project,
-        notesInput: row.notes_input || '',
-      }));
+    // 2. Fetch all completed attendance logs from Supabase DB
+    const { data: dbLogs } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      return NextResponse.json(
-        {
-          success: true,
-          source: 'supabase',
-          activeCheckIns: activeList,
-          history: globalAttendanceHistory,
+    const activeList: ActiveCheckIn[] = (dbSessions || []).map((row) => ({
+      user_name: row.user_name,
+      user_avatar: row.user_avatar,
+      checkInTime: row.check_in_time,
+      checkInTimestamp: Number(row.check_in_timestamp),
+      selectedProject: row.selected_project,
+      notesInput: row.notes_input || '',
+    }));
+
+    const historyList = (dbLogs && dbLogs.length > 0) ? dbLogs : globalAttendanceHistory;
+
+    return NextResponse.json(
+      {
+        success: true,
+        source: 'supabase',
+        activeCheckIns: activeList,
+        history: historyList,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         },
-        {
-          headers: {
-            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          },
-        }
-      );
-    }
+      }
+    );
   } catch (e) {
     console.warn('[Attendance API] Supabase GET fallback to memory', e);
   }
@@ -74,6 +78,21 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { action, user_name, user_avatar, selectedProject, notesInput, checkInTime, checkInTimestamp, record } = body;
+
+    // Reset All Attendance History Across All Users (Admin Feature)
+    if (action === 'reset_all') {
+      globalAttendanceHistory.length = 0;
+      globalActiveCheckIns.clear();
+
+      try {
+        await supabase.from('attendance_logs').delete().neq('id', '');
+        await supabase.from('active_sessions').delete().neq('user_name', '');
+      } catch (dbErr) {
+        console.warn('[Attendance API] Supabase reset_all error', dbErr);
+      }
+
+      return NextResponse.json({ success: true, message: 'All attendance history reset successfully' });
+    }
 
     if (!user_name) {
       return NextResponse.json({ success: false, error: 'User name is required' }, { status: 400 });
