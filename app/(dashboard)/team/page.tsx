@@ -72,6 +72,7 @@ export default function TeamWorkloadPage() {
   }, []);
 
   const handleOpenEditMemberModal = (member: TeamMemberWorkload) => {
+    if (!isAdminOrOwner) return;
     setEditingMember(member);
     setFormRole(member.custom_role || member.role);
     setFormDivision(member.division || 'Agency Team');
@@ -83,7 +84,7 @@ export default function TeamWorkloadPage() {
 
   const handleSaveMemberInfo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMember) return;
+    if (!editingMember || !isAdminOrOwner) return;
 
     const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
     let customInfoMap: Record<string, any> = {};
@@ -976,6 +977,22 @@ export default function TeamWorkloadPage() {
       {/* ---------------------------------------------------- */}
       {activeTab === 'team_list' && (
         <div className="space-y-6 animate-fade-in">
+          {isAdminOrOwner ? (
+            <div className="p-3 bg-[#4F9D78]/10 border border-[#4F9D78]/30 rounded-xl text-xs text-[#3D8362] flex items-center gap-2 font-medium">
+              <ShieldCheck className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
+              <span>
+                <strong>Akses Administrator Aktif:</strong> Anda masuk sebagai <strong className="uppercase">{currentUserRole}</strong>. Anda memiliki hak akses untuk mengedit role/jabatan spesifik, divisi, dan data tim di bawah ini.
+              </span>
+            </div>
+          ) : (
+            <div className="p-3 bg-[#EEF2F7] border border-[#24324A]/20 rounded-xl text-xs text-[#24324A] flex items-center gap-2">
+              <Lock className="w-4 h-4 text-[#24324A] flex-shrink-0" />
+              <span>
+                <strong>Perhatian Akses:</strong> Anda masuk sebagai <strong className="uppercase">{currentUserRole}</strong>. Pengubahan role & informasi anggota tim hanya dapat dilakukan oleh <strong>Admin / Owner Workspace</strong>.
+              </span>
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs">
             <div>
               <h3 className="text-sm font-extrabold text-[#24324A] flex items-center gap-2">
@@ -1006,13 +1023,22 @@ export default function TeamWorkloadPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleOpenEditMemberModal(member)}
-                    className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] cursor-pointer shadow-xs transition-colors"
-                    title="Edit Role & Info Anggota Tim"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
+                  {isAdminOrOwner ? (
+                    <button
+                      onClick={() => handleOpenEditMemberModal(member)}
+                      className="p-1.5 bg-white border border-[#E8E8EC] rounded-lg hover:bg-[#EEF2F7] text-[#24324A] cursor-pointer shadow-xs transition-colors"
+                      title="Edit Role & Info Anggota Tim"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-[#F26B5E]" />
+                    </button>
+                  ) : (
+                    <div
+                      className="p-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg text-[#737680] cursor-not-allowed opacity-60"
+                      title="Hanya Admin / Owner yang dapat mengedit role & info tim"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-[#737680]" />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5 pt-3 border-t border-[#E8E8EC] text-xs text-[#737680]">
