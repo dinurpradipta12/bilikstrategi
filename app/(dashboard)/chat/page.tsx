@@ -224,13 +224,18 @@ export default function ChatPage() {
       .then((res) => res.json())
       .then((chatData) => {
         if (chatData.channels?.length > 0) {
-          const unique: typeof channels = [];
-          const seen = new Set<string>();
-          chatData.channels.forEach((c: any) => {
-            const key = `${c.id}-${c.name}`;
-            if (!seen.has(key)) { seen.add(key); unique.push(c); }
+          setChannels((prev) => {
+            const unique: typeof channels = [];
+            const seen = new Set<string>();
+            [...prev, ...chatData.channels].forEach((c: any) => {
+              const key = c.id || `${c.type}-${c.name}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(c);
+              }
+            });
+            return unique;
           });
-          setChannels(unique);
         }
       })
       .catch((err) => console.warn('[Chat] Channels fetch error:', err));

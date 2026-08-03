@@ -63,6 +63,25 @@ function normalizeChannelId(id: string): string {
   return id;
 }
 
+function normalizeStoredChannelId(id: string): string {
+  const channelId = normalizeChannelId(id);
+  if (channelId === 'dm_allisha' || channelId === 'dm_dinur') {
+    return 'dm_pair_allisha_dinur';
+  }
+  return channelId;
+}
+
+function getChannelAliases(rawId: string) {
+  const normalized = normalizeChannelId(rawId);
+  const stored = normalizeStoredChannelId(rawId);
+  const aliases = new Set([rawId, normalized, stored].filter(Boolean));
+  if (stored === 'dm_pair_allisha_dinur') {
+    aliases.add('dm_allisha');
+    aliases.add('dm_dinur');
+  }
+  return Array.from(aliases);
+}
+
 function getUserClickUpToken(req: NextRequest) {
   return req.cookies.get('clickup_access_token')?.value || '';
 }
@@ -330,7 +349,7 @@ function mergeChatMessages(messages: StoredChatMessage[]) {
 }
 
 async function getStoredChatMessages(channelId: string, rawChannelId: string) {
-  const ids = Array.from(new Set([channelId, rawChannelId].filter(Boolean)));
+  const ids = Array.from(new Set([...getChannelAliases(rawChannelId), channelId].filter(Boolean)));
   try {
     const { data, error } = await supabase
       .from('app_chat_messages')
@@ -521,7 +540,7 @@ export async function GET(req: NextRequest) {
 
     if (rawChannelId) {
       const channelId = normalizeChannelId(rawChannelId);
-      const memoryMsgs = globalThis.sharedChatStore[channelId] || globalThis.sharedChatStore[rawChannelId] || [];
+      const memoryMsgs = mergeChatMessages(getChannelAliases(rawChannelId).flatMap((id) => globalThis.sharedChatStore[id] || []));
       const storedMsgs = await getStoredChatMessages(channelId, rawChannelId);
       const localMsgs = mergeChatMessages([...storedMsgs, ...memoryMsgs]);
 
@@ -578,6 +597,7 @@ export async function POST(req: NextRequest) {
     }
 
     const channelId = normalizeChannelId(rawChannelId);
+    const storedChannelId = normalizeStoredChannelId(rawChannelId);
     const appSender = getRequestSender(req, sender || null);
     const senderName = appSender.name || appSender.email || 'Pengguna';
     const outboundText = buildClickUpChatText(text, replyTo || null);
@@ -598,18 +618,14 @@ export async function POST(req: NextRequest) {
     };
 
     // Store in global memory store for instant cross-session persistence
-    if (!globalThis.sharedChatStore[channelId]) {
-      globalThis.sharedChatStore[channelId] = [];
-    }
-    globalThis.sharedChatStore[channelId].push(newMsg);
-    if (channelId !== rawChannelId) {
-      if (!globalThis.sharedChatStore[rawChannelId]) {
-        globalThis.sharedChatStore[rawChannelId] = [];
+    for (const id of getChannelAliases(rawChannelId)) {
+      if (!globalThis.sharedChatStore[id]) {
+        globalThis.sharedChatStore[id] = [];
       }
-      globalThis.sharedChatStore[rawChannelId].push(newMsg);
+      globalThis.sharedChatStore[id].push({ ...newMsg, channel_id: id });
     }
 
-    await persistChatMessage(newMsg, channelId, false);
+    await persistChatMessage(newMsg, storedChannelId, false);
 
     if (channelId.startsWith('dm_') && userToken) {
       try {
@@ -618,7 +634,7 @@ export async function POST(req: NextRequest) {
         newMsg.id = clickUpMsg.id;
         newMsg.created_at = clickUpMsg.created_at;
         newMsg.clickup_sync_warning = null;
-        await replaceStoredChatMessageId(previousId, newMsg, channelId);
+        await replaceStoredChatMessageId(previousId, newMsg, storedChannelId);
       } catch (err) {
         console.warn('[ClickUp Chat API] Non-blocking direct message post fallback:', err);
       }
@@ -632,7 +648,7 @@ export async function POST(req: NextRequest) {
           newMsg.id = comment.id;
         }
         newMsg.clickup_sync_warning = null;
-        await replaceStoredChatMessageId(previousId, newMsg, channelId);
+        await replaceStoredChatMessageId(previousId, newMsg, storedChannelId);
       } catch (err) {
         console.warn('[ClickUp Chat API] Non-blocking view comment post fallback:', err);
       }
