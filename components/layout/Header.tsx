@@ -14,6 +14,7 @@ import {
   UNREAD_BADGE_EVENT,
 } from '@/lib/chat/notification-store';
 import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -125,6 +126,8 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
       let currentEmail = '';
       let currentName = 'Bilik Strategi';
       let currentAvatar = '';
+      let serverAppRole = '';
+      let serverIsSuperuser = false;
 
       const savedUserStr = localStorage.getItem('bilik_current_user');
       if (savedUserStr) {
@@ -142,14 +145,16 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
         if (data.user) {
           currentName = data.user.username || currentName;
           currentEmail = data.user.email || currentEmail;
+          serverAppRole = String(data.user.app_role || '').toLowerCase();
+          serverIsSuperuser = data.user.is_superuser === true;
           if (data.user.profilePicture) currentAvatar = data.user.profilePicture;
         }
       } catch (err) {
         console.warn('[Header] ClickUp profile fetch failed, using default workspace profile.', err);
       }
 
-      const isSuperOwner = currentEmail.toLowerCase().trim() === 'snllabsarchive@gmail.com';
-      let finalRole = isSuperOwner ? 'Owner' : 'Member';
+      const isSuperOwner = serverIsSuperuser || isSuperuserEmail(currentEmail);
+      let finalRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
       if (!isSuperOwner) {
         const savedTeamStr = localStorage.getItem('bilik_team_members');

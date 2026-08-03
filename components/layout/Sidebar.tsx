@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   FileSpreadsheet,
 } from 'lucide-react';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -53,6 +54,8 @@ export default function Sidebar() {
       let username = 'Dinur Pradipta';
       let email = 'snllabsarchive@gmail.com';
       let avatar = '';
+      let serverAppRole = '';
+      let serverIsSuperuser = false;
 
       const savedUserStr = localStorage.getItem('bilik_current_user');
       if (savedUserStr) {
@@ -71,6 +74,8 @@ export default function Sidebar() {
           if (userData.user) {
             username = userData.user.username || username;
             email = userData.user.email || email;
+            serverAppRole = String(userData.user.app_role || '').toLowerCase();
+            serverIsSuperuser = userData.user.is_superuser === true;
             if (userData.user.profilePicture) avatar = userData.user.profilePicture;
           }
         }
@@ -78,8 +83,8 @@ export default function Sidebar() {
         console.warn('[Sidebar] ClickUp profile fetch failed, using default workspace profile.', err);
       }
 
-      const isSuperOwner = email.toLowerCase().trim() === 'snllabsarchive@gmail.com';
-      let resolvedRole = isSuperOwner ? 'Owner' : 'Member';
+      const isSuperOwner = serverIsSuperuser || isSuperuserEmail(email);
+      let resolvedRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
       if (!isSuperOwner) {
         const savedTeamStr = localStorage.getItem('bilik_team_members');

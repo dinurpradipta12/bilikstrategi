@@ -31,6 +31,7 @@ import {
   CalendarDays,
   SlidersHorizontal,
 } from 'lucide-react';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 interface TeamMemberWorkload {
   id: string;
@@ -57,6 +58,7 @@ export default function TeamWorkloadPage() {
   const [members, setMembers] = useState<TeamMemberWorkload[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
+  const [isSuperuserAccount, setIsSuperuserAccount] = useState(false);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
 
@@ -671,15 +673,20 @@ export default function TeamWorkloadPage() {
       const teamData = await teamRes.json();
       const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
-      // Fetch authenticated user profile & resolve exact workspace role
+      // Resolve the app role from the authenticated server identity first.
+      // localStorage is only a compatibility fallback for older sessions.
+      const userRes = await fetch('/api/clickup/user', { cache: 'no-store' });
+      const userData = await userRes.json().catch(() => ({}));
+      const authenticatedUser = userData?.user || {};
+
       const savedUserStr = localStorage.getItem('bilik_current_user');
-      let loggedInEmail = '';
-      let loggedInName = 'Bilik Strategi';
+      let loggedInEmail = String(authenticatedUser.email || '').trim();
+      let loggedInName = String(authenticatedUser.username || 'Bilik Strategi');
       if (savedUserStr) {
         try {
           const u = JSON.parse(savedUserStr);
-          if (u.email) loggedInEmail = u.email;
-          if (u.username) loggedInName = u.username;
+          if (!loggedInEmail && u.email) loggedInEmail = u.email;
+          if ((!loggedInName || loggedInName === 'Bilik Strategi') && u.username) loggedInName = u.username;
         } catch {}
       }
 
@@ -689,13 +696,17 @@ export default function TeamWorkloadPage() {
         try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
       }
 
-      const isSuperOwner = loggedInEmail.toLowerCase().trim() === 'snllabsarchive@gmail.com';
+      const isSuperOwner = authenticatedUser.is_superuser === true || isSuperuserEmail(loggedInEmail);
       const cInfoLoggedIn = customInfoMap[loggedInName] || {};
       const isLoggedInPromotedAdmin = cInfoLoggedIn.is_admin === true || cInfoLoggedIn.role === 'Admin' || (cInfoLoggedIn.custom_role || '').toLowerCase().includes('admin');
+      const resolvedAppRole = String(authenticatedUser.app_role || '').toLowerCase();
 
+      setIsSuperuserAccount(isSuperOwner);
       if (isSuperOwner) {
         setCurrentUserRole('Owner');
-      } else if (isLoggedInPromotedAdmin) {
+      } else if (resolvedAppRole === 'owner' || authenticatedUser.role === 1) {
+        setCurrentUserRole('Owner');
+      } else if (resolvedAppRole === 'admin' || authenticatedUser.role === 2 || isLoggedInPromotedAdmin) {
         setCurrentUserRole('Admin');
       } else {
         setCurrentUserRole('Member');
@@ -764,7 +775,7 @@ export default function TeamWorkloadPage() {
 
         const defaultCustomRole = m.role === 1 ? 'Owner / Project Lead' : m.role === 2 ? 'Admin / Operations' : 'Agency Team Member';
 
-        const isMemberSuperOwner = (cInfo.email || m.email || '').toLowerCase().trim() === 'snllabsarchive@gmail.com';
+        const isMemberSuperOwner = isSuperuserEmail(m.email) || isSuperuserEmail(cInfo.email);
         const isMemberPromotedAdmin = cInfo.is_admin === true || cInfo.role === 'Admin' || (cInfo.custom_role || '').toLowerCase().includes('admin');
         const effectiveMemberRole = isMemberSuperOwner ? 'Owner' : isMemberPromotedAdmin ? 'Admin' : (m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member');
 
@@ -850,16 +861,20 @@ export default function TeamWorkloadPage() {
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs shadow-2xs">
               <ShieldCheck className="w-3.5 h-3.5 text-[#4F9D78]" />
               <span className="text-[#737680]">Akses Anda:</span>
-              <select
-                value={currentUserRole}
-                onChange={(e) => setCurrentUserRole(e.target.value as any)}
-                className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
-                title="Ganti Mode Role Pengguna"
-              >
-                <option value="Owner">Owner (Admin Edit)</option>
-                <option value="Admin">Admin (Admin Edit)</option>
-                <option value="Member">Member (Read Only)</option>
-              </select>
+              {isSuperuserAccount ? (
+                <strong className="font-bold text-[#24324A]">Owner (Superuser)</strong>
+              ) : (
+                <select
+                  value={currentUserRole}
+                  onChange={(e) => setCurrentUserRole(e.target.value as any)}
+                  className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
+                  title="Ganti Mode Role Pengguna"
+                >
+                  <option value="Owner">Owner (Admin Edit)</option>
+                  <option value="Admin">Admin (Admin Edit)</option>
+                  <option value="Member">Member (Read Only)</option>
+                </select>
+              )}
             </div>
           )}
 

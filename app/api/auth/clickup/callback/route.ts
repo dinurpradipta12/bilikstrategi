@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 export const runtime = 'edge';
 
@@ -26,7 +27,9 @@ export async function GET(req: NextRequest) {
     if (queryName) {
       response.cookies.set('clickup_user_name', queryName, { path: '/' });
       if (queryEmail) response.cookies.set('clickup_user_email', queryEmail, { path: '/' });
-      if (queryRole) response.cookies.set('clickup_user_role', queryRole, { path: '/' });
+      if (queryRole || isSuperuserEmail(queryEmail)) {
+        response.cookies.set('clickup_user_role', isSuperuserEmail(queryEmail) ? 'owner' : queryRole!, { path: '/' });
+      }
       if (queryAvatar) response.cookies.set('clickup_user_avatar', queryAvatar, { path: '/' });
       response.cookies.set('clickup_logged_in', 'true', { path: '/' });
       return response;
@@ -64,7 +67,7 @@ export async function GET(req: NextRequest) {
       if (userData?.user) {
         const username = userData.user.username;
         const email = userData.user.email;
-        const role = userData.user.role === 1 ? 'owner' : userData.user.role === 2 ? 'admin' : 'member';
+        const role = isSuperuserEmail(email) ? 'owner' : userData.user.role === 1 ? 'owner' : userData.user.role === 2 ? 'admin' : 'member';
         const avatar = userData.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`;
 
         response.cookies.set('clickup_user_name', username, { path: '/' });

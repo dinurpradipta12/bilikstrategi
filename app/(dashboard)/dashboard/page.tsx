@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { supabase } from '@/lib/supabase/client';
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 interface TeamMember {
   id: string;
@@ -304,23 +305,42 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    // Resolve logged in user from localStorage
+    // Resolve the user from the server identity first; localStorage is only a
+    // compatibility fallback for sessions created before server role storage.
     const savedUserStr = localStorage.getItem('bilik_current_user');
+    let savedUser: any = {};
     if (savedUserStr) {
-      try {
-        const u = JSON.parse(savedUserStr);
-        const emailLower = (u.email || '').toLowerCase().trim();
-        const isSuperOwner = emailLower === 'snllabsarchive@gmail.com';
-        const role = isSuperOwner ? 'Owner / Workspace Admin' : (u.role || 'Member');
-
-        setCurrentUser({
-          username: u.username || (isSuperOwner ? 'Dinur Pradipta' : 'Bilik Strategi'),
-          email: u.email || (isSuperOwner ? 'snllabsarchive@gmail.com' : ''),
-          role: role,
-          avatar: u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.username || 'User')}&background=24324A&color=fff`,
-        });
-      } catch {}
+      try { savedUser = JSON.parse(savedUserStr); } catch {}
     }
+
+    const applyUserProfile = (u: any) => {
+      const email = String(u?.email || '').trim();
+      const username = u?.username || 'Bilik Strategi';
+      const isSuperOwner = u?.is_superuser === true || isSuperuserEmail(email);
+      const appRole = String(u?.app_role || '').toLowerCase();
+      const role = isSuperOwner
+        ? 'Owner / Workspace Admin'
+        : appRole === 'owner' || u?.role === 1
+          ? 'Owner'
+          : appRole === 'admin' || u?.role === 2
+            ? 'Admin'
+            : (u?.role || 'Member');
+
+      setCurrentUser({
+        username,
+        email,
+        role,
+        avatar: u?.profilePicture || u?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
+      });
+    };
+
+    applyUserProfile(savedUser);
+    fetch('/api/clickup/user', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user) applyUserProfile(data.user);
+      })
+      .catch(() => {});
 
     // Check active attendance session time
     const checkActiveSession = () => {

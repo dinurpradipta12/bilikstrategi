@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 export const runtime = 'edge';
 
@@ -24,12 +25,18 @@ function getRequestUser(req: NextRequest) {
 }
 
 async function ensureDefaultWorkspace(user = { id: '', name: 'Pengguna', email: '', avatar: '' }) {
+  const existingWorkspace = await supabase
+    .from('app_workspaces')
+    .select('owner_user_id,owner_email')
+    .eq('id', 'bilik-strategi')
+    .maybeSingle();
+
   const defaultWorkspace = {
     id: 'bilik-strategi',
     name: 'Bilik Strategi Workspace',
     slug: 'bilik-strategi',
-    owner_user_id: user.id || null,
-    owner_email: user.email || 'snllabsarchive@gmail.com',
+    owner_user_id: existingWorkspace.data?.owner_user_id || (isSuperuserEmail(user.email) ? user.id : null),
+    owner_email: existingWorkspace.data?.owner_email || 'snllabsarchive@gmail.com',
     clickup_workspace_id: process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619',
     clickup_space_id: process.env.CLICKUP_SPACE_ID || null,
     clickup_sync_enabled: true,
@@ -45,7 +52,7 @@ async function ensureDefaultWorkspace(user = { id: '', name: 'Pengguna', email: 
         user_name: user.name,
         user_email: user.email,
         user_avatar: user.avatar,
-        role: user.email?.toLowerCase() === 'snllabsarchive@gmail.com' ? 'owner' : 'member',
+        role: isSuperuserEmail(user.email) ? 'owner' : 'member',
         status: 'active',
       },
       { onConflict: 'workspace_id,user_id' }
