@@ -89,7 +89,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   }, []);
 
   return (
-    <header className="h-16 bg-[#FFFFFF] border-b border-[#E8E8EC] sticky top-0 z-20 flex items-center justify-between px-6">
+    <header className="hidden md:flex h-16 bg-[#FFFFFF] border-b border-[#E8E8EC] sticky top-0 z-20 items-center justify-between px-6">
       {/* Left: Workspace Selector & Search */}
       <div className="flex items-center gap-4">
         {/* Workspace Switcher */}

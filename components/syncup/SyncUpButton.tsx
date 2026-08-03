@@ -46,15 +46,13 @@ export default function SyncUpButton({
       {variant === 'header' && (
         <button
           onClick={handleStartCall}
-          className={`flex items-center gap-2 px-3 py-1.5 bg-[#0F5A47] hover:bg-[#0B4537] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer border border-[#10B981]/30 group ${className}`}
-          title="Jump on a voice call or video call (ClickUp SyncUp)"
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0F5A47] hover:bg-[#0B4537] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer border border-[#10B981]/30 group ${className}`}
+          title="Jump on a voice call or video call (SyncUp)"
         >
           <div className="w-5 h-5 rounded-full bg-[#10B981] flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
             <PhoneCall className="w-3 h-3 text-white animate-pulse" />
           </div>
-          <div className="text-left leading-tight">
-            <span className="block font-extrabold text-[11px] tracking-tight">Start SyncUp</span>
-          </div>
+          <span className="hidden sm:inline font-extrabold text-[11px] tracking-tight">SyncUp</span>
         </button>
       )}
 
