@@ -96,7 +96,6 @@ export function showBackgroundChatNotification(notification: ChatNotification) {
         body: notification.text || 'Pesan baru',
         icon: notification.senderAvatar || '/favicon.png',
         tag: `bilik-chat-${notification.id}`,
-        renotify: true,
         silent: false,
       }
     );
