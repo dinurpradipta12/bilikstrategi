@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MessageSquare, Send, Hash, RefreshCw,
   MessageCircle, X, Reply, ChevronRight,
-  User, Sparkles, Bell, AtSign, Check, CheckCheck, PhoneCall,
+  User, Bell, AtSign, Check, CheckCheck, PhoneCall,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
@@ -34,17 +34,14 @@ interface ToastNotification {
   exiting?: boolean;
 }
 
-interface DynamicIslandState {
-  visible: boolean;
-  exiting: boolean;
-  data: ToastNotification | null;
-}
-
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function chatCacheKey(channelId: string) {
+  return `bilik_chat_messages_${channelId}`;
 }
 
 /** Render WhatsApp-style status ticks for own messages */
@@ -101,7 +98,7 @@ function renderMentionedText(text: string, members: Array<{ username: string }> 
 export default function ChatPage() {
   // ── State ──────────────────────────────────────────────────────────────────
   const [channels, setChannels] = useState<Array<{
-    id: string; name: string; type: string; unread_count: number;
+    id: string; name: string; type: string; unread_count: number; avatar?: string; email?: string;
   }>>([
     { id: '7-90182855619-8',  name: '📢 General - Bilik Strategi Workspace', type: 'general',  unread_count: 0 },
     { id: '4-901811772332-8', name: '💬 Media Brand',      type: 'project', unread_count: 0 },
@@ -151,10 +148,6 @@ export default function ChatPage() {
   // Toast
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
-  // Dynamic Island
-  const [island, setIsland] = useState<DynamicIslandState>({ visible: false, exiting: false, data: null });
-  const islandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Scroll anchors
   const messagesEndRef  = useRef<HTMLDivElement>(null);
   const threadEndRef    = useRef<HTMLDivElement>(null);
@@ -174,21 +167,10 @@ export default function ChatPage() {
     }, 5000);
   }, []);
 
-  // ── Dynamic Island helper ─────────────────────────────────────────────────
-  const showDynamicIsland = useCallback((data: ToastNotification) => {
-    if (islandTimerRef.current) clearTimeout(islandTimerRef.current);
-    setIsland({ visible: true, exiting: false, data });
-    islandTimerRef.current = setTimeout(() => {
-      setIsland((prev) => ({ ...prev, exiting: true }));
-      setTimeout(() => setIsland({ visible: false, exiting: false, data: null }), 300);
-    }, 4500);
-  }, []);
-
   const triggerNotification = useCallback((data: ToastNotification) => {
-    showDynamicIsland(data);
     showToast({ ...data, id: `toast-${Date.now()}` });
     setUnreadMap((prev) => ({ ...prev, [data.channelId]: (prev[data.channelId] || 0) + 1 }));
-  }, [showDynamicIsland, showToast]);
+  }, [showToast]);
 
   // ── Simulate "read" after another member receives message ────────────────
   const advanceStatusToRead = useCallback((msgId: string) => {
@@ -254,6 +236,17 @@ export default function ChatPage() {
       .catch((err) => console.warn('[Chat] Channels fetch error:', err));
   }, []);
 
+  const isCurrentUserMessage = useCallback((msg: Pick<ChatMessageItem, 'user_id' | 'user_name'>) => {
+    const messageUserId = String(msg.user_id || '');
+    const currentUserId = String(currentUser.id || '');
+    if (messageUserId && currentUserId && messageUserId === currentUserId) return true;
+
+    const messageName = (msg.user_name || '').toLowerCase().trim();
+    const currentName = (currentUser.username || '').toLowerCase().trim();
+    if (!messageName || !currentName || currentName === 'pengguna') return false;
+    return messageName === currentName;
+  }, [currentUser.id, currentUser.username]);
+
   // ── Fetch messages ────────────────────────────────────────────────────────
   const fetchActiveMessages = useCallback(async (channelId: string, shouldScroll = false) => {
     setLoadingMessages(true);
@@ -265,7 +258,7 @@ export default function ChatPage() {
 
         if (previousCountRef.current > 0 && newMsgs.length > previousCountRef.current) {
           const latestMsg = newMsgs[newMsgs.length - 1];
-          if (latestMsg.user_id !== String(currentUser.id) && !latestMsg.user_name.includes('Dinur')) {
+          if (!isCurrentUserMessage(latestMsg)) {
             const chName = channels.find((c) => c.id === channelId)?.name || 'Channel';
             triggerNotification({
               id: latestMsg.id,
@@ -281,22 +274,29 @@ export default function ChatPage() {
 
         // Merge: keep localStatus for optimistic messages
         setRawMessages((prev) => {
+          if (newMsgs.length === 0 && prev.some((m) => m.channel_id === channelId)) {
+            return prev;
+          }
+
           const statusPreserved = newMsgs.map((nm) => {
             const existing = prev.find((p) => p.id === nm.id);
             return existing?.localStatus ? { ...nm, localStatus: existing.localStatus } : nm;
           });
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(chatCacheKey(channelId), JSON.stringify(statusPreserved));
+          }
           return statusPreserved;
         });
 
         if (shouldScroll) scrollToBottom(true);
       }
-    } catch (err) {
+  } catch (err) {
       console.warn('[Chat] Gagal memuat pesan:', err);
     } finally {
       setLoadingMessages(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels, currentUser.id, triggerNotification]);
+  }, [channels, isCurrentUserMessage, triggerNotification]);
 
   // ── Typing API integration ────────────────────────────────────────────────
   const [otherTypingUsers, setOtherTypingUsers] = useState<Array<{ userId: string | number; username: string }>>([]);
@@ -345,6 +345,14 @@ export default function ChatPage() {
     isTypingRef.current = false;
     setOtherTypingUsers([]);
     setUnreadMap((prev) => ({ ...prev, [activeChannelId]: 0 }));
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(chatCacheKey(activeChannelId));
+        setRawMessages(cached ? JSON.parse(cached) : []);
+      } catch {
+        setRawMessages([]);
+      }
+    }
     fetchActiveMessages(activeChannelId, true);
     fetchTypingStatus();
   }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
@@ -488,11 +496,23 @@ export default function ChatPage() {
       isOptimistic: true,
     };
 
-    setRawMessages((prev) => [...prev, tempMsg]);
+    setRawMessages((prev) => {
+      const next = [...prev, tempMsg];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(chatCacheKey(activeChannelId), JSON.stringify(next));
+      }
+      return next;
+    });
     setStatusMap((prev) => ({ ...prev, [tempId]: 'sending' }));
     scrollToBottom(true);
 
     const toSend = textInput;
+    const sender = {
+      id: currentUser.id,
+      name: currentUser.username,
+      email: currentUser.email,
+      avatar: currentUser.avatar,
+    };
     setTextInput('');
     isTypingRef.current = false;
     setIsSelfTyping(false);
@@ -502,7 +522,7 @@ export default function ChatPage() {
       await fetch('/api/clickup/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: activeChannelId, text: toSend }),
+        body: JSON.stringify({ channelId: activeChannelId, text: toSend, sender }),
       });
       setStatusMap((prev) => ({ ...prev, [tempId]: 'sent' }));
       setRawMessages((prev) =>
@@ -550,13 +570,27 @@ export default function ChatPage() {
     scrollToThreadBottom(true);
 
     const toSend = threadInput;
+    const sender = {
+      id: currentUser.id,
+      name: currentUser.username,
+      email: currentUser.email,
+      avatar: currentUser.avatar,
+    };
     setThreadInput('');
 
     try {
       await fetch('/api/clickup/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: activeChannelId, text: toSend, parentId }),
+        body: JSON.stringify({
+          channelId: activeChannelId,
+          text: toSend,
+          sender,
+          replyTo: {
+            author: activeThreadMessage.user_name,
+            text: activeThreadMessage.text,
+          },
+        }),
       });
       setStatusMap((prev) => ({ ...prev, [replyId]: 'sent' }));
       advanceStatusToRead(replyId);
@@ -609,43 +643,8 @@ export default function ChatPage() {
 
       <div className="relative h-[calc(100vh-8rem)] bg-white border border-[#E8E8EC] rounded-2xl shadow-xs overflow-hidden flex animate-fade-in">
 
-        {/* ══ ① Dynamic Island ══════════════════════════════════════════════ */}
-        {island.visible && island.data && (
-          <div
-            onClick={() => {
-              setActiveChannelId(island.data!.channelId);
-              setUnreadMap((prev) => ({ ...prev, [island.data!.channelId]: 0 }));
-              setIsland({ visible: false, exiting: false, data: null });
-            }}
-            className={`fixed top-4 left-1/2 z-[60] cursor-pointer select-none
-              ${island.exiting ? 'dynamic-island-exit' : 'dynamic-island-enter'}`}
-            style={{ transform: 'translateX(-50%)' }}
-          >
-            <div className="relative flex items-center gap-3 bg-[#0D0D0D] text-white
-              pl-2 pr-5 py-2 rounded-full shadow-2xl border border-white/10"
-              style={{ backdropFilter: 'blur(20px)', minWidth: 260 }}>
-              <div className="relative flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={island.data.senderAvatar} alt={island.data.senderName}
-                  className="w-9 h-9 rounded-full object-cover border-2 border-white/20" />
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#4F9D78] border-2 border-[#0D0D0D] rounded-full online-dot" />
-              </div>
-              <div className="flex flex-col min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-white leading-none">{island.data.senderName}</span>
-                  <span className="text-[9px] bg-[#F26B5E]/90 text-white px-1.5 py-0.5 rounded-full font-bold leading-none">
-                    {island.data.channelName}
-                  </span>
-                </div>
-                <p className="text-[11px] text-white/75 truncate mt-0.5 leading-snug max-w-[200px]">{island.data.text}</p>
-              </div>
-              <Sparkles className="w-4 h-4 text-[#F26B5E] flex-shrink-0 animate-pulse" />
-            </div>
-          </div>
-        )}
-
-        {/* ══ ② Toast Stack ════════════════════════════════════════════════ */}
-        <div className="fixed bottom-6 right-6 z-[55] flex flex-col-reverse gap-2 pointer-events-none">
+        {/* ══ ① Toast Stack ════════════════════════════════════════════════ */}
+        <div className="fixed top-6 right-6 z-[55] flex flex-col gap-2 pointer-events-none">
           {toasts.map((toast) => (
             <div key={toast.id}
               className={`pointer-events-auto flex items-start gap-3 bg-white border border-[#E8E8EC]
@@ -760,6 +759,11 @@ export default function ChatPage() {
                     const unread   = unreadMap[ch.id] || 0;
                     const dmName   = ch.name.replace('👤 DM: ', '').replace('DM:', '').trim();
                     const initials = dmName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+                    const memberAvatar = ch.avatar || liveMembers.find((m) =>
+                      m.username.toLowerCase() === dmName.toLowerCase() ||
+                      m.username.toLowerCase().includes(dmName.toLowerCase()) ||
+                      dmName.toLowerCase().includes(m.username.toLowerCase())
+                    )?.avatar;
                     return (
                       <button key={ch.id}
                         onClick={() => {
@@ -773,10 +777,21 @@ export default function ChatPage() {
                             : 'text-[#737680] hover:bg-white hover:text-[#202124]'}`}
                       >
                         <div className="flex items-center gap-2 truncate">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-extrabold flex-shrink-0
-                            ${isActive ? 'bg-[#7B68EE] text-white' : 'bg-[#E8E8EC] text-[#737680]'}`}>
-                            {initials || <User className="w-3 h-3" />}
-                          </div>
+                          {memberAvatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={memberAvatar}
+                              alt={dmName}
+                              className={`w-6 h-6 rounded-full object-cover flex-shrink-0 border ${
+                                isActive ? 'border-[#7B68EE]/40' : 'border-[#E8E8EC]'
+                              }`}
+                            />
+                          ) : (
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-extrabold flex-shrink-0
+                              ${isActive ? 'bg-[#7B68EE] text-white' : 'bg-[#E8E8EC] text-[#737680]'}`}>
+                              {initials || <User className="w-3 h-3" />}
+                            </div>
+                          )}
                           <span className="truncate">{dmName}</span>
                         </div>
                         {unread > 0 && (
@@ -872,11 +887,7 @@ export default function ChatPage() {
             ) : (
               rootMessages.map((rawMsg) => {
                 const msg = getMessageWithReplies(rawMsg);
-                const isMe =
-                  (currentUser.id > 0 && String(msg.user_id) === String(currentUser.id)) ||
-                  (currentUser.username && currentUser.username !== 'Pengguna' &&
-                    (msg.user_name.toLowerCase().includes(currentUser.username.toLowerCase()) ||
-                     currentUser.username.toLowerCase().includes(msg.user_name.toLowerCase())));
+                const isMe = isCurrentUserMessage(msg);
                 const replyCount = msg.reply_count || 0;
                 const isSelected = activeThreadMessage?.id === msg.id;
                 const msgStatus: MessageStatus = statusMap[msg.id] || 'read';
@@ -1075,7 +1086,7 @@ export default function ChatPage() {
                 );
                 return allReplies.length ? (
                 allReplies.map((reply) => {
-                  const isReplyMe = reply.user_name.includes('Dinur') || reply.user_id === String(currentUser.id);
+                  const isReplyMe = isCurrentUserMessage(reply);
                   const replyStatus: MessageStatus = statusMap[reply.id] || 'read';
                   return (
                     <div key={reply.id} className="flex items-start gap-2">
