@@ -339,7 +339,7 @@ export default function FloatingChat() {
   };
 
   return (
-    <div className="fixed right-4 bottom-5 md:right-6 md:bottom-6 z-[60] flex flex-col items-end gap-3">
+    <div className="hidden md:flex fixed right-4 bottom-5 md:right-6 md:bottom-6 z-[60] flex-col items-end gap-3">
       {open && (
         <section className="w-[min(380px,calc(100vw-2rem))] h-[min(500px,calc(100vh-7rem))] bg-white border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-fade-in">
           <header className="px-4 py-3 border-b border-[#E8E8EC] bg-[#24324A] text-white flex items-center justify-between">
