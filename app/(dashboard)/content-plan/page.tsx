@@ -43,6 +43,15 @@ export interface ContentSheetItem {
 
 const DEFAULT_SHEETS: ContentSheetItem[] = [];
 
+const generateContentSheetId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  // UUID-shaped fallback for browsers without crypto.randomUUID.
+  return 'b0eebc99-9c0b-4ef8-bb6d-' + Date.now().toString(16).padStart(12, '0').slice(-12);
+};
+
 export default function ContentPlanPage() {
   const [mounted, setMounted] = useState(false);
   const [sheets, setSheets] = useState<ContentSheetItem[]>([]);
@@ -237,11 +246,11 @@ export default function ContentPlanPage() {
         if (parsed.length > 0 && !selectedSheetId) setSelectedSheetId(parsed[0].id);
       } catch {
         setSheets(DEFAULT_SHEETS);
-        setSelectedSheetId(DEFAULT_SHEETS[0].id);
+        setSelectedSheetId('');
       }
     } else {
       setSheets(DEFAULT_SHEETS);
-      setSelectedSheetId(DEFAULT_SHEETS[0].id);
+      setSelectedSheetId('');
     }
   };
 
@@ -287,7 +296,7 @@ export default function ContentPlanPage() {
     const logoUrlToUse = formLogoUrl.trim() || `https://ui-avatars.com/api/?name=${encodeURIComponent(formClientName.trim())}&background=FFF0ED&color=F26B5E&font-size=0.4`;
 
     const newSheet: ContentSheetItem = {
-      id: 'sheet-' + Date.now(),
+      id: generateContentSheetId(),
       client_name: formClientName.trim(),
       title: formTitle.trim() || `Content Plan ${formClientName.trim()}`,
       sheet_url: formSheetUrl.trim(),
@@ -303,21 +312,27 @@ export default function ContentPlanPage() {
     setSelectedSheetId(newSheet.id);
     localStorage.setItem('bilik_content_sheets', JSON.stringify(updated));
 
-    try {
-      await supabase.from('content_plan_sheets').insert([
-        {
-          id: newSheet.id,
-          client_name: newSheet.client_name,
-          title: newSheet.title,
-          sheet_url: newSheet.sheet_url,
-          embed_url: newSheet.embed_url,
-          platform: newSheet.platform,
-          status: newSheet.status,
-          logo_url: newSheet.logo_url,
-        },
-      ]);
-    } catch (err) {
-      console.warn('[ContentPlan] Supabase insert error:', err);
+    const { error: insertError } = await supabase.from('content_plan_sheets').insert([
+      {
+        id: newSheet.id,
+        client_name: newSheet.client_name,
+        title: newSheet.title,
+        sheet_url: newSheet.sheet_url,
+        embed_url: newSheet.embed_url,
+        platform: newSheet.platform,
+        status: newSheet.status,
+        logo_url: newSheet.logo_url,
+      },
+    ]);
+
+    if (insertError) {
+      console.warn('[ContentPlan] Supabase insert error:', insertError);
+      setSheets(sheets);
+      setSelectedSheetId(sheets[0]?.id || '');
+      localStorage.setItem('bilik_content_sheets', JSON.stringify(sheets));
+      setToastMessage('Sheet gagal disimpan ke database. Periksa koneksi Supabase lalu coba lagi.');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
     }
 
     setShowAddModal(false);
