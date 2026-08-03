@@ -6,11 +6,16 @@ import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 
+import MobileBottomNav from '@/components/layout/MobileBottomNav';
+import { usePathname, useRouter } from 'next/navigation';
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     // 1. Strict Authentication Check for All Dashboard Routes
@@ -32,7 +37,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     checkAuth();
 
-    // 2. Sidebar Collapsed State Listener
+    // 2. Mobile landing focus: if mobile screen and on home root, redirect to /chat
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && (pathname === '/' || pathname === '/dashboard')) {
+      router.push('/chat');
+    }
+
+    // 3. Sidebar Collapsed State Listener
     const checkState = () => {
       const isCollapsed = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
       setSidebarCollapsed(isCollapsed);
@@ -46,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.removeEventListener('sidebar-toggle', checkState);
       window.removeEventListener('storage', checkState);
     };
-  }, []);
+  }, [pathname, router]);
 
   if (isAuthenticated === false) {
     return (
@@ -60,14 +70,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex">
-      {/* Collapsible Sidebar */}
-      <Sidebar />
+    <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
+      {/* Collapsible Sidebar (Desktop) */}
+      <div className="hidden md:block">
+        <Sidebar />
+      </div>
 
       {/* Main Container */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
-          sidebarCollapsed ? 'pl-16' : 'pl-64'
+          sidebarCollapsed ? 'pl-0 md:pl-16' : 'pl-0 md:pl-64'
         }`}
       >
         {/* Top Header Navigation */}
@@ -76,11 +88,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onOpenCreateTask={() => setCreateTaskOpen(true)}
         />
 
-        {/* Page Content Area - Responsive Fill Without Huge Empty Side Gaps */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 w-full max-w-[1800px] mx-auto transition-all duration-300">
+        {/* Page Content Area - Responsive Fill */}
+        <main className="flex-1 p-3 md:p-6 lg:p-8 w-full max-w-[1800px] mx-auto transition-all duration-300 pb-24 md:pb-8">
           {children}
         </main>
       </div>
+
+      {/* Floating Bottom Navigation for Mobile & Tablet */}
+      <MobileBottomNav />
 
       {/* Global Command Menu (Cmd+K) */}
       <CommandMenu

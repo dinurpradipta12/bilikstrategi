@@ -125,6 +125,7 @@ export default function ChatPage() {
   const [liveMembers, setLiveMembers]               = useState<Array<{ id: number; username: string; email: string; avatar: string }>>([]);
   const [loadingMessages, setLoadingMessages]       = useState(false);
   const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>({});
+  const [mobileChannelsOpen, setMobileChannelsOpen] = useState(false);
   
   // Authenticated user (default Dinur Pradipta)
   const [currentUser, setCurrentUser] = useState({
@@ -678,23 +679,33 @@ export default function ChatPage() {
           ))}
         </div>
 
-        {/* ══ ③ Left Sidebar ════════════════════════════════════════════════ */}
-        <div className="w-72 border-r border-[#E8E8EC] bg-[#F7F7F8] flex flex-col flex-shrink-0">
-          <div className="px-4 pt-4 pb-3 border-b border-[#E8E8EC]">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-[#F26B5E]" /> Agency Chat
-              </h2>
-              <div className="flex items-center gap-2">
-                {totalUnread > 0 && (
-                  <span className="flex items-center gap-1 px-2 py-0.5 bg-[#F26B5E] text-white font-extrabold text-[10px] rounded-full badge-pop">
-                    <Bell className="w-2.5 h-2.5" />{totalUnread}
-                  </span>
-                )}
-                <span className="flex items-center gap-1 text-[10px] text-[#4F9D78] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#4F9D78] online-dot" />Live 2s
+        {/* ══ ③ Left Sidebar (Discord Channels Drawer) ════════════════════════ */}
+        {mobileChannelsOpen && (
+          <div
+            onClick={() => setMobileChannelsOpen(false)}
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs md:hidden"
+          />
+        )}
+
+        <div className={`w-72 border-r border-[#E8E8EC] bg-[#F7F7F8] flex-col flex-shrink-0 transition-all ${
+          mobileChannelsOpen ? 'fixed inset-y-0 left-0 z-50 flex shadow-2xl w-80' : 'hidden md:flex'
+        }`}>
+          <div className="px-4 pt-4 pb-3 border-b border-[#E8E8EC] flex items-center justify-between">
+            <h2 className="text-xs font-extrabold text-[#24324A] uppercase tracking-wider flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5 text-[#F26B5E]" /> Agency Chat
+            </h2>
+            <div className="flex items-center gap-2">
+              {totalUnread > 0 && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-[#F26B5E] text-white font-extrabold text-[10px] rounded-full badge-pop">
+                  <Bell className="w-2.5 h-2.5" />{totalUnread}
                 </span>
-              </div>
+              )}
+              <button
+                onClick={() => setMobileChannelsOpen(false)}
+                className="md:hidden p-1 text-[#737680] hover:text-[#202124]"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -707,7 +718,11 @@ export default function ChatPage() {
                     <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
                       unread={unreadMap[ch.id] || 0} label={ch.name}
                       icon={<Hash className="w-3 h-3 text-[#F26B5E]" />}
-                      onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                      onClick={() => {
+                        setActiveChannelId(ch.id);
+                        setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                        setMobileChannelsOpen(false);
+                      }}
                     />
                   ))}
                 </div>
@@ -722,7 +737,11 @@ export default function ChatPage() {
                     <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
                       unread={unreadMap[ch.id] || 0} label={ch.name.replace('💬 ', '')}
                       icon={<Hash className="w-3 h-3 text-[#737680]" />}
-                      onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                      onClick={() => {
+                        setActiveChannelId(ch.id);
+                        setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                        setMobileChannelsOpen(false);
+                      }}
                     />
                   ))}
                 </div>
@@ -743,7 +762,11 @@ export default function ChatPage() {
                     const initials = dmName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
                     return (
                       <button key={ch.id}
-                        onClick={() => { setActiveChannelId(ch.id); setUnreadMap((p) => ({ ...p, [ch.id]: 0 })); }}
+                        onClick={() => {
+                          setActiveChannelId(ch.id);
+                          setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                          setMobileChannelsOpen(false);
+                        }}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold
                           transition-all text-left cursor-pointer
                           ${isActive ? 'bg-gradient-to-r from-[#7B68EE]/15 to-[#7B68EE]/5 text-[#7B68EE] border border-[#7B68EE]/20'
@@ -787,9 +810,17 @@ export default function ChatPage() {
         {/* ══ ④ Main Message Area ══════════════════════════════════════════ */}
         <div className="flex-1 flex flex-col bg-white min-w-0">
           {/* Header */}
-          <div className="h-14 px-6 border-b border-[#E8E8EC] flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">{activeChannel?.name}</h3>
+          <div className="h-14 px-4 md:px-6 border-b border-[#E8E8EC] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <button
+                onClick={() => setMobileChannelsOpen(true)}
+                className="md:hidden p-1.5 rounded-lg border border-[#E8E8EC] text-[#24324A] hover:bg-[#F7F7F8] flex-shrink-0 cursor-pointer"
+                title="Buka Channel Discord Chat"
+              >
+                <Hash className="w-4 h-4 text-[#F26B5E]" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">{activeChannel?.name}</h3>
 
               {/* Subtitle: switches between member count and "sedang mengetik" */}
               <div className="h-4 mt-0.5 overflow-hidden">
