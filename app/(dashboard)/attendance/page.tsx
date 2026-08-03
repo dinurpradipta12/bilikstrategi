@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   Clock,
   Play,
+  Pause,
   Square,
   Calendar,
   CheckCircle2,
@@ -54,6 +55,9 @@ interface TeamMemberStatus {
   isOnline: boolean;
   checkInTime?: string;
   checkInTimestamp?: number;
+  isPaused?: boolean;
+  pausedAt?: string;
+  accumulatedSeconds?: number;
   project?: string;
   statusText?: string;
 }
@@ -80,6 +84,9 @@ export default function AttendancePage() {
   const [isCheckedIn, setIsCheckedIn] = useState<boolean>(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkInTimestamp, setCheckInTimestamp] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState<number>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   // Form Inputs
@@ -167,8 +174,11 @@ export default function AttendancePage() {
       isOnline: true,
       checkInTime: active.checkInTime,
       checkInTimestamp: active.checkInTimestamp,
+      isPaused: active.isPaused === true,
+      pausedAt: active.pausedAt,
+      accumulatedSeconds: Number(active.accumulatedSeconds || 0),
       project: active.selectedProject || 'Bilik Strategi Workspace',
-      statusText: 'Online & Bekerja',
+      statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
     };
   };
 
@@ -181,8 +191,11 @@ export default function AttendancePage() {
     isOnline: isCheckedIn,
     checkInTime: isCheckedIn ? checkInTime || undefined : undefined,
     checkInTimestamp: isCheckedIn ? checkInTimestamp || undefined : undefined,
+    isPaused: isCheckedIn ? isPaused : false,
+    pausedAt: isCheckedIn ? pausedAt || undefined : undefined,
+    accumulatedSeconds: isCheckedIn ? accumulatedSeconds : 0,
     project: isCheckedIn ? selectedProject : undefined,
-    statusText: isCheckedIn ? 'Online & Bekerja' : 'Belum Check-In',
+    statusText: isCheckedIn ? (isPaused ? 'Paused / Dijeda' : 'Online & Bekerja') : 'Belum Check-In',
   });
 
   // 1. Fetch User Profile, Projects, & Team Members on Mount
@@ -262,6 +275,9 @@ export default function AttendancePage() {
               isOnline: false,
               checkInTime: undefined,
               checkInTimestamp: undefined,
+              isPaused: false,
+              pausedAt: undefined,
+              accumulatedSeconds: 0,
               project: undefined,
               statusText: 'Belum Check-In',
             };
@@ -294,6 +310,9 @@ export default function AttendancePage() {
           setIsCheckedIn(true);
           setCheckInTime(parsed.checkInTime);
           setCheckInTimestamp(parsed.checkInTimestamp);
+          setIsPaused(parsed.isPaused === true);
+          setPausedAt(parsed.pausedAt || null);
+          setAccumulatedSeconds(Number(parsed.accumulatedSeconds || 0));
           setSelectedProject(parsed.selectedProject || 'Bilik Strategi Workspace');
           setNotesInput(parsed.notesInput || '');
         } catch {
@@ -323,6 +342,9 @@ export default function AttendancePage() {
               setIsCheckedIn(false);
               setCheckInTime(null);
               setCheckInTimestamp(null);
+              setIsPaused(false);
+              setPausedAt(null);
+              setAccumulatedSeconds(0);
               setElapsedSeconds(0);
               localStorage.removeItem('bilik_attendance_history');
               localStorage.removeItem('bilik_timesheet_recap');
@@ -409,6 +431,9 @@ export default function AttendancePage() {
       setIsCheckedIn(false);
       setCheckInTime(null);
       setCheckInTimestamp(null);
+      setIsPaused(false);
+      setPausedAt(null);
+      setAccumulatedSeconds(0);
       setElapsedSeconds(0);
       setShowAdminResetModal(false);
 
@@ -481,20 +506,24 @@ export default function AttendancePage() {
         })
       );
 
-      if (isCheckedIn && checkInTimestamp) {
-        const diffSec = Math.floor((now.getTime() - checkInTimestamp) / 1000);
-        setElapsedSeconds(diffSec > 0 ? diffSec : 0);
+      if (isCheckedIn) {
+        const runningSeconds = !isPaused && checkInTimestamp
+          ? Math.floor((now.getTime() - checkInTimestamp) / 1000)
+          : 0;
+        const totalSeconds = accumulatedSeconds + Math.max(0, runningSeconds);
+        setElapsedSeconds(totalSeconds);
       }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isCheckedIn, checkInTimestamp]);
+  }, [isCheckedIn, isPaused, checkInTimestamp, accumulatedSeconds]);
 
   // Sync live status directly from Supabase DB (Single Source of Truth)
   const syncRealTimeTeamAttendance = async () => {
     try {
       // 1. Direct Supabase DB active_sessions fetch via REST API
       let supabaseActiveList: any[] = [];
+      let hasAuthoritativeServerSnapshot = false;
       try {
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
         const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
@@ -504,6 +533,7 @@ export default function AttendancePage() {
           cache: 'no-store',
         });
         if (restRes.ok) {
+          hasAuthoritativeServerSnapshot = true;
           const restData = await restRes.json();
           if (Array.isArray(restData)) {
             supabaseActiveList = restData.map((row: any) => ({
@@ -511,6 +541,9 @@ export default function AttendancePage() {
               user_avatar: row.user_avatar,
               checkInTime: row.check_in_time,
               checkInTimestamp: Number(row.check_in_timestamp),
+              isPaused: row.is_paused === true,
+              pausedAt: row.paused_at || undefined,
+              accumulatedSeconds: Number(row.accumulated_seconds || 0),
               selectedProject: row.selected_project,
               notesInput: row.notes_input || '',
             }));
@@ -518,6 +551,58 @@ export default function AttendancePage() {
         }
       } catch {
         // ignore
+      }
+
+      const currentNameClean = normalizeMemberKey(currentUser.username);
+      const currentActiveSession = supabaseActiveList.find((active: any) => {
+        const activeNameClean = normalizeMemberKey(active.user_name);
+        return activeNameClean === currentNameClean ||
+          (activeNameClean.length > 3 && currentNameClean.includes(activeNameClean)) ||
+          (currentNameClean.length > 3 && activeNameClean.includes(currentNameClean));
+      });
+
+      // Keep the current device aligned with the server when another tab/device
+      // pauses or resumes the same attendance session.
+      if (currentActiveSession) {
+        const sessionIsPaused = currentActiveSession.isPaused === true;
+        const sessionAccumulated = Number(currentActiveSession.accumulatedSeconds || 0);
+        const sessionStartedAt = Number(currentActiveSession.checkInTimestamp || 0);
+        const runningSeconds = !sessionIsPaused && sessionStartedAt
+          ? Math.max(0, Math.floor((Date.now() - sessionStartedAt) / 1000))
+          : 0;
+        const sessionElapsed = sessionAccumulated + runningSeconds;
+
+        setIsCheckedIn(true);
+        setCheckInTime(currentActiveSession.checkInTime || null);
+        setCheckInTimestamp(sessionStartedAt || null);
+        setIsPaused(sessionIsPaused);
+        setPausedAt(currentActiveSession.pausedAt || null);
+        setAccumulatedSeconds(sessionAccumulated);
+        setElapsedSeconds(sessionElapsed);
+        setSelectedProject(currentActiveSession.selectedProject || 'Bilik Strategi Workspace');
+        setNotesInput(currentActiveSession.notesInput || '');
+        localStorage.setItem('bilik_active_attendance', JSON.stringify({
+          user_name: currentActiveSession.user_name,
+          user_avatar: currentActiveSession.user_avatar || currentUser.avatar,
+          checkInTime: currentActiveSession.checkInTime,
+          checkInTimestamp: sessionStartedAt,
+          selectedProject: currentActiveSession.selectedProject || 'Bilik Strategi Workspace',
+          notesInput: currentActiveSession.notesInput || '',
+          isPaused: sessionIsPaused,
+          pausedAt: currentActiveSession.pausedAt || null,
+          accumulatedSeconds: sessionAccumulated,
+        }));
+      } else if (hasAuthoritativeServerSnapshot && currentUser.username !== 'User') {
+        // A successful server snapshot without our row means the session was
+        // checked out elsewhere. Clear stale local state instead of reviving it.
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        setCheckInTimestamp(null);
+        setIsPaused(false);
+        setPausedAt(null);
+        setAccumulatedSeconds(0);
+        setElapsedSeconds(0);
+        localStorage.removeItem('bilik_active_attendance');
       }
 
       setTeamStatusList((prev) => {
@@ -568,6 +653,9 @@ export default function AttendancePage() {
               isOnline: false,
               checkInTime: undefined,
               checkInTimestamp: undefined,
+              isPaused: false,
+              pausedAt: undefined,
+              accumulatedSeconds: 0,
               project: undefined,
               statusText: 'Belum Check-In',
             };
@@ -589,8 +677,11 @@ export default function AttendancePage() {
               isOnline: true,
               checkInTime: active.checkInTime,
               checkInTimestamp: active.checkInTimestamp,
+              isPaused: active.isPaused === true,
+              pausedAt: active.pausedAt,
+              accumulatedSeconds: Number(active.accumulatedSeconds || 0),
               project: active.selectedProject || 'Bilik Strategi Workspace',
-              statusText: 'Online & Bekerja',
+              statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
             };
           }
 
@@ -599,6 +690,9 @@ export default function AttendancePage() {
             isOnline: false,
             checkInTime: undefined,
             checkInTimestamp: undefined,
+            isPaused: false,
+            pausedAt: undefined,
+            accumulatedSeconds: 0,
             project: undefined,
               statusText: 'Belum Check-In',
             };
@@ -635,7 +729,7 @@ export default function AttendancePage() {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
     };
-  }, [isCheckedIn, checkInTime, checkInTimestamp, selectedProject, currentUser.username]);
+  }, [isCheckedIn, isPaused, pausedAt, accumulatedSeconds, checkInTime, checkInTimestamp, selectedProject, currentUser.username]);
 
   // 3. Supabase Live Realtime WebSocket Listener (Instant Push Notification on DB Changes)
   useEffect(() => {
@@ -655,7 +749,7 @@ export default function AttendancePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUser.username, isCheckedIn]);
 
   // Admin Quick Action: Toggle Check-In for any Team Member
   const handleAdminToggleMemberCheckIn = async (member: TeamMemberStatus, e: React.MouseEvent) => {
@@ -670,6 +764,9 @@ export default function AttendancePage() {
         user_avatar: member.avatar,
         checkInTime: startTimeStr,
         checkInTimestamp: startTimestamp,
+        isPaused: false,
+        pausedAt: null,
+        accumulatedSeconds: 0,
         selectedProject: 'Bilik Strategi Workspace',
         notesInput: 'Check-In via Admin',
       };
@@ -687,6 +784,9 @@ export default function AttendancePage() {
           user_avatar: member.avatar,
           check_in_time: startTimeStr,
           check_in_timestamp: startTimestamp,
+          is_paused: false,
+          paused_at: null,
+          accumulated_seconds: 0,
           selected_project: 'Bilik Strategi Workspace',
           notes_input: 'Check-In via Admin',
           updated_at: new Date().toISOString(),
@@ -704,6 +804,9 @@ export default function AttendancePage() {
           notesInput: 'Check-In via Admin',
           checkInTime: startTimeStr,
           checkInTimestamp: startTimestamp,
+          isPaused: false,
+          pausedAt: null,
+          accumulatedSeconds: 0,
         }),
       }).catch(() => {});
     } else {
@@ -741,6 +844,119 @@ export default function AttendancePage() {
     syncRealTimeTeamAttendance();
   };
 
+  const persistLocalActiveAttendance = (activeObj: any) => {
+    localStorage.setItem('bilik_active_attendance', JSON.stringify(activeObj));
+
+    try {
+      const storeStr = localStorage.getItem('bilik_team_active_store');
+      const storeMap = storeStr ? JSON.parse(storeStr) : {};
+      storeMap[currentUser.username.toLowerCase()] = activeObj;
+      localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
+    } catch {
+      // ignore local cache errors
+    }
+  };
+
+  const broadcastAttendanceSync = () => {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const bc = new BroadcastChannel('bilik_attendance_channel');
+        bc.postMessage({ type: 'SYNC_ATTENDANCE' });
+        bc.close();
+      } catch {
+        // ignore browser broadcast errors
+      }
+    }
+  };
+
+  const syncAttendanceAction = async (action: 'pause' | 'resume', activeObj: any) => {
+    const response = await fetch('/api/attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...activeObj }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || `Gagal melakukan ${action} presensi`);
+    }
+  };
+
+  const handlePause = async () => {
+    if (!isCheckedIn || isPaused || !checkInTimestamp) return;
+
+    const now = Date.now();
+    const nextAccumulatedSeconds = accumulatedSeconds + Math.max(
+      0,
+      Math.floor((now - checkInTimestamp) / 1000)
+    );
+    const nextPausedAt = new Date(now).toISOString();
+    const activeObj = {
+      user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
+      checkInTime: checkInTime || new Date(checkInTimestamp).toLocaleTimeString('id-ID'),
+      checkInTimestamp,
+      isPaused: true,
+      pausedAt: nextPausedAt,
+      accumulatedSeconds: nextAccumulatedSeconds,
+      selectedProject,
+      notesInput,
+    };
+
+    setIsPaused(true);
+    setPausedAt(nextPausedAt);
+    setAccumulatedSeconds(nextAccumulatedSeconds);
+    setElapsedSeconds(nextAccumulatedSeconds);
+    persistLocalActiveAttendance(activeObj);
+    broadcastAttendanceSync();
+
+    try {
+      await syncAttendanceAction('pause', activeObj);
+      syncRealTimeTeamAttendance();
+    } catch (err) {
+      console.warn('[Attendance] Pause sync error', err);
+      setLastCheckOutNotice({
+        type: 'warning',
+        message: 'Pause tersimpan di perangkat, tetapi belum berhasil disinkronkan ke server.',
+      });
+    }
+  };
+
+  const handleResume = async () => {
+    if (!isCheckedIn || !isPaused) return;
+
+    const now = Date.now();
+    const activeObj = {
+      user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
+      checkInTime: checkInTime || new Date(now).toLocaleTimeString('id-ID'),
+      checkInTimestamp: now,
+      isPaused: false,
+      pausedAt: null,
+      accumulatedSeconds,
+      selectedProject,
+      notesInput,
+    };
+
+    setIsPaused(false);
+    setPausedAt(null);
+    setCheckInTimestamp(now);
+    setElapsedSeconds(accumulatedSeconds);
+    persistLocalActiveAttendance(activeObj);
+    broadcastAttendanceSync();
+
+    try {
+      await syncAttendanceAction('resume', activeObj);
+      syncRealTimeTeamAttendance();
+    } catch (err) {
+      console.warn('[Attendance] Resume sync error', err);
+      setLastCheckOutNotice({
+        type: 'warning',
+        message: 'Presensi dilanjutkan di perangkat, tetapi belum berhasil disinkronkan ke server.',
+      });
+    }
+  };
+
   // 3. Handle Check-In
   const handleCheckIn = () => {
     const now = new Date();
@@ -755,13 +971,20 @@ export default function AttendancePage() {
     setIsCheckedIn(true);
     setCheckInTime(startTimeStr);
     setCheckInTimestamp(startTimestamp);
+    setIsPaused(false);
+    setPausedAt(null);
+    setAccumulatedSeconds(0);
     setElapsedSeconds(0);
     setLastCheckOutNotice(null);
 
     const activeObj = {
       user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
       checkInTime: startTimeStr,
       checkInTimestamp: startTimestamp,
+      isPaused: false,
+      pausedAt: null,
+      accumulatedSeconds: 0,
       selectedProject,
       notesInput,
     };
@@ -804,6 +1027,9 @@ export default function AttendancePage() {
           user_avatar: currentUser.avatar,
           check_in_time: startTimeStr,
           check_in_timestamp: startTimestamp,
+          is_paused: false,
+          paused_at: null,
+          accumulated_seconds: 0,
           selected_project: selectedProject,
           notes_input: notesInput,
           updated_at: new Date().toISOString(),
@@ -823,6 +1049,9 @@ export default function AttendancePage() {
         notesInput,
         checkInTime: startTimeStr,
         checkInTimestamp: startTimestamp,
+        isPaused: false,
+        pausedAt: null,
+        accumulatedSeconds: 0,
       }),
     }).catch(() => {});
   };
@@ -839,7 +1068,9 @@ export default function AttendancePage() {
       hour12: false,
     });
 
-    const diffMs = now.getTime() - checkInTimestamp;
+    const diffMs = (accumulatedSeconds * 1000) + (
+      isPaused ? 0 : Math.max(0, now.getTime() - checkInTimestamp)
+    );
     const durationHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
 
     const dayName = now.toLocaleDateString('en-US', { weekday: 'short' });
@@ -917,6 +1148,9 @@ export default function AttendancePage() {
     setIsCheckedIn(false);
     setCheckInTime(null);
     setCheckInTimestamp(null);
+    setIsPaused(false);
+    setPausedAt(null);
+    setAccumulatedSeconds(0);
     setElapsedSeconds(0);
     setNotesInput('');
     localStorage.removeItem('bilik_active_attendance');
@@ -1135,7 +1369,9 @@ export default function AttendancePage() {
             {/* Center Timer Display */}
             <div className="my-8 text-center space-y-3">
               <span className="text-[11px] font-bold text-[#737680] uppercase tracking-widest block">
-                {isCheckedIn ? 'Durasi Jam Kerja Berjalan' : 'Waktu Real-Time Saat Ini'}
+                {isCheckedIn
+                  ? (isPaused ? 'Durasi Jam Kerja Dijeda' : 'Durasi Jam Kerja Berjalan')
+                  : 'Waktu Real-Time Saat Ini'}
               </span>
               <div className="text-4xl sm:text-5xl font-extrabold font-mono tracking-tight text-[#24324A]">
                 {isCheckedIn ? formatTimer(elapsedSeconds) : currentTime || '00 : 00 : 00'}
@@ -1144,8 +1380,12 @@ export default function AttendancePage() {
               {isCheckedIn ? (
                 <div className="space-y-1">
                   {checkInTime && (
-                    <p className="text-xs font-semibold text-[#4F9D78] bg-[#4F9D78]/10 inline-block px-3 py-1 rounded-full border border-[#4F9D78]/20">
-                      ✓ Check-in masuk sejak pukul <b>{checkInTime} WIB</b>
+                    <p
+                      className={isPaused
+                        ? "text-xs font-semibold text-[#B87C24] bg-[#E6A23C]/10 inline-block px-3 py-1 rounded-full border border-[#E6A23C]/20"
+                        : "text-xs font-semibold text-[#4F9D78] bg-[#4F9D78]/10 inline-block px-3 py-1 rounded-full border border-[#4F9D78]/20"}
+                    >
+                      {isPaused ? '⏸ Presensi dijeda sejak' : '✓ Check-in masuk sejak'} pukul <b>{isPaused && pausedAt ? new Date(pausedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : checkInTime} WIB</b>
                     </p>
                   )}
                   {elapsedSeconds < 3600 && (
@@ -1161,7 +1401,7 @@ export default function AttendancePage() {
               )}
             </div>
 
-            {/* Action Check-In / Check-Out Button */}
+            {/* Action Check-In / Pause / Check-Out Buttons */}
             <div>
               {!isCheckedIn ? (
                 <button
@@ -1173,14 +1413,27 @@ export default function AttendancePage() {
                   <span>CHECK-IN (MULAI BEKERJA)</span>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleCheckOut}
-                  className="w-full py-4 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
-                >
-                  <Square className="w-5 h-5 fill-white" />
-                  <span>CHECK-OUT (SELESAI & SIMPAN KE TIMESHEET)</span>
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={isPaused ? handleResume : handlePause}
+                    className={isPaused
+                      ? "w-full py-4 bg-[#4F9D78] hover:bg-[#3D8362] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
+                      : "w-full py-4 bg-[#E6A23C] hover:bg-[#C78A2C] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"}
+                  >
+                    {isPaused ? <Play className="w-5 h-5 fill-white" /> : <Pause className="w-5 h-5 fill-white" />}
+                    <span>{isPaused ? 'LANJUTKAN PRESENSI' : 'PAUSE PRESENSI'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckOut}
+                    className="w-full py-4 bg-[#F26B5E] hover:bg-[#D95346] text-white rounded-xl text-sm font-extrabold flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5"
+                  >
+                    <Square className="w-5 h-5 fill-white" />
+                    <span>CHECK-OUT & SIMPAN</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1266,7 +1519,10 @@ export default function AttendancePage() {
                 .map((m) => {
                   let liveMemberDurationStr = '00:00:00';
                   if (m.isOnline && m.checkInTimestamp) {
-                    const sec = Math.max(0, Math.floor((Date.now() - m.checkInTimestamp) / 1000));
+                    const runningSeconds = m.isPaused
+                      ? 0
+                      : Math.max(0, Math.floor((Date.now() - m.checkInTimestamp) / 1000));
+                    const sec = Number(m.accumulatedSeconds || 0) + runningSeconds;
                     liveMemberDurationStr = formatTimer(sec);
                   }
 
@@ -1275,7 +1531,9 @@ export default function AttendancePage() {
                     key={m.id}
                     className={`p-3 rounded-xl border transition-all ${
                       m.isOnline
-                        ? 'bg-[#FFFFFF] border-[#4F9D78]/40 shadow-xs'
+                        ? m.isPaused
+                          ? 'bg-[#FFFBF2] border-[#E6A23C]/40 shadow-xs'
+                          : 'bg-[#FFFFFF] border-[#4F9D78]/40 shadow-xs'
                         : 'bg-[#F7F7F8] border-[#E8E8EC] opacity-80'
                     }`}
                   >
@@ -1287,12 +1545,12 @@ export default function AttendancePage() {
                             src={m.avatar}
                             alt={m.name}
                             className={`w-9 h-9 rounded-full object-cover border ${
-                              m.isOnline ? 'border-[#4F9D78]' : 'border-[#E8E8EC]'
+                              m.isPaused ? 'border-[#E6A23C]' : m.isOnline ? 'border-[#4F9D78]' : 'border-[#E8E8EC]'
                             }`}
                           />
                           <span
                             className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                              m.isOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'
+                              m.isPaused ? 'bg-[#E6A23C]' : m.isOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'
                             }`}
                           />
                         </div>
@@ -1302,7 +1560,13 @@ export default function AttendancePage() {
                             <span className="text-[9px] text-[#737680] font-semibold uppercase">{m.role}</span>
                           </div>
                           <p className="text-[10px] text-[#737680] truncate">
-                            {m.isOnline ? `Check-In ${m.checkInTime || '08:30'} WIB` : 'Belum Check-In'}
+                            {m.isOnline
+                              ? m.isPaused
+                                ? 'Dijeda sejak ' + (m.pausedAt
+                                  ? new Date(m.pausedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                                  : '-')
+                                : 'Check-In ' + (m.checkInTime || '08:30') + ' WIB'
+                              : 'Belum Check-In'}
                           </p>
                         </div>
                       </div>
@@ -1311,10 +1575,17 @@ export default function AttendancePage() {
                       <div className="text-right flex-shrink-0">
                         {m.isOnline ? (
                           <div>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] rounded-lg font-mono font-extrabold text-xs border border-[#4F9D78]/30 shadow-2xs">
-                              <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-ping" />
+                            <span className={m.isPaused
+                              ? "inline-flex items-center gap-1 px-2.5 py-1 bg-[#E6A23C]/10 text-[#B87C24] rounded-lg font-mono font-extrabold text-xs border border-[#E6A23C]/30 shadow-2xs"
+                              : "inline-flex items-center gap-1 px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] rounded-lg font-mono font-extrabold text-xs border border-[#4F9D78]/30 shadow-2xs"}>
+                              {m.isPaused
+                                ? <Pause className="w-3 h-3 fill-current" />
+                                : <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-ping" />}
                               {liveMemberDurationStr}
                             </span>
+                            {m.isPaused && (
+                              <p className="text-[9px] font-extrabold text-[#B87C24] mt-1 uppercase">Paused / Dijeda</p>
+                            )}
                             <p className="text-[10px] font-extrabold text-[#7B68EE] mt-1 truncate max-w-[130px]">
                               {m.project || 'Bilik Strategi Workspace'}
                             </p>

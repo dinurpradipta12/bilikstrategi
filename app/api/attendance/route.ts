@@ -10,6 +10,9 @@ export interface ActiveCheckIn {
   user_avatar?: string;
   checkInTime: string;
   checkInTimestamp: number;
+  isPaused?: boolean;
+  pausedAt?: string | null;
+  accumulatedSeconds?: number;
   selectedProject: string;
   notesInput: string;
 }
@@ -37,6 +40,9 @@ export async function GET() {
       user_avatar: row.user_avatar,
       checkInTime: row.check_in_time,
       checkInTimestamp: Number(row.check_in_timestamp),
+      isPaused: row.is_paused === true,
+      pausedAt: row.paused_at || null,
+      accumulatedSeconds: Number(row.accumulated_seconds || 0),
       selectedProject: row.selected_project,
       notesInput: row.notes_input || '',
     }));
@@ -80,7 +86,16 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, user_name, user_avatar, selectedProject, notesInput, checkInTime, checkInTimestamp, record } = body;
+    const {
+      action,
+      user_name,
+      user_avatar,
+      selectedProject,
+      notesInput,
+      checkInTime,
+      checkInTimestamp,
+      record,
+    } = body;
 
     // Reset All Attendance History Across All Users (Admin Feature)
     if (action === 'reset_all') {
@@ -123,6 +138,9 @@ export async function POST(req: Request) {
         user_avatar,
         checkInTime: checkInTime || new Date().toLocaleTimeString('id-ID'),
         checkInTimestamp: checkInTimestamp || Date.now(),
+        isPaused: false,
+        pausedAt: null,
+        accumulatedSeconds: 0,
         selectedProject: selectedProject || 'Bilik Strategi Workspace',
         notesInput: notesInput || '',
       };
@@ -136,12 +154,84 @@ export async function POST(req: Request) {
           user_avatar: user_avatar || '',
           check_in_time: activeObj.checkInTime,
           check_in_timestamp: activeObj.checkInTimestamp,
+          is_paused: false,
+          paused_at: null,
+          accumulated_seconds: 0,
           selected_project: activeObj.selectedProject,
           notes_input: activeObj.notesInput,
           updated_at: new Date().toISOString(),
         });
       } catch (dbErr) {
         console.warn('[Attendance API] Supabase checkin error', dbErr);
+      }
+
+      return NextResponse.json({ success: true, active: activeObj });
+    }
+
+    if (action === 'pause' || action === 'resume') {
+      // The server is the source of truth for accumulated time. This prevents
+      // two tabs/devices from counting the same running interval twice.
+      const { data: currentRow, error: currentRowError } = await supabase
+        .from('active_sessions')
+        .select('*')
+        .ilike('user_name', user_name)
+        .maybeSingle();
+
+      if (currentRowError) {
+        throw new Error(currentRowError.message || 'Active session could not be loaded');
+      }
+
+      if (!currentRow) {
+        return NextResponse.json(
+          { success: false, error: 'Active attendance session was not found' },
+          { status: 409 }
+        );
+      }
+
+      const now = Date.now();
+      const storedTimestamp = Number(currentRow?.check_in_timestamp || checkInTimestamp || 0);
+      const storedAccumulated = Number(currentRow?.accumulated_seconds || 0);
+      const storedIsPaused = currentRow?.is_paused === true;
+      const runningSeconds = !storedIsPaused && storedTimestamp
+        ? Math.max(0, Math.floor((now - storedTimestamp) / 1000))
+        : 0;
+      const currentTotalSeconds = storedAccumulated + runningSeconds;
+      const nextIsPaused = action === 'pause';
+      const nextAccumulatedSeconds = currentTotalSeconds;
+      const nextTimestamp = nextIsPaused
+        ? storedTimestamp || Number(checkInTimestamp || now)
+        : now;
+      const nextPausedAt = nextIsPaused ? new Date(now).toISOString() : null;
+
+      const activeObj: ActiveCheckIn = {
+        user_name: currentRow?.user_name || user_name,
+        user_avatar: currentRow?.user_avatar || user_avatar || '',
+        checkInTime: currentRow?.check_in_time || checkInTime || new Date(nextTimestamp).toLocaleTimeString('id-ID'),
+        checkInTimestamp: nextTimestamp,
+        isPaused: nextIsPaused,
+        pausedAt: nextPausedAt,
+        accumulatedSeconds: nextAccumulatedSeconds,
+        selectedProject: currentRow?.selected_project || selectedProject || 'Bilik Strategi Workspace',
+        notesInput: currentRow?.notes_input || notesInput || '',
+      };
+
+      globalActiveCheckIns.set(key, activeObj);
+
+      const { error: upsertError } = await supabase.from('active_sessions').upsert({
+        user_name: activeObj.user_name,
+        user_avatar: activeObj.user_avatar || '',
+        check_in_time: activeObj.checkInTime,
+        check_in_timestamp: activeObj.checkInTimestamp,
+        is_paused: activeObj.isPaused,
+        paused_at: activeObj.pausedAt || null,
+        accumulated_seconds: activeObj.accumulatedSeconds || 0,
+        selected_project: activeObj.selectedProject,
+        notes_input: activeObj.notesInput,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (upsertError) {
+        throw new Error(upsertError.message || 'Active session could not be saved');
       }
 
       return NextResponse.json({ success: true, active: activeObj });

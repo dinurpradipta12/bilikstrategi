@@ -106,11 +106,23 @@ export default function DashboardPage() {
   const [activeSessionTime, setActiveSessionTime] = useState<string | null>(null);
 
   // Real-time Active Sessions & Timesheet Recap State
-  const [activeSessions, setActiveSessions] = useState<Record<string, { checkInTimestamp: number; project_name?: string }>>({});
+  const [activeSessions, setActiveSessions] = useState<Record<string, {
+    checkInTimestamp: number;
+    project_name?: string;
+    isPaused?: boolean;
+    pausedAt?: string | null;
+    accumulatedSeconds?: number;
+  }>>({});
   const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
 
   const loadRealTimeAttendanceData = async () => {
-    const sessionsMap: Record<string, { checkInTimestamp: number; project_name?: string }> = {};
+    const sessionsMap: Record<string, {
+      checkInTimestamp: number;
+      project_name?: string;
+      isPaused?: boolean;
+      pausedAt?: string | null;
+      accumulatedSeconds?: number;
+    }> = {};
 
     const storeStr = localStorage.getItem('bilik_team_active_store');
     if (storeStr) {
@@ -126,8 +138,16 @@ export default function DashboardPage() {
     if (activeStr) {
       try {
         const parsed = JSON.parse(activeStr);
-        if (parsed.userName) {
-          sessionsMap[parsed.userName.toLowerCase()] = { checkInTimestamp: parsed.timestamp, project_name: parsed.project };
+        const userName = parsed.userName || parsed.user_name;
+        const timestamp = Number(parsed.timestamp || parsed.checkInTimestamp || 0);
+        if (userName && timestamp) {
+          sessionsMap[userName.toLowerCase()] = {
+            checkInTimestamp: timestamp,
+            project_name: parsed.project || parsed.selectedProject,
+            isPaused: parsed.isPaused === true,
+            pausedAt: parsed.pausedAt || null,
+            accumulatedSeconds: Number(parsed.accumulatedSeconds || 0),
+          };
         }
       } catch {}
     }
@@ -146,8 +166,11 @@ export default function DashboardPage() {
           rows.forEach((r: any) => {
             if (r.user_name) {
               sessionsMap[r.user_name.toLowerCase()] = {
-                checkInTimestamp: r.check_in_timestamp || Date.now(),
-                project_name: r.project_name,
+                checkInTimestamp: Number(r.check_in_timestamp || Date.now()),
+                project_name: r.project_name || r.selected_project,
+                isPaused: r.is_paused === true,
+                pausedAt: r.paused_at || null,
+                accumulatedSeconds: Number(r.accumulated_seconds || 0),
               };
             }
           });
@@ -243,8 +266,11 @@ export default function DashboardPage() {
 
     if (!sessionKey || !activeSessions[sessionKey]) return null;
 
-    const startMs = activeSessions[sessionKey].checkInTimestamp;
-    const diffSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const session = activeSessions[sessionKey];
+    const runningSeconds = session.isPaused
+      ? 0
+      : Math.max(0, Math.floor((Date.now() - session.checkInTimestamp) / 1000));
+    const diffSec = Number(session.accumulatedSeconds || 0) + runningSeconds;
     const hrs = Math.floor(diffSec / 3600);
     const mins = Math.floor((diffSec % 3600) / 60);
     const secs = diffSec % 60;

@@ -427,7 +427,14 @@ export default function TeamWorkloadPage() {
   };
 
   // Active Sessions Live Ticker & Capacity State
-  const [activeSessions, setActiveSessions] = useState<Record<string, { checkInTimestamp: number; checkInTime: string; projectName?: string }>>({});
+  const [activeSessions, setActiveSessions] = useState<Record<string, {
+    checkInTimestamp: number;
+    checkInTime: string;
+    projectName?: string;
+    isPaused?: boolean;
+    pausedAt?: string | null;
+    accumulatedSeconds?: number;
+  }>>({});
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
   const [capacities, setCapacities] = useState<Record<string, number>>({});
 
@@ -449,7 +456,14 @@ export default function TeamWorkloadPage() {
 
   // Sync live check-in sessions for real-time AKTIF ticker
   const syncLiveSessions = async () => {
-    const sessionMap: Record<string, { checkInTimestamp: number; checkInTime: string; projectName?: string }> = {};
+    const sessionMap: Record<string, {
+      checkInTimestamp: number;
+      checkInTime: string;
+      projectName?: string;
+      isPaused?: boolean;
+      pausedAt?: string | null;
+      accumulatedSeconds?: number;
+    }> = {};
 
     const myActiveStr = localStorage.getItem('bilik_active_attendance');
     if (myActiveStr) {
@@ -460,6 +474,9 @@ export default function TeamWorkloadPage() {
             checkInTimestamp: parsed.checkInTimestamp,
             checkInTime: parsed.checkInTime || '',
             projectName: parsed.selectedProject,
+            isPaused: parsed.isPaused === true,
+            pausedAt: parsed.pausedAt || null,
+            accumulatedSeconds: Number(parsed.accumulatedSeconds || 0),
           };
         }
       } catch {}
@@ -476,6 +493,9 @@ export default function TeamWorkloadPage() {
               checkInTimestamp: item.checkInTimestamp,
               checkInTime: item.checkInTime || '',
               projectName: item.selectedProject,
+              isPaused: item.isPaused === true,
+              pausedAt: item.pausedAt || null,
+              accumulatedSeconds: Number(item.accumulatedSeconds || 0),
             };
           }
         });
@@ -499,6 +519,9 @@ export default function TeamWorkloadPage() {
                 checkInTimestamp: Number(row.check_in_timestamp),
                 checkInTime: row.check_in_time || '',
                 projectName: row.selected_project,
+                isPaused: row.is_paused === true,
+                pausedAt: row.paused_at || null,
+                accumulatedSeconds: Number(row.accumulated_seconds || 0),
               };
             }
           });
@@ -525,8 +548,11 @@ export default function TeamWorkloadPage() {
     );
     if (!sessionKey || !activeSessions[sessionKey]) return null;
 
-    const startMs = activeSessions[sessionKey].checkInTimestamp;
-    const diffSec = Math.max(0, Math.floor((nowTimestamp - startMs) / 1000));
+    const session = activeSessions[sessionKey];
+    const runningSeconds = session.isPaused
+      ? 0
+      : Math.max(0, Math.floor((nowTimestamp - session.checkInTimestamp) / 1000));
+    const diffSec = Number(session.accumulatedSeconds || 0) + runningSeconds;
 
     const hrs = Math.floor(diffSec / 3600);
     const mins = Math.floor((diffSec % 3600) / 60);
