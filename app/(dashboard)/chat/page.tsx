@@ -819,26 +819,28 @@ export default function ChatPage() {
               >
                 <Hash className="w-4 h-4 text-[#F26B5E]" />
               </button>
+
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">{activeChannel?.name}</h3>
 
-              {/* Subtitle: switches between member count and "sedang mengetik" */}
-              <div className="h-4 mt-0.5 overflow-hidden">
-                {typingText ? (
-                  <p className="text-[11px] text-[#4F9D78] font-medium flex items-center gap-1.5 animate-fade-in">
-                    <span className="inline-flex items-center gap-0.5">
-                      {[0, 150, 300].map((delay) => (
-                        <span key={delay} className="w-1 h-1 bg-[#4F9D78] rounded-full"
-                          style={{ animation: `typingBounce 1.2s ${delay}ms ease-in-out infinite` }} />
-                      ))}
-                    </span>
-                    <span>{typingText}</span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-[#737680] animate-fade-in">
-                    {liveMembers.length} anggota • Login sebagai {currentUser.username}
-                  </p>
-                )}
+                {/* Subtitle: switches between member count and "sedang mengetik" */}
+                <div className="h-4 mt-0.5 overflow-hidden">
+                  {typingText ? (
+                    <p className="text-[11px] text-[#4F9D78] font-medium flex items-center gap-1.5 animate-fade-in">
+                      <span className="inline-flex items-center gap-0.5">
+                        {[0, 150, 300].map((delay) => (
+                          <span key={delay} className="w-1 h-1 bg-[#4F9D78] rounded-full"
+                            style={{ animation: `typingBounce 1.2s ${delay}ms ease-in-out infinite` }} />
+                        ))}
+                      </span>
+                      <span>{typingText}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#737680] animate-fade-in">
+                      {liveMembers.length} anggota • Login sebagai {currentUser.username}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
