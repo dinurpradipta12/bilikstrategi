@@ -17,4 +17,5 @@ WHERE tasks.id = ranked_tasks.id
   AND ranked_tasks.row_number > 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_task_cache_raw_identity_unique
-  ON public.task_cache ((raw_data->>'id'));
+  ON public.task_cache ((NULLIF(raw_data->>'id', '')))
+  WHERE NULLIF(raw_data->>'id', '') IS NOT NULL;
