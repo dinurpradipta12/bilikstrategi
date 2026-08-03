@@ -1,8 +1,5 @@
 'use client';
 
-export const runtime = 'edge';
-export const dynamic = 'force-dynamic';
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'next/navigation';
@@ -34,8 +31,6 @@ import {
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
-
-import { supabase } from '@/lib/supabase/client';
 
 type ProjectTab = 'overview' | 'tasks' | 'timeline' | 'team' | 'files' | 'activity' | 'feedback';
 
@@ -359,47 +354,37 @@ export default function ProjectDetailPage() {
       setLoading(true);
       let foundProject: any = null;
 
-      // 1. Try fetching from Supabase DB
-      try {
-        const { data: supaData } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('id', projectId)
-          .single();
-
-        if (supaData) {
-          foundProject = {
-            id: String(supaData.id),
-            clickup_list_id: String(supaData.clickup_list_id || supaData.id),
-            name: supaData.name || 'Project',
-            description: supaData.description || 'Project Bilik Strategi',
-            client_name: supaData.client_name || 'Bilik Strategi Workspace',
-            status: supaData.status || 'in_progress',
-            start_date: supaData.start_date || new Date().toISOString().split('T')[0],
-            due_date: supaData.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-            progress_percentage: supaData.progress || 0,
-            total_tasks: 0,
-            completed_tasks: 0,
-            overdue_tasks: 0,
-            team_lead_name: 'Dinur Pradipta',
-          };
-        }
-      } catch {}
-
-      // 2. Try fetching from shared server API
+      // 1. Try fetching from shared server API
       if (!foundProject) {
         try {
           const apiRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
           if (apiRes.ok) {
             const apiJson = await apiRes.json();
             if (Array.isArray(apiJson.projects)) {
-              foundProject = apiJson.projects.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
+              const apiProject = apiJson.projects.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
+              if (apiProject) {
+                foundProject = {
+                  id: String(apiProject.id),
+                  clickup_list_id: String(apiProject.clickup_list_id || apiProject.id),
+                  name: apiProject.name || 'Project',
+                  description: apiProject.description || 'Project Bilik Strategi',
+                  client_name: apiProject.client_name || 'Bilik Strategi Workspace',
+                  status: apiProject.status || 'in_progress',
+                  start_date: apiProject.start_date || new Date().toISOString().split('T')[0],
+                  due_date: apiProject.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+                  progress_percentage: apiProject.progress || apiProject.progress_percentage || 0,
+                  total_tasks: apiProject.total_tasks || 0,
+                  completed_tasks: apiProject.completed_tasks || 0,
+                  overdue_tasks: apiProject.overdue_tasks || 0,
+                  team_lead_name: apiProject.team_lead_name || 'Dinur Pradipta',
+                };
+              }
             }
           }
         } catch {}
       }
 
-      // 3. Try fetching from ClickUp API
+      // 2. Try fetching from ClickUp API
       if (!foundProject) {
         try {
           const res = await fetch('/api/clickup/projects');
@@ -454,23 +439,24 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!projectId) return;
 
-    const channel = supabase
-      .channel(`project_meta_${projectId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'project_meta', filter: `project_id=eq.${projectId}` },
-        (payload: { new?: { meta?: ProjectMeta } }) => {
-          const incomingMeta = payload.new?.meta;
-          if (incomingMeta && typeof incomingMeta === 'object') {
-            setMeta(incomingMeta);
-            localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(incomingMeta));
-          }
+    const loadProjectMeta = async () => {
+      try {
+        const res = await fetch(`/api/supabase/project-meta?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.meta && typeof data.meta === 'object') {
+          setMeta(data.meta);
+          localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(data.meta));
         }
-      )
-      .subscribe();
+      } catch {
+        // keep current UI state
+      }
+    };
 
+    loadProjectMeta();
+    const interval = window.setInterval(loadProjectMeta, 15000);
     return () => {
-      supabase.removeChannel(channel);
+      window.clearInterval(interval);
     };
   }, [projectId]);
 
@@ -489,15 +475,11 @@ export default function ProjectDetailPage() {
       }
     };
 
-    const channel = supabase
-      .channel(`project_tasks_${projectId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_cache' }, () => {
-        loadProjectTasks();
-      })
-      .subscribe();
+    loadProjectTasks();
+    const interval = window.setInterval(loadProjectTasks, 15000);
 
     return () => {
-      supabase.removeChannel(channel);
+      window.clearInterval(interval);
     };
   }, [projectId]);
 

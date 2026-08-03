@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getChatChannels, getViewComments, postViewComment } from '@/lib/clickup/chat';
 import { getWorkspaceMembers } from '@/lib/clickup/users';
-import { supabase } from '@/lib/supabase/client';
+import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
 
 export const runtime = 'edge';
 
