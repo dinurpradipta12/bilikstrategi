@@ -69,7 +69,7 @@ if (!globalThis.sharedChatStore) {
 
 function normalizeChannelId(id: string): string {
   const clean = id.trim().toLowerCase();
-  if (clean.includes('allisha')) return 'dm_allisha';
+  if (clean.includes('allisha') || clean.includes('dinur')) return 'dm_allisha';
   return id;
 }
 

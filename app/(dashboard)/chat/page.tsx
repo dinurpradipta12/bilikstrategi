@@ -109,6 +109,7 @@ export default function ChatPage() {
     { id: '6-901819384971-8', name: '💬 Approval Script',  type: 'project', unread_count: 0 },
     { id: '6-901819385000-8', name: '💬 Approval Content', type: 'project', unread_count: 0 },
     { id: 'dm_allisha',       name: '👤 DM: Allisha',      type: 'direct',  unread_count: 0 },
+    { id: 'dm_dinur',         name: '👤 DM: Dinur Pradipta', type: 'direct', unread_count: 0 },
     { id: 'dm_doni',          name: '👤 DM: Doni Setiawan', type: 'direct', unread_count: 0 },
     { id: 'dm_amalia',        name: '👤 DM: Amalia Fitriani', type: 'direct', unread_count: 0 },
     { id: 'dm_bayu',          name: '👤 DM: Mohammad Nuris Bayu Samodro', type: 'direct', unread_count: 0 },
@@ -569,7 +570,13 @@ export default function ChatPage() {
   // ── Sidebar grouping ──────────────────────────────────────────────────────
   const generalChannels = channels.filter((c) => c.type === 'general');
   const spaceChannels   = channels.filter((c) => c.type === 'project' || (!c.type && !c.name.includes('DM:')));
-  const dmChannels      = channels.filter((c) => c.type === 'direct' || c.name.includes('DM:'));
+  const dmChannels      = channels.filter((c) => {
+    if (c.type !== 'direct' && !c.name.includes('DM:')) return false;
+    const cleanName = c.name.replace('👤 DM: ', '').replace('DM:', '').trim().toLowerCase();
+    const myName = (currentUser.username || '').toLowerCase().trim();
+    if (!myName || myName === 'pengguna') return true;
+    return !cleanName.includes(myName) && !myName.includes(cleanName);
+  });
 
   const activeChannel  = channels.find((c) => c.id === activeChannelId) || channels[0];
   const totalUnread    = Object.values(unreadMap).reduce((s, n) => s + n, 0);
@@ -828,11 +835,10 @@ export default function ChatPage() {
               rootMessages.map((rawMsg) => {
                 const msg = getMessageWithReplies(rawMsg);
                 const isMe =
-                  String(msg.user_id) === '276885530' ||
-                  msg.user_name.toLowerCase().includes('dinur') ||
                   (currentUser.id > 0 && String(msg.user_id) === String(currentUser.id)) ||
                   (currentUser.username && currentUser.username !== 'Pengguna' &&
-                    msg.user_name.toLowerCase().includes(currentUser.username.toLowerCase()));
+                    (msg.user_name.toLowerCase().includes(currentUser.username.toLowerCase()) ||
+                     currentUser.username.toLowerCase().includes(msg.user_name.toLowerCase())));
                 const replyCount = msg.reply_count || 0;
                 const isSelected = activeThreadMessage?.id === msg.id;
                 const msgStatus: MessageStatus = statusMap[msg.id] || 'read';
@@ -849,7 +855,7 @@ export default function ChatPage() {
                       <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                         {/* Name + time */}
                         <div className={`flex items-center gap-1.5 mb-1 text-[11px] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                          <span className="font-bold text-[#24324A]">{msg.user_name}{isMe ? ' (Saya)' : ''}</span>
+                          <span className="font-bold text-[#24324A]">{isMe ? 'Saya' : msg.user_name}</span>
                           <span className="text-[#737680]">{formatTime(msg.created_at)}</span>
                         </div>
 
