@@ -56,6 +56,7 @@ if (!globalThis.sharedChatStore) {
 
 function normalizeChannelId(id: string): string {
   const clean = id.trim().toLowerCase();
+  if (clean === 'dm_pair_allisha_dinur') return 'dm_pair_allisha_dinur';
   if (clean === 'dm_dinur') return 'dm_dinur';
   if (clean === 'dm_allisha') return 'dm_allisha';
   if (clean.includes('allisha')) return 'dm_allisha';
@@ -484,8 +485,15 @@ function dmSlug(channelId: string) {
   return channelId.replace(/^dm_/, '').toLowerCase();
 }
 
-async function resolveDmTargetUserId(channelId: string, teamId: string, token: string) {
+function getDmTargetSlug(channelId: string, sender?: AppChatSender | null) {
   const slug = dmSlug(channelId);
+  if (slug !== 'pair_allisha_dinur') return slug;
+  const identity = `${sender?.name || ''} ${sender?.email || ''}`.toLowerCase();
+  return identity.includes('allisha') || identity.includes('contact.dinurpradipta') ? 'dinur' : 'allisha';
+}
+
+async function resolveDmTargetUserId(channelId: string, teamId: string, token: string, sender?: AppChatSender | null) {
+  const slug = getDmTargetSlug(channelId, sender);
   const members = await getWorkspaceMembers(teamId, token);
   const match = members.find((member) => {
     const name = (member.username || '').toLowerCase();
@@ -499,8 +507,8 @@ async function resolveDmTargetUserId(channelId: string, teamId: string, token: s
   return match?.id ? String(match.id) : null;
 }
 
-async function resolveDmTargetParticipant(channelId: string, teamId: string, token: string) {
-  const slug = dmSlug(channelId);
+async function resolveDmTargetParticipant(channelId: string, teamId: string, token: string, sender?: AppChatSender | null) {
+  const slug = getDmTargetSlug(channelId, sender);
   const members = await getWorkspaceMembers(teamId, token);
   const match = members.find((member) => {
     const name = (member.username || '').toLowerCase();
@@ -534,9 +542,9 @@ async function getOrCreateDmChannel(teamId: string, targetUserId: string, token:
   return channelId;
 }
 
-async function getDmMessages(rawChannelId: string, teamId: string, token: string) {
+async function getDmMessages(rawChannelId: string, teamId: string, token: string, sender?: AppChatSender | null) {
   const channelId = normalizeChannelId(rawChannelId);
-  const { participant, members } = await resolveDmTargetParticipant(channelId, teamId, token);
+  const { participant, members } = await resolveDmTargetParticipant(channelId, teamId, token, sender);
   const targetUserId = participant?.id || null;
   if (!targetUserId) return [];
 
@@ -552,7 +560,7 @@ async function getDmMessages(rawChannelId: string, teamId: string, token: string
 
 async function postDmMessage(rawChannelId: string, text: string, sender: AppChatSender | null, replyTo: AppChatMeta['reply'], teamId: string, token: string) {
   const channelId = normalizeChannelId(rawChannelId);
-  const targetUserId = await resolveDmTargetUserId(channelId, teamId, token);
+  const targetUserId = await resolveDmTargetUserId(channelId, teamId, token, sender);
   if (!targetUserId) throw new Error('Target Direct Message ClickUp tidak ditemukan');
 
   const clickUpDmChannelId = await getOrCreateDmChannel(teamId, targetUserId, token);
@@ -599,7 +607,7 @@ export async function GET(req: NextRequest) {
 
       if (channelId.startsWith('dm_')) {
         try {
-          const clickupMsgs = await getDmMessages(channelId, teamId, token);
+          const clickupMsgs = await getDmMessages(channelId, teamId, token, getRequestSender(req));
           const allMsgs = mergeChatMessages([...clickupMsgs, ...localMsgs]);
 
           return NextResponse.json({ messages: allMsgs });

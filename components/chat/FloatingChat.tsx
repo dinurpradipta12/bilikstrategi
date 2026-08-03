@@ -2,10 +2,11 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronRight, Hash, MessageCircle, X } from 'lucide-react';
+import { ChevronRight, Hash, LoaderCircle, MessageCircle, Send, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
   CHAT_NOTIFICATION_EVENT,
+  getChatChannelAliases,
   getChatUnreadTotal,
   getChatUnreadForChannel,
   incrementChatUnread,
@@ -20,6 +21,13 @@ type FloatingChannel = {
   id: string;
   name: string;
   avatar?: string;
+};
+
+type FloatingUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
 };
 
 type FloatingTab = {
@@ -50,15 +58,17 @@ function channelLabel(channelId: string) {
 }
 
 function readStoredUser() {
-  if (typeof window === 'undefined') return { id: '', name: '' };
+  if (typeof window === 'undefined') return { id: '', name: '', email: '', avatar: '' };
   try {
     const parsed = JSON.parse(localStorage.getItem('bilik_current_user') || '{}');
     return {
       id: String(parsed.id || parsed.user_id || ''),
       name: parsed.username || parsed.name || '',
+      email: parsed.email || '',
+      avatar: parsed.avatar || '',
     };
   } catch {
-    return { id: '', name: '' };
+    return { id: '', name: '', email: '', avatar: '' };
   }
 }
 
@@ -79,7 +89,11 @@ export default function FloatingChat() {
   const [notifications, setNotifications] = useState<ChatNotification[]>(() => readChatNotifications());
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>(() => readChatUnreadMap());
   const [channels, setChannels] = useState<FloatingChannel[]>([]);
-  const [currentUser, setCurrentUser] = useState(readStoredUser);
+  const [currentUser, setCurrentUser] = useState<FloatingUser>(readStoredUser);
+  const [replyText, setReplyText] = useState('');
+  const [replySending, setReplySending] = useState(false);
+  const [replyError, setReplyError] = useState('');
+  const [sentReply, setSentReply] = useState<ChatNotification | null>(null);
   const currentUserRef = useRef(currentUser);
   const channelsRef = useRef<FloatingChannel[]>([]);
   const seenMessageIdsRef = useRef<Set<string>>(new Set(notifications.map((item) => item.id)));
@@ -100,6 +114,8 @@ export default function FloatingChat() {
         setCurrentUser({
           id: String(data.user.id || ''),
           name: data.user.username || data.user.email || '',
+          email: data.user.email || '',
+          avatar: data.user.profilePicture || data.user.avatar || '',
         });
       })
       .catch(() => {
@@ -241,6 +257,80 @@ export default function FloatingChat() {
 
   const totalUnread = getChatUnreadTotal(unreadMap);
   const selectedTab = tabs.find((tab) => tab.channelId === selectedChannelId) || tabs[0] || null;
+  const latestForSelectedTab = selectedTab
+    ? [selectedTab.latest, sentReply?.channelId === selectedTab.channelId ? sentReply : null]
+      .filter((message): message is ChatNotification => Boolean(message))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null
+    : null;
+
+  const resolveReplyChannelId = (channelId: string) => {
+    const aliases = new Set(getChatChannelAliases(channelId));
+    const matchingChannels = channels.filter((channel) =>
+      getChatChannelAliases(channel.id).some((alias) => aliases.has(alias))
+    );
+    if (matchingChannels.length === 0) return channelId;
+    if (matchingChannels.length === 1) return matchingChannels[0].id;
+
+    const selfTokens = [
+      currentUser.name.toLowerCase().trim().split(/\s+/)[0],
+      currentUser.email.toLowerCase().trim().split('@')[0].split(/[._-]/)[0],
+    ].filter((token) => token.length > 2);
+    return matchingChannels.find((channel) => {
+      const channelIdentity = channel.name.toLowerCase();
+      return !selfTokens.some((token) => channelIdentity.includes(token));
+    })?.id || matchingChannels[0].id;
+  };
+
+  const handleQuickReply = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = replyText.trim();
+    if (!text || !selectedTab || replySending) return;
+
+    setReplySending(true);
+    setReplyError('');
+    const clientMessageId = `floating-msg-${Date.now()}`;
+    const replyChannelId = resolveReplyChannelId(selectedTab.channelId);
+    const sender = {
+      id: currentUser.id,
+      name: currentUser.name || 'Pengguna',
+      email: currentUser.email,
+      avatar: currentUser.avatar || fallbackAvatar(currentUser.name),
+    };
+
+    try {
+      const response = await fetch('/api/clickup/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: replyChannelId,
+          text,
+          sender,
+          clientMessageId,
+          replyTo: selectedTab.latest
+            ? { author: selectedTab.latest.senderName, text: selectedTab.latest.text }
+            : undefined,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Balasan gagal dikirim');
+
+      const reply: ChatNotification = {
+        id: String(data.id || clientMessageId),
+        senderName: data.user_name || sender.name,
+        senderAvatar: data.user_avatar || sender.avatar,
+        channelName: selectedTab.channelName,
+        channelId: selectedTab.channelId,
+        text: data.text || text,
+        createdAt: data.created_at || new Date().toISOString(),
+      };
+      setSentReply(reply);
+      setReplyText('');
+    } catch (error) {
+      setReplyError(error instanceof Error ? error.message : 'Balasan gagal dikirim');
+    } finally {
+      setReplySending(false);
+    }
+  };
 
   const openFullChat = (channelId?: string) => {
     if (channelId) localStorage.setItem('bilik_chat_open_channel', channelId);
@@ -297,24 +387,29 @@ export default function FloatingChat() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                {selectedTab?.latest ? (
+                {latestForSelectedTab ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={selectedTab.latest.senderAvatar} alt={selectedTab.latest.senderName} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
+                      <img src={latestForSelectedTab.senderAvatar} alt={latestForSelectedTab.senderName} className="w-9 h-9 rounded-full object-cover border border-[#E8E8EC]" />
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-[#24324A] truncate">{selectedTab.latest.senderName}</p>
+                        <p className="text-xs font-bold text-[#24324A] truncate">{latestForSelectedTab.senderName}</p>
                         <p className="flex items-center gap-1 text-[10px] text-[#737680] truncate">
                           <Hash className="w-2.5 h-2.5" />{selectedTab.channelName}
                         </p>
                       </div>
                     </div>
                     <div className="bg-[#F4F4F5] rounded-2xl rounded-tl-sm px-3 py-2.5 text-xs text-[#202124] whitespace-pre-wrap break-words">
-                      {selectedTab.latest.text}
+                      {latestForSelectedTab.text}
                     </div>
                     <p className="text-[10px] text-[#737680]">
                       {selectedTab.unread} pesan belum dibaca di percakapan ini.
                     </p>
+                    {sentReply?.channelId === selectedTab.channelId && (
+                      <div className="border border-[#4F9D78]/25 bg-[#EEF8F3] rounded-xl px-3 py-2 text-[10px] text-[#356D53]">
+                        Balasan terkirim: <span className="font-semibold">{sentReply.text}</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-[#737680]">Buka percakapan ini untuk melihat pesan.</p>
@@ -322,6 +417,25 @@ export default function FloatingChat() {
               </div>
 
               <div className="p-3 border-t border-[#E8E8EC] bg-[#F7F7F8]">
+                <form onSubmit={handleQuickReply} className="flex items-center gap-2 mb-2">
+                  <input
+                    value={replyText}
+                    onChange={(event) => setReplyText(event.target.value)}
+                    placeholder="Tulis balasan..."
+                    disabled={!selectedTab || replySending}
+                    className="min-w-0 flex-1 px-3 py-2 bg-white border border-[#E8E8EC] rounded-lg text-xs text-[#202124] outline-none focus:border-[#7B68EE] disabled:bg-[#F4F4F5]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!replyText.trim() || replySending || !selectedTab}
+                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#7B68EE] text-white hover:bg-[#6655D2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Kirim balasan"
+                    aria-label="Kirim balasan"
+                  >
+                    {replySending ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </button>
+                </form>
+                {replyError && <p className="mb-2 text-[10px] text-[#D95858]">{replyError}</p>}
                 <button type="button" onClick={() => openFullChat(selectedTab?.channelId)} className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#24324A] text-white text-xs font-bold rounded-xl hover:bg-[#1A2536] transition-colors">
                   Buka Agency Chat
                   <ChevronRight className="w-3.5 h-3.5 text-[#F26B5E]" />
