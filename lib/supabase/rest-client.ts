@@ -43,6 +43,11 @@ class SupabaseRestQuery<T = any> implements PromiseLike<QueryResult<T>> {
     return this;
   }
 
+  in(column: string, values: Array<string | number | boolean>) {
+    this.params.set(column, `in.(${values.map((value) => String(value)).join(',')})`);
+    return this;
+  }
+
   ilike(column: string, value: string) {
     this.params.set(column, `ilike.${String(value)}`);
     return this;
