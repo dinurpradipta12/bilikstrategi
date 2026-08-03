@@ -13,6 +13,7 @@ import {
   type ChatNotification,
   UNREAD_BADGE_EVENT,
 } from '@/lib/chat/notification-store';
+import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -333,6 +334,9 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
                     )}
                   </>
                 )}
+              </div>
+              <div className="mt-2 pt-2 border-t border-[#E8E8EC]">
+                <ChatSoundToggle />
               </div>
             </div>
           )}

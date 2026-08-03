@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import FloatingChat from '@/components/chat/FloatingChat';
+import ChatNotificationSound from '@/components/chat/ChatNotificationSound';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
@@ -112,6 +113,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
 
       <FloatingChat />
+      <ChatNotificationSound />
     </div>
   );
 }

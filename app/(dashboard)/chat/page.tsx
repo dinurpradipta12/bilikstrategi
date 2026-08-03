@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
+import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
 import { AgencyChatMessage } from '@/lib/mock/data';
 import {
   clearChatChannelNotifications,
@@ -945,6 +946,7 @@ export default function ChatPage() {
               <MessageSquare className="w-3.5 h-3.5 text-[#F26B5E]" /> Agency Chat
             </h2>
             <div className="flex items-center gap-2">
+              <ChatSoundToggle compact />
               {totalUnread > 0 && (
                 <span className="flex items-center gap-1 px-2 py-0.5 bg-[#F26B5E] text-white font-extrabold text-[10px] rounded-full badge-pop">
                   <Bell className="w-2.5 h-2.5" />{totalUnread}
