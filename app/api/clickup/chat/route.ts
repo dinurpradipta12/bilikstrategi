@@ -420,6 +420,35 @@ async function replaceStoredChatMessageId(oldId: string, message: StoredChatMess
   }
 }
 
+async function enqueueClickUpSyncJob(message: StoredChatMessage, normalizedChannelId: string, rawChannelId: string) {
+  try {
+    await supabase.from('app_chat_sync_jobs').insert({
+      workspace_id: 'bilik-strategi',
+      room_id: normalizedChannelId,
+      message_id: message.id,
+      provider: 'clickup',
+      action: 'send_message',
+      status: 'pending',
+      payload: {
+        channel_id: rawChannelId,
+        normalized_channel_id: normalizedChannelId,
+        text: message.text,
+        sender: {
+          id: message.user_id,
+          name: message.user_name,
+          avatar: message.user_avatar,
+        },
+        reply: {
+          author: message.reply_author,
+          text: message.reply_text,
+        },
+      },
+    });
+  } catch (err) {
+    console.warn('[App Chat Sync Queue] ClickUp sync job skipped:', err);
+  }
+}
+
 function extractItems(payload: any) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -599,6 +628,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { channelId: rawChannelId, text, sender, replyTo, clientMessageId } = body;
     const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
+    const syncClickUpInline = process.env.CLICKUP_CHAT_INLINE_SYNC === 'true';
 
     if (!rawChannelId || !text) {
       return NextResponse.json({ error: 'channelId and text are required' }, { status: 400 });
@@ -622,7 +652,7 @@ export async function POST(req: NextRequest) {
       reply_count: 0,
       reply_author: replyTo?.author || null,
       reply_text: replyTo?.text || null,
-      clickup_sync_warning: userToken ? null : 'ClickUp sync dilewati karena akun ini tidak memiliki token OAuth user. Backend tidak memakai token owner untuk mengirim pesan user lain.',
+      clickup_sync_warning: null,
     };
 
     // Store in global memory store for instant cross-session persistence
@@ -634,8 +664,9 @@ export async function POST(req: NextRequest) {
     }
 
     await persistChatMessage(newMsg, storedChannelId, false);
+    await enqueueClickUpSyncJob(newMsg, storedChannelId, rawChannelId);
 
-    if (channelId.startsWith('dm_') && userToken) {
+    if (syncClickUpInline && channelId.startsWith('dm_') && userToken) {
       try {
         const previousId = newMsg.id;
         const clickUpMsg = await postDmMessage(channelId, text, appSender, replyTo || null, teamId, userToken);
@@ -649,7 +680,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (rawChannelId.includes('-') && userToken) {
+    if (syncClickUpInline && rawChannelId.includes('-') && userToken) {
       try {
         const previousId = newMsg.id;
         const comment = await postViewComment(rawChannelId, outboundText, undefined, true, userToken);

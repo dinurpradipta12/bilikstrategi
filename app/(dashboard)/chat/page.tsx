@@ -44,6 +44,47 @@ function chatCacheKey(channelId: string) {
   return `bilik_chat_messages_${channelId}`;
 }
 
+function normalizeStoredChannelId(id: string) {
+  const clean = id.trim().toLowerCase();
+  if (clean === 'dm_allisha' || clean === 'dm_dinur' || clean.includes('allisha') || clean.includes('dinur')) {
+    return 'dm_pair_allisha_dinur';
+  }
+  return clean;
+}
+
+function getRealtimeChannelAliases(row: any) {
+  const aliases = new Set<string>();
+  const normalized = String(row.normalized_channel_id || '').trim();
+  const raw = String(row.channel_id || '').trim();
+  if (normalized) aliases.add(normalized);
+  if (raw) aliases.add(raw);
+  if (normalized === 'dm_pair_allisha_dinur' || raw === 'dm_allisha' || raw === 'dm_dinur') {
+    aliases.add('dm_allisha');
+    aliases.add('dm_dinur');
+  }
+  return Array.from(aliases);
+}
+
+function rowToRealtimeMessage(row: any): ChatMessageItem {
+  const raw = row.raw_data || {};
+  return {
+    id: String(row.id || raw.id),
+    channel_id: raw.channel_id || row.channel_id || row.normalized_channel_id,
+    user_id: String(row.user_id || raw.user_id || ''),
+    user_name: row.user_name || raw.user_name || 'Pengguna',
+    user_avatar:
+      row.user_avatar ||
+      raw.user_avatar ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(row.user_name || raw.user_name || 'Pengguna')}&background=24324A&color=fff`,
+    text: row.text || raw.text || '',
+    created_at: row.created_at || raw.created_at || new Date().toISOString(),
+    parent_id: row.parent_id || raw.parent_id || null,
+    reply_count: row.reply_count ?? raw.reply_count ?? 0,
+    reply_author: row.reply_author || raw.reply_author || null,
+    reply_text: row.reply_text || raw.reply_text || null,
+  } as ChatMessageItem;
+}
+
 /** Render WhatsApp-style status ticks for own messages */
 function MessageStatusIcon({ status }: { status: MessageStatus }) {
   if (status === 'sending') {
@@ -171,6 +212,7 @@ export default function ChatPage() {
   const threadEndRef    = useRef<HTMLDivElement>(null);
   const previousCountRef = useRef<number>(0);
   const lastSeenMessageRef = useRef<Record<string, string>>({});
+  const realtimeSeenRef = useRef<Set<string>>(new Set());
 
   // ── Scroll helpers ────────────────────────────────────────────────────────
   const scrollToBottom      = (smooth = true) => setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' }), 80);
@@ -370,6 +412,62 @@ export default function ChatPage() {
         }
       })
     );
+  }, [activeChannelId, channels, isCurrentUserMessage, triggerNotification]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const subscription = supabase
+      .channel('app-chat-messages-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_chat_messages' },
+        (payload) => {
+          const row = payload.new as any;
+          const msg = rowToRealtimeMessage(row);
+          if (!msg.id || realtimeSeenRef.current.has(msg.id)) return;
+          realtimeSeenRef.current.add(msg.id);
+
+          const aliases = getRealtimeChannelAliases(row);
+          const isForActiveChannel =
+            aliases.includes(activeChannelId) || aliases.includes(normalizeStoredChannelId(activeChannelId));
+
+          if (isForActiveChannel) {
+            setRawMessages((prev) => {
+              if (prev.some((existing) => existing.id === msg.id)) return prev;
+              const next = [...prev, { ...msg, channel_id: activeChannelId }].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              );
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(chatCacheKey(activeChannelId), JSON.stringify(next));
+              }
+              lastSeenMessageRef.current[activeChannelId] = msg.id;
+              return next;
+            });
+            if (isCurrentUserMessage(msg)) {
+              setStatusMap((prev) => ({ ...prev, [msg.id]: prev[msg.id] || 'sent' }));
+            }
+            return;
+          }
+
+          const targetChannel = channels.find((ch) => aliases.includes(ch.id) || aliases.includes(normalizeStoredChannelId(ch.id)));
+          if (!targetChannel || isCurrentUserMessage(msg)) return;
+
+          triggerNotification({
+            id: `rt-${targetChannel.id}-${msg.id}`,
+            senderName: msg.user_name,
+            senderAvatar: msg.user_avatar,
+            channelName: targetChannel.name.replace('💬 ', '').replace('📢 ', ''),
+            channelId: targetChannel.id,
+            text: msg.text,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, [activeChannelId, channels, isCurrentUserMessage, triggerNotification]);
 
   // ── Typing API integration ────────────────────────────────────────────────

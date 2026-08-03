@@ -11,9 +11,22 @@ interface HeaderProps {
   onOpenCreateTask: () => void;
 }
 
+type AppWorkspace = {
+  id: string;
+  name: string;
+  slug?: string;
+};
+
 export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderProps) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<AppWorkspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>({
+    id: 'bilik-strategi',
+    name: 'Bilik Strategi Workspace',
+    slug: 'bilik-strategi',
+  });
   const [userProfile, setUserProfile] = useState({
     name: 'Bilik Strategi',
     email: '',
@@ -22,6 +35,39 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   });
 
   const unreadNotifications: any[] = [];
+
+  const loadWorkspaces = async () => {
+    try {
+      const res = await fetch('/api/app/workspaces', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mengambil workspace');
+      const list: AppWorkspace[] = data.workspaces || [];
+      const currentId = data.current_workspace_id || 'bilik-strategi';
+      setWorkspaces(list);
+      setActiveWorkspace(list.find((item) => item.id === currentId) || list[0] || activeWorkspace);
+    } catch (err) {
+      console.warn('[Header] Workspace fetch failed, using default workspace.', err);
+    }
+  };
+
+  const selectWorkspace = async (workspace: AppWorkspace) => {
+    setWorkspaceDropdownOpen(false);
+    setActiveWorkspace(workspace);
+    try {
+      const res = await fetch('/api/app/workspaces', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspace.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Gagal memilih workspace');
+      }
+      window.dispatchEvent(new Event('bilik-workspace-updated'));
+    } catch (err) {
+      console.warn('[Header] Workspace switch failed:', err);
+    }
+  };
 
   useEffect(() => {
     async function loadClickUpProfile() {
@@ -88,15 +134,56 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  useEffect(() => {
+    loadWorkspaces();
+    window.addEventListener('bilik-workspace-updated', loadWorkspaces);
+    return () => window.removeEventListener('bilik-workspace-updated', loadWorkspaces);
+  }, []);
+
   return (
     <header className="hidden md:flex h-16 bg-[#FFFFFF] border-b border-[#E8E8EC] sticky top-0 z-20 items-center justify-between px-6">
       {/* Left: Workspace Selector & Search */}
       <div className="flex items-center gap-4">
         {/* Workspace Switcher */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg text-xs font-medium text-[#24324A] cursor-pointer hover:bg-[#EEF2F7] transition-colors">
-          <div className="w-2 h-2 rounded-full bg-[#4F9D78]"></div>
-          <span className="font-semibold">Bilik Strategi Workspace</span>
-          <ChevronDown className="w-3.5 h-3.5 text-[#737680]" />
+        <div className="relative">
+          <button
+            onClick={() => setWorkspaceDropdownOpen((open) => !open)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg text-xs font-medium text-[#24324A] cursor-pointer hover:bg-[#EEF2F7] transition-colors max-w-64"
+          >
+            <div className="w-2 h-2 rounded-full bg-[#4F9D78] flex-shrink-0"></div>
+            <span className="font-semibold truncate">{activeWorkspace.name}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-[#737680] flex-shrink-0" />
+          </button>
+
+          {workspaceDropdownOpen && (
+            <div className="absolute left-0 mt-2 w-72 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-xl p-2 z-50 text-xs animate-fade-in">
+              <div className="px-2 py-2 text-[10px] font-bold text-[#737680] uppercase tracking-wider">Workspace Aplikasi</div>
+              <div className="max-h-64 overflow-y-auto">
+                {workspaces.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    onClick={() => selectWorkspace(workspace)}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                      activeWorkspace.id === workspace.id
+                        ? 'bg-[#EEF8F3] text-[#24324A]'
+                        : 'text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124]'
+                    }`}
+                  >
+                    <span className="block font-semibold truncate">{workspace.name}</span>
+                    <span className="block text-[10px] font-mono truncate">{workspace.slug || workspace.id}</span>
+                  </button>
+                ))}
+              </div>
+              <Link
+                href="/settings"
+                onClick={() => setWorkspaceDropdownOpen(false)}
+                className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg text-[#F26B5E] hover:bg-[#FFF0ED] font-semibold"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Kelola Workspace
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Global Search Bar */}
