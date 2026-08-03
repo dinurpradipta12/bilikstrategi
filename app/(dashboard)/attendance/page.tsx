@@ -29,6 +29,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 
 export interface AttendanceRecord {
   id: string;
