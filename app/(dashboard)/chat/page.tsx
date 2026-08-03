@@ -812,7 +812,12 @@ export default function ChatPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
-              <SyncUpButton variant="header" roomTitle={`SyncUp - ${activeChannel?.name || 'Chat Room'}`} />
+              <SyncUpButton
+                variant="header"
+                roomTitle={`SyncUp - ${activeChannel?.name || 'Chat Room'}`}
+                channelId={activeChannelId}
+                onStartCall={() => fetchActiveMessages(activeChannelId, true)}
+              />
 
               <button onClick={() => fetchActiveMessages(activeChannelId, true)}
                 className="px-3 py-1.5 border border-[#E8E8EC] rounded-lg hover:bg-[#F7F7F8] text-[11px]
@@ -870,7 +875,24 @@ export default function ChatPage() {
                                 : 'bg-[#F4F4F5] text-[#202124] rounded-bl-sm hover:bg-[#EBEBED]'}
                               ${isSelected ? 'ring-2 ring-[#7B68EE] ring-offset-1' : ''}`}
                           >
-                            {renderMentionedText(msg.text, liveMembers)}
+                            {msg.text.includes('SyncUp Voice & Video Call') ? (
+                              <div className="p-3 bg-[#0F5A47] text-white rounded-xl shadow-sm border border-[#10B981]/40 space-y-2 max-w-xs text-left">
+                                <div className="flex items-center gap-2 font-extrabold text-xs text-[#10B981]">
+                                  <PhoneCall className="w-4 h-4 text-[#10B981] animate-pulse" />
+                                  <span>SyncUp Call Aktif</span>
+                                </div>
+                                <p className="text-[11px] text-white/90 leading-relaxed">
+                                  {msg.user_name} telah memulai panggilan Huddle di channel ini.
+                                </p>
+                                <SyncUpButton
+                                  variant="full"
+                                  roomTitle={`SyncUp - ${activeChannel?.name || 'Chat Room'}`}
+                                  className="mt-1"
+                                />
+                              </div>
+                            ) : (
+                              renderMentionedText(msg.text, liveMembers)
+                            )}
                           </div>
 
                           {/* Hover action */}
