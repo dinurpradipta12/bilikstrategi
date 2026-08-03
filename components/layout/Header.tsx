@@ -156,7 +156,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
       const isSuperOwner = serverIsSuperuser || isSuperuserEmail(currentEmail);
       let finalRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
-      if (!isSuperOwner) {
+      if (!isSuperOwner && !serverAppRole) {
         const savedTeamStr = localStorage.getItem('bilik_team_members');
         if (savedTeamStr) {
           try {
@@ -187,7 +187,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
 
     const handleStorage = () => loadClickUpProfile();
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('bilik-role-updated', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('bilik-role-updated', handleStorage);
+    };
   }, []);
 
   useEffect(() => {

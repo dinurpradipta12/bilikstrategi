@@ -57,7 +57,7 @@ export default function TeamWorkloadPage() {
   const [mounted, setMounted] = useState(false);
   const [members, setMembers] = useState<TeamMemberWorkload[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Owner');
+  const [currentUserRole, setCurrentUserRole] = useState<'Owner' | 'Admin' | 'Member'>('Member');
   const [isSuperuserAccount, setIsSuperuserAccount] = useState(false);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [timesheetRecap, setTimesheetRecap] = useState<Record<string, Record<string, any>>>({});
@@ -71,6 +71,8 @@ export default function TeamWorkloadPage() {
   const [formCapacity, setFormCapacity] = useState(40);
   const [formIsAdmin, setFormIsAdmin] = useState(false);
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
+  const [savingMemberInfo, setSavingMemberInfo] = useState(false);
+  const [memberSaveError, setMemberSaveError] = useState('');
 
   // ------------------------------------------------------------------------
   // TIMESHEET RECORDING PERIOD RANGE STATE
@@ -323,6 +325,7 @@ export default function TeamWorkloadPage() {
   const handleOpenEditMemberModal = (member: TeamMemberWorkload) => {
     if (!isAdminOrOwner) return;
     setEditingMember(member);
+    setMemberSaveError('');
     setFormRole(member.custom_role || member.role);
     setFormDivision(member.division || 'Agency Team');
     setFormEmail(member.email);
@@ -340,92 +343,127 @@ export default function TeamWorkloadPage() {
     setShowEditMemberModal(true);
   };
 
-  const handleSaveMemberInfo = (e: React.FormEvent) => {
+  const handleSaveMemberInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMember || !isAdminOrOwner) return;
+    if (!editingMember || !isAdminOrOwner || savingMemberInfo) return;
 
-    const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
-    let customInfoMap: Record<string, any> = {};
-    if (savedCustomInfoStr) {
-      try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
+    const targetEmail = formEmail.trim().toLowerCase();
+    if (!targetEmail) {
+      setMemberSaveError('Email pengguna wajib diisi agar akses dapat disimpan lintas perangkat.');
+      return;
     }
 
-    const updatedRoleStr = formIsAdmin ? 'Admin' : 'Member';
+    setSavingMemberInfo(true);
+    setMemberSaveError('');
 
-    const updatedInfo = {
-      custom_role: formRole,
-      role: updatedRoleStr,
-      division: formDivision,
-      email: formEmail,
-      phone: formPhone,
-      capacity: formCapacity,
-      is_admin: formIsAdmin,
-    };
+    try {
+      // The database role is authoritative. localStorage below is only kept as
+      // an optimistic compatibility cache for older pages in this application.
+      const roleResponse = await fetch('/api/app/user-roles', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          display_name: editingMember.full_name,
+          role: formIsAdmin ? 'admin' : 'member',
+          is_admin: formIsAdmin,
+        }),
+      });
+      const roleData = await roleResponse.json().catch(() => ({}));
+      if (!roleResponse.ok) {
+        throw new Error(roleData.error || 'Role gagal disimpan ke database.');
+      }
 
-    customInfoMap[editingMember.full_name] = updatedInfo;
-    customInfoMap[editingMember.id] = updatedInfo;
-    localStorage.setItem('bilik_team_custom_info', JSON.stringify(customInfoMap));
+      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
+      let customInfoMap: Record<string, any> = {};
+      if (savedCustomInfoStr) {
+        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
+      }
 
-    // Persist in bilik_team_members for global role resolution!
-    const savedTeamStr = localStorage.getItem('bilik_team_members');
-    let teamList: any[] = [];
-    if (savedTeamStr) {
-      try { teamList = JSON.parse(savedTeamStr); } catch {}
+      const updatedRoleStr = formIsAdmin ? 'Admin' : 'Member';
+
+      const updatedInfo = {
+        custom_role: formRole,
+        role: updatedRoleStr,
+        division: formDivision,
+        email: targetEmail,
+        phone: formPhone,
+        capacity: formCapacity,
+        is_admin: formIsAdmin,
+      };
+
+      customInfoMap[editingMember.full_name] = updatedInfo;
+      customInfoMap[editingMember.id] = updatedInfo;
+      localStorage.setItem('bilik_team_custom_info', JSON.stringify(customInfoMap));
+
+      // Keep the legacy local cache in sync for pages that have not migrated yet.
+      const savedTeamStr = localStorage.getItem('bilik_team_members');
+      let teamList: any[] = [];
+      if (savedTeamStr) {
+        try { teamList = JSON.parse(savedTeamStr); } catch {}
+      }
+
+      const memberIdx = teamList.findIndex(
+        (m: any) => m.id === editingMember.id || m.full_name === editingMember.full_name || (m.email && m.email === targetEmail)
+      );
+
+      const newTeamMemberObj = {
+        id: editingMember.id,
+        name: editingMember.full_name,
+        full_name: editingMember.full_name,
+        email: targetEmail,
+        role: updatedRoleStr,
+        custom_role: formRole,
+        division: formDivision,
+        capacity: formCapacity,
+        is_admin: formIsAdmin,
+      };
+
+      if (memberIdx >= 0) {
+        teamList[memberIdx] = { ...teamList[memberIdx], ...newTeamMemberObj };
+      } else {
+        teamList.push(newTeamMemberObj);
+      }
+      localStorage.setItem('bilik_team_members', JSON.stringify(teamList));
+
+      // Also update capacities map.
+      const savedCapsStr = localStorage.getItem('bilik_member_capacities');
+      let currentCaps: Record<string, number> = {};
+      if (savedCapsStr) {
+        try { currentCaps = JSON.parse(savedCapsStr); } catch {}
+      }
+      currentCaps[editingMember.id] = formCapacity;
+      currentCaps[editingMember.full_name] = formCapacity;
+      localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
+
+      // Update in-memory members list.
+      setMembers((prev) =>
+        prev.map((m) => {
+          if (m.id === editingMember.id || m.full_name === editingMember.full_name) {
+            return {
+              ...m,
+              role: updatedRoleStr,
+              custom_role: formRole,
+              division: formDivision,
+              email: targetEmail,
+              phone: formPhone,
+              capacity_hours: formCapacity,
+            };
+          }
+          return m;
+        })
+      );
+
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('bilik-role-updated', {
+        detail: { email: targetEmail, role: formIsAdmin ? 'admin' : 'member' },
+      }));
+      setShowEditMemberModal(false);
+    } catch (error: any) {
+      setMemberSaveError(error?.message || 'Role gagal disimpan ke database.');
+    } finally {
+      setSavingMemberInfo(false);
     }
-
-    const memberIdx = teamList.findIndex(
-      (m: any) => m.id === editingMember.id || m.full_name === editingMember.full_name || (m.email && m.email === formEmail)
-    );
-
-    const newTeamMemberObj = {
-      id: editingMember.id,
-      name: editingMember.full_name,
-      full_name: editingMember.full_name,
-      email: formEmail,
-      role: updatedRoleStr,
-      custom_role: formRole,
-      division: formDivision,
-      capacity: formCapacity,
-      is_admin: formIsAdmin,
-    };
-
-    if (memberIdx >= 0) {
-      teamList[memberIdx] = { ...teamList[memberIdx], ...newTeamMemberObj };
-    } else {
-      teamList.push(newTeamMemberObj);
-    }
-    localStorage.setItem('bilik_team_members', JSON.stringify(teamList));
-
-    // Also update capacities map
-    const savedCapsStr = localStorage.getItem('bilik_member_capacities');
-    let currentCaps: Record<string, number> = {};
-    if (savedCapsStr) {
-      try { currentCaps = JSON.parse(savedCapsStr); } catch {}
-    }
-    currentCaps[editingMember.id] = formCapacity;
-    currentCaps[editingMember.full_name] = formCapacity;
-    localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
-
-    // Update in-memory members list
-    setMembers((prev) =>
-      prev.map((m) => {
-        if (m.id === editingMember.id || m.full_name === editingMember.full_name) {
-          return {
-            ...m,
-            role: updatedRoleStr,
-            custom_role: formRole,
-            division: formDivision,
-            email: formEmail,
-            phone: formPhone,
-            capacity_hours: formCapacity,
-          };
-        }
-        return m;
-      })
-    );
-
-    window.dispatchEvent(new Event('storage'));
-    setShowEditMemberModal(false);
   };
 
   // Active Sessions Live Ticker & Capacity State
@@ -681,12 +719,10 @@ export default function TeamWorkloadPage() {
 
       const savedUserStr = localStorage.getItem('bilik_current_user');
       let loggedInEmail = String(authenticatedUser.email || '').trim();
-      let loggedInName = String(authenticatedUser.username || 'Bilik Strategi');
       if (savedUserStr) {
         try {
           const u = JSON.parse(savedUserStr);
           if (!loggedInEmail && u.email) loggedInEmail = u.email;
-          if ((!loggedInName || loggedInName === 'Bilik Strategi') && u.username) loggedInName = u.username;
         } catch {}
       }
 
@@ -696,9 +732,21 @@ export default function TeamWorkloadPage() {
         try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
       }
 
+      // Durable app roles are loaded for the member list. The local cache is
+      // only a fallback for older records that have not been migrated yet.
+      const persistedRoleByEmail = new Map<string, any>();
+      try {
+        const roleRes = await fetch('/api/app/user-roles', { cache: 'no-store' });
+        const roleData = await roleRes.json().catch(() => ({}));
+        if (roleRes.ok && Array.isArray(roleData.roles)) {
+          roleData.roles.forEach((role: any) => {
+            const email = String(role.email || '').trim().toLowerCase();
+            if (email) persistedRoleByEmail.set(email, role);
+          });
+        }
+      } catch {}
+
       const isSuperOwner = authenticatedUser.is_superuser === true || isSuperuserEmail(loggedInEmail);
-      const cInfoLoggedIn = customInfoMap[loggedInName] || {};
-      const isLoggedInPromotedAdmin = cInfoLoggedIn.is_admin === true || cInfoLoggedIn.role === 'Admin' || (cInfoLoggedIn.custom_role || '').toLowerCase().includes('admin');
       const resolvedAppRole = String(authenticatedUser.app_role || '').toLowerCase();
 
       setIsSuperuserAccount(isSuperOwner);
@@ -706,7 +754,7 @@ export default function TeamWorkloadPage() {
         setCurrentUserRole('Owner');
       } else if (resolvedAppRole === 'owner' || authenticatedUser.role === 1) {
         setCurrentUserRole('Owner');
-      } else if (resolvedAppRole === 'admin' || authenticatedUser.role === 2 || isLoggedInPromotedAdmin) {
+      } else if (resolvedAppRole === 'admin' || authenticatedUser.role === 2) {
         setCurrentUserRole('Admin');
       } else {
         setCurrentUserRole('Member');
@@ -729,6 +777,9 @@ export default function TeamWorkloadPage() {
       const mappedMembers: TeamMemberWorkload[] = clickUpMembers.map((m: any) => {
         const memberName = m.username || (m.email ? m.email.split('@')[0] : 'Team Member');
         const cInfo = customInfoMap[memberName] || customInfoMap[String(m.id)] || {};
+        const clickUpEmail = String(m.email || '').trim().toLowerCase();
+        const customEmail = String(cInfo.email || '').trim().toLowerCase();
+        const persistedRole = persistedRoleByEmail.get(clickUpEmail) || persistedRoleByEmail.get(customEmail);
 
         const assignedTasks = fetchedTasks.filter((t: any) =>
           t.assignee_names?.some((name: string) => name.toLowerCase().includes(memberName.toLowerCase()))
@@ -773,16 +824,31 @@ export default function TeamWorkloadPage() {
 
         const allMemberTasks = [...customUserTasks, ...memberPriorityTasks];
 
-        const defaultCustomRole = m.role === 1 ? 'Owner / Project Lead' : m.role === 2 ? 'Admin / Operations' : 'Agency Team Member';
+        const defaultCustomRole = persistedRole?.role === 'admin'
+          ? 'Sub Admin / Workspace Admin'
+          : m.role === 1
+            ? 'Owner / Project Lead'
+            : m.role === 2
+              ? 'Admin / Operations'
+              : 'Agency Team Member';
 
-        const isMemberSuperOwner = isSuperuserEmail(m.email) || isSuperuserEmail(cInfo.email);
-        const isMemberPromotedAdmin = cInfo.is_admin === true || cInfo.role === 'Admin' || (cInfo.custom_role || '').toLowerCase().includes('admin');
-        const effectiveMemberRole = isMemberSuperOwner ? 'Owner' : isMemberPromotedAdmin ? 'Admin' : (m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member');
+        const isMemberSuperOwner = persistedRole?.is_superuser === true || isSuperuserEmail(m.email) || isSuperuserEmail(cInfo.email);
+        const effectiveMemberRole = persistedRole
+          ? persistedRole.is_superuser === true || persistedRole.role === 'owner'
+            ? 'Owner'
+            : persistedRole.role === 'admin'
+              ? 'Admin'
+              : 'Member'
+          : isMemberSuperOwner
+            ? 'Owner'
+            : cInfo.is_admin === true || cInfo.role === 'Admin' || (cInfo.custom_role || '').toLowerCase().includes('admin')
+              ? 'Admin'
+              : (m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member');
 
         return {
           id: String(m.id),
           full_name: memberName,
-          email: cInfo.email || m.email || '',
+          email: cInfo.email || m.email || persistedRole?.email || '',
           role: effectiveMemberRole,
           custom_role: cInfo.custom_role || defaultCustomRole,
           division: cInfo.division || 'Agency Team',
@@ -1837,20 +1903,28 @@ export default function TeamWorkloadPage() {
                 </label>
               </div>
 
+              {memberSaveError && (
+                <p className="rounded-lg border border-[#F26B5E]/30 bg-[#FFF0ED] px-3 py-2 text-[11px] font-semibold text-[#D95858]">
+                  {memberSaveError}
+                </p>
+              )}
+
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowEditMemberModal(false)}
-                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer"
+                  disabled={savingMemberInfo}
+                  className="px-4 py-2 bg-[#F7F7F8] border border-[#E8E8EC] text-[#737680] rounded-xl font-bold hover:text-[#24324A] cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  disabled={savingMemberInfo}
+                  className="px-5 py-2 bg-[#24324A] hover:bg-[#1A2536] text-white rounded-xl font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Send className="w-3.5 h-3.5 text-[#F26B5E]" />
-                  <span>Simpan Perubahan</span>
+                  {savingMemberInfo ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#F26B5E]" /> : <Send className="w-3.5 h-3.5 text-[#F26B5E]" />}
+                  <span>{savingMemberInfo ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
                 </button>
               </div>
             </form>

@@ -86,7 +86,7 @@ export default function Sidebar() {
       const isSuperOwner = serverIsSuperuser || isSuperuserEmail(email);
       let resolvedRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
-      if (!isSuperOwner) {
+      if (!isSuperOwner && !serverAppRole) {
         const savedTeamStr = localStorage.getItem('bilik_team_members');
         if (savedTeamStr) {
           try {
@@ -116,6 +116,7 @@ export default function Sidebar() {
 
     const handleStorage = () => loadClickUpProfile();
     window.addEventListener('storage', handleStorage);
+    window.addEventListener('bilik-role-updated', handleStorage);
 
     // Read real-time unread badge counts (defaults to 0 when no unread messages/notifs exist)
     const savedChatUnread = Number(localStorage.getItem('bilik_chat_unread_count') || '0');
@@ -139,6 +140,7 @@ export default function Sidebar() {
 
     return () => {
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('bilik-role-updated', handleStorage);
       window.removeEventListener('unread-badge-update', handleUnreadUpdate);
     };
   }, []);

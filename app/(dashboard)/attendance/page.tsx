@@ -123,37 +123,13 @@ export default function AttendancePage() {
   const [showAdminResetModal, setShowAdminResetModal] = useState<boolean>(false);
 
   // Helper function to strictly check if user is Admin or Owner
-  const checkIsAdminOrOwner = (userEmail?: string, userName?: string, userRole?: string): boolean => {
+  const checkIsAdminOrOwner = (userEmail?: string, userRole?: string): boolean => {
     const emailClean = (userEmail || '').toLowerCase().trim();
-    const nameClean = (userName || '').toLowerCase().trim();
     const roleClean = (userRole || '').toLowerCase().trim();
 
-    // 1. Super Admin / Owner (Official ClickUp Workspace Owner)
-    if (emailClean.includes('snllabsarchive@gmail.com') || nameClean === 'dinur pradipta' || roleClean === 'owner') {
-      return true;
-    }
-
-    // 2. Check if admin mode was enabled for this user in localStorage 'bilik_team_custom_info'
-    if (typeof window !== 'undefined') {
-      try {
-        const customStr = localStorage.getItem('bilik_team_custom_info');
-        if (customStr) {
-          const map = JSON.parse(customStr);
-          const matched = Object.entries(map).find(([k]: [string, any]) => {
-            const kClean = k.toLowerCase().trim();
-            return kClean === nameClean || (emailClean && kClean === emailClean);
-          });
-          if (matched && matched[1]) {
-            const info: any = matched[1];
-            if (info.is_admin || (info.role || '').toLowerCase().includes('admin') || (info.role || '').toLowerCase().includes('owner')) {
-              return true;
-            }
-          }
-        }
-      } catch {}
-    }
-
-    return roleClean === 'admin';
+    // The role returned by /api/clickup/user is backed by app_user_roles.
+    // Ignore stale localStorage role flags so every device gets the same access.
+    return isSuperuserEmail(emailClean) || roleClean === 'owner' || roleClean === 'admin';
   };
 
   const normalizeMemberKey = (value?: string) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -205,6 +181,7 @@ export default function AttendancePage() {
         let activeUsername = '';
         let activeEmail = '';
         let resolvedUserRole: 'Owner' | 'Admin' | 'Member' = 'Member';
+        let hasServerAppRole = false;
 
         const userRes = await fetch('/api/clickup/user');
         if (userRes.ok) {
@@ -213,7 +190,13 @@ export default function AttendancePage() {
             activeUsername = userData.user.username || '';
             activeEmail = userData.user.email || '';
             const roleNum = userData.user.role;
-            resolvedUserRole = roleNum === 1 ? 'Owner' : roleNum === 2 ? 'Admin' : 'Member';
+            const appRole = String(userData.user.app_role || '').toLowerCase();
+            hasServerAppRole = ['owner', 'admin', 'member', 'client'].includes(appRole);
+            resolvedUserRole = appRole === 'owner' || roleNum === 1
+              ? 'Owner'
+              : appRole === 'admin' || roleNum === 2
+                ? 'Admin'
+                : 'Member';
 
             setCurrentUser({
               id: String(userData.user.id),
@@ -254,13 +237,8 @@ export default function AttendancePage() {
             );
           });
 
-          if (matchedMember) {
+          if (matchedMember && !hasServerAppRole) {
             resolvedUserRole = matchedMember.role === 1 ? 'Owner' : matchedMember.role === 2 ? 'Admin' : 'Member';
-          }
-
-          // Check if admin mode was enabled in custom info
-          if (checkIsAdminOrOwner(activeEmail, activeUsername, resolvedUserRole)) {
-            resolvedUserRole = activeEmail.includes('snllabsarchive') || activeUsername.toLowerCase() === 'dinur pradipta' ? 'Owner' : 'Admin';
           }
 
           const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
@@ -1274,7 +1252,7 @@ export default function AttendancePage() {
 
   // Compute active team count
   const onlineCount = teamStatusList.filter((m) => m.isOnline).length;
-  const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.username, currentUser.role);
+  const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.role);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12 relative">

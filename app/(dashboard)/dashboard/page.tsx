@@ -66,42 +66,13 @@ export default function DashboardPage() {
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
 
-  const checkIsAdminOrOwner = (userEmail: string, userName: string, defaultRole: string) => {
+  const checkIsAdminOrOwner = (userEmail: string, defaultRole: string) => {
     const emailLower = (userEmail || '').toLowerCase().trim();
+    const roleLower = (defaultRole || '').toLowerCase().trim();
 
-    // Rule 1: Primary Owner (snllabsarchive@gmail.com) is ALWAYS Admin/Owner
-    if (emailLower === 'snllabsarchive@gmail.com') return true;
-
-    // Rule 2: Check team list in localStorage ('bilik_team_members') to see if promoted by Owner
-    if (typeof window !== 'undefined') {
-      const savedTeamStr = localStorage.getItem('bilik_team_members');
-      if (savedTeamStr) {
-        try {
-          const parsedMembers = JSON.parse(savedTeamStr);
-          if (Array.isArray(parsedMembers)) {
-            const found = parsedMembers.find(
-              (m: any) =>
-                (m.email && m.email.toLowerCase().trim() === emailLower) ||
-                (m.name && m.name.toLowerCase().trim() === userName.toLowerCase().trim())
-            );
-            if (found && found.role) {
-              const r = found.role.toLowerCase();
-              if (r.includes('owner') || r.includes('admin') || r.includes('lead')) {
-                return true;
-              } else {
-                return false; // Explicitly assigned as Member in Team List!
-              }
-            }
-          }
-        } catch {}
-      }
-    }
-
-    // Rule 3: Check defaultRole string if not contact.dinurpradipta@gmail.com
-    if (emailLower === 'contact.dinurpradipta@gmail.com') return false;
-
-    const r = (defaultRole || '').toLowerCase();
-    return r.includes('owner') || r.includes('admin') || r.includes('lead');
+    // The server-resolved app role is authoritative. Do not let a stale
+    // localStorage member record downgrade or upgrade this account.
+    return isSuperuserEmail(emailLower) || roleLower.includes('owner') || roleLower.includes('admin') || roleLower.includes('lead');
   };
 
   const [activeSessionTime, setActiveSessionTime] = useState<string | null>(null);
@@ -952,7 +923,7 @@ export default function DashboardPage() {
         /* PERSONAL DASHBOARD VIEW (DASHBOARD SAYA)              */
         /* ---------------------------------------------------- */
         (() => {
-          const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.username, currentUser.role);
+          const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.role);
 
           const hour = new Date().getHours();
           const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
