@@ -152,6 +152,7 @@ export default function ChatPage() {
   const messagesEndRef  = useRef<HTMLDivElement>(null);
   const threadEndRef    = useRef<HTMLDivElement>(null);
   const previousCountRef = useRef<number>(0);
+  const lastSeenMessageRef = useRef<Record<string, string>>({});
 
   // ── Scroll helpers ────────────────────────────────────────────────────────
   const scrollToBottom      = (smooth = true) => setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' }), 80);
@@ -276,6 +277,9 @@ export default function ChatPage() {
           }
         }
         previousCountRef.current = newMsgs.length;
+        if (newMsgs.length > 0) {
+          lastSeenMessageRef.current[channelId] = newMsgs[newMsgs.length - 1].id;
+        }
 
         // Merge: keep localStatus for optimistic messages
         setRawMessages((prev) => {
@@ -302,6 +306,40 @@ export default function ChatPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channels, isCurrentUserMessage, triggerNotification]);
+
+  const pollChannelNotifications = useCallback(async () => {
+    const watchChannels = channels.filter((ch) => ch.id && ch.id !== activeChannelId);
+    await Promise.allSettled(
+      watchChannels.map(async (ch) => {
+        try {
+          const res = await fetch(`/api/clickup/chat?channelId=${encodeURIComponent(ch.id)}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const messages: ChatMessageItem[] = Array.isArray(data.messages) ? data.messages : [];
+          if (messages.length === 0) return;
+
+          const latestMsg = messages[messages.length - 1];
+          const previousLatestId = lastSeenMessageRef.current[ch.id];
+          lastSeenMessageRef.current[ch.id] = latestMsg.id;
+
+          if (!previousLatestId || previousLatestId === latestMsg.id || isCurrentUserMessage(latestMsg)) {
+            return;
+          }
+
+          triggerNotification({
+            id: `${ch.id}-${latestMsg.id}`,
+            senderName: latestMsg.user_name,
+            senderAvatar: latestMsg.user_avatar,
+            channelName: ch.name.replace('💬 ', '').replace('📢 ', ''),
+            channelId: ch.id,
+            text: latestMsg.text,
+          });
+        } catch {
+          // Background notification polling should never interrupt the active chat.
+        }
+      })
+    );
+  }, [activeChannelId, channels, isCurrentUserMessage, triggerNotification]);
 
   // ── Typing API integration ────────────────────────────────────────────────
   const [otherTypingUsers, setOtherTypingUsers] = useState<Array<{ userId: string | number; username: string }>>([]);
@@ -368,10 +406,11 @@ export default function ChatPage() {
       if (!document.hidden && activeChannelId) {
         fetchActiveMessages(activeChannelId, false);
         fetchTypingStatus();
+        pollChannelNotifications();
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
+  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus, pollChannelNotifications]);
 
   // ── Mention autocomplete filtering ─────────────────────────────────────────
   const filteredMentionMembers = React.useMemo(() => {
