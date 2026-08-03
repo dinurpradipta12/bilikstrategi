@@ -61,17 +61,17 @@ export function publishChatUnreadMap(unreadMap: Record<string, number>) {
 }
 
 export function publishChatNotification(notification: ChatNotification, unreadMap: Record<string, number>) {
-  if (!isBrowser()) return;
-  const notifications = [
-    notification,
-    ...readChatNotifications().filter((item) => item.id !== notification.id),
-  ].slice(0, 30);
+  if (!isBrowser()) return false;
+  const existingNotifications = readChatNotifications();
+  if (existingNotifications.some((item) => item.id === notification.id)) return false;
+  const notifications = [notification, ...existingNotifications].slice(0, 30);
   localStorage.setItem(CHAT_NOTIFICATIONS_KEY, JSON.stringify(notifications));
   const count = getChatUnreadTotal(unreadMap);
   dispatchUnreadCount(count);
   window.dispatchEvent(new CustomEvent(CHAT_NOTIFICATION_EVENT, {
     detail: { notification, notifications, count },
   }));
+  return true;
 }
 
 export function clearChatChannelNotifications(channelId: string) {
@@ -82,4 +82,3 @@ export function clearChatChannelNotifications(channelId: string) {
     detail: { notifications },
   }));
 }
-

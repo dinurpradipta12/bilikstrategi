@@ -260,8 +260,14 @@ export default function ChatPage() {
       [data.channelId]: (unreadMapRef.current[data.channelId] || 0) + 1,
     };
     unreadMapRef.current = nextMap;
+    const accepted = publishChatNotification(notification, nextMap);
+    if (!accepted) {
+      const storedMap = readChatUnreadMap();
+      unreadMapRef.current = storedMap;
+      setUnreadMap(storedMap);
+      return;
+    }
     setUnreadMap(nextMap);
-    publishChatNotification(notification, nextMap);
     showToast({ ...notification, id: `toast-${data.id}-${Date.now()}` });
   }, [showToast]);
 

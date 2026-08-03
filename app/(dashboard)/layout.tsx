@@ -5,6 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
+import FloatingChat from '@/components/chat/FloatingChat';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
@@ -109,6 +110,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         isOpen={createTaskOpen}
         onClose={() => setCreateTaskOpen(false)}
       />
+
+      <FloatingChat />
     </div>
   );
 }
