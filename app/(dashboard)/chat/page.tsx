@@ -527,7 +527,7 @@ export default function ChatPage() {
       await fetch('/api/clickup/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId: activeChannelId, text: toSend, sender }),
+        body: JSON.stringify({ channelId: activeChannelId, text: toSend, sender, clientMessageId: tempId }),
       });
       setStatusMap((prev) => ({ ...prev, [tempId]: 'sent' }));
       setRawMessages((prev) =>
@@ -591,6 +591,7 @@ export default function ChatPage() {
           channelId: activeChannelId,
           text: toSend,
           sender,
+          clientMessageId: replyId,
           replyTo: {
             author: activeThreadMessage.user_name,
             text: activeThreadMessage.text,

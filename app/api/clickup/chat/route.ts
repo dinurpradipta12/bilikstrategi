@@ -348,6 +348,14 @@ function mergeChatMessages(messages: StoredChatMessage[]) {
   );
 }
 
+function replaceMemoryChatMessage(oldId: string, message: StoredChatMessage, rawChannelId: string) {
+  for (const id of getChannelAliases(rawChannelId)) {
+    const current = globalThis.sharedChatStore[id] || [];
+    const withoutOld = current.filter((item) => item?.id !== oldId && item?.id !== message.id);
+    globalThis.sharedChatStore[id] = [...withoutOld, { ...message, channel_id: id }];
+  }
+}
+
 async function getStoredChatMessages(channelId: string, rawChannelId: string) {
   const ids = Array.from(new Set([...getChannelAliases(rawChannelId), channelId].filter(Boolean)));
   try {
@@ -589,7 +597,7 @@ export async function POST(req: NextRequest) {
   try {
     const userToken = getUserClickUpToken(req);
     const body = await req.json();
-    const { channelId: rawChannelId, text, sender, replyTo } = body;
+    const { channelId: rawChannelId, text, sender, replyTo, clientMessageId } = body;
     const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
 
     if (!rawChannelId || !text) {
@@ -603,7 +611,7 @@ export async function POST(req: NextRequest) {
     const outboundText = buildClickUpChatText(text, replyTo || null);
 
     const newMsg: StoredChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: clientMessageId || `msg-${Date.now()}`,
       channel_id: rawChannelId,
       user_id: String(appSender.id || ''),
       user_name: senderName,
@@ -634,6 +642,7 @@ export async function POST(req: NextRequest) {
         newMsg.id = clickUpMsg.id;
         newMsg.created_at = clickUpMsg.created_at;
         newMsg.clickup_sync_warning = null;
+        replaceMemoryChatMessage(previousId, newMsg, rawChannelId);
         await replaceStoredChatMessageId(previousId, newMsg, storedChannelId);
       } catch (err) {
         console.warn('[ClickUp Chat API] Non-blocking direct message post fallback:', err);
@@ -648,6 +657,7 @@ export async function POST(req: NextRequest) {
           newMsg.id = comment.id;
         }
         newMsg.clickup_sync_warning = null;
+        replaceMemoryChatMessage(previousId, newMsg, rawChannelId);
         await replaceStoredChatMessageId(previousId, newMsg, storedChannelId);
       } catch (err) {
         console.warn('[ClickUp Chat API] Non-blocking view comment post fallback:', err);
