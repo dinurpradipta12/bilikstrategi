@@ -29,7 +29,10 @@ export async function GET() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    const activeList: ActiveCheckIn[] = (dbSessions || []).map((row) => ({
+    const activeRows = Array.isArray(dbSessions) ? dbSessions : [];
+    const logRows = Array.isArray(dbLogs) ? dbLogs : [];
+
+    const activeList: ActiveCheckIn[] = activeRows.map((row: any) => ({
       user_name: row.user_name,
       user_avatar: row.user_avatar,
       checkInTime: row.check_in_time,
@@ -38,7 +41,7 @@ export async function GET() {
       notesInput: row.notes_input || '',
     }));
 
-    const historyList = (dbLogs && dbLogs.length > 0) ? dbLogs : globalAttendanceHistory;
+    const historyList = logRows.length > 0 ? logRows : globalAttendanceHistory;
 
     return NextResponse.json(
       {

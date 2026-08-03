@@ -366,7 +366,8 @@ async function getStoredChatMessages(channelId: string, rawChannelId: string) {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    return (data || []).map(rowToStoredMessage);
+    const rows = Array.isArray(data) ? data : [];
+    return rows.map(rowToStoredMessage);
   } catch (err) {
     console.warn('[App Chat DB] Fallback to memory store:', err);
     return [];

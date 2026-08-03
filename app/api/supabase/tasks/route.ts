@@ -128,10 +128,12 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    fallbackTasks.length = 0;
-    fallbackTasks.push(...(data || []));
+    const rows = Array.isArray(data) ? data : [];
 
-    let tasks = (data || []).map(rowToTask);
+    fallbackTasks.length = 0;
+    fallbackTasks.push(...rows);
+
+    let tasks = rows.map(rowToTask);
     if (projectId && !isUuid(projectId)) {
       tasks = tasks.filter((task) => task.project_id === projectId || task.clickup_task_id === projectId);
     }
