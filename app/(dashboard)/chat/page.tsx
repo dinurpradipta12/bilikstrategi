@@ -9,6 +9,14 @@ import {
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
 import { AgencyChatMessage } from '@/lib/mock/data';
+import {
+  clearChatChannelNotifications,
+  publishChatNotification,
+  publishChatUnreadMap,
+  readChatNotifications,
+  readChatUnreadMap,
+  type ChatNotification,
+} from '@/lib/chat/notification-store';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,13 +32,8 @@ interface ChatMessageItem extends AgencyChatMessage {
   isOptimistic?: boolean;
 }
 
-interface ToastNotification {
-  id: string;
-  senderName: string;
-  senderAvatar: string;
-  channelName: string;
-  channelId: string;
-  text: string;
+interface ToastNotification extends Omit<ChatNotification, 'createdAt'> {
+  createdAt?: string;
   exiting?: boolean;
 }
 
@@ -162,7 +165,7 @@ export default function ChatPage() {
   const [activeThreadMessage, setActiveThreadMessage] = useState<ChatMessageItem | null>(null);
   const [liveMembers, setLiveMembers]               = useState<Array<{ id: number; username: string; email: string; avatar: string }>>([]);
   const [loadingMessages, setLoadingMessages]       = useState(false);
-  const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>({});
+  const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>(() => readChatUnreadMap());
   const [mobileChannelsOpen, setMobileChannelsOpen] = useState(false);
   
   // Authenticated user (default Dinur Pradipta)
@@ -188,6 +191,8 @@ export default function ChatPage() {
 
   // Toast
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  const unreadMapRef = useRef<Record<string, number>>(readChatUnreadMap());
+  const notifiedMessageIdsRef = useRef<Set<string>>(new Set(readChatNotifications().map((item) => item.id)));
 
   // ── Sync Mode (Manual vs Realtime) ──────────────────────────────────────────
   const [syncMode, setSyncMode] = useState<'manual' | 'realtime'>(() => {
@@ -228,10 +233,41 @@ export default function ChatPage() {
     }, 5000);
   }, []);
 
+  const markChannelRead = useCallback((channelId: string) => {
+    const nextMap = { ...unreadMapRef.current };
+    delete nextMap[channelId];
+    unreadMapRef.current = nextMap;
+    setUnreadMap(nextMap);
+    publishChatUnreadMap(nextMap);
+    clearChatChannelNotifications(channelId);
+  }, []);
+
   const triggerNotification = useCallback((data: ToastNotification) => {
-    showToast({ ...data, id: `toast-${Date.now()}` });
-    setUnreadMap((prev) => ({ ...prev, [data.channelId]: (prev[data.channelId] || 0) + 1 }));
+    if (notifiedMessageIdsRef.current.has(data.id)) return;
+    notifiedMessageIdsRef.current.add(data.id);
+
+    const notification: ChatNotification = {
+      id: data.id,
+      senderName: data.senderName,
+      senderAvatar: data.senderAvatar,
+      channelName: data.channelName,
+      channelId: data.channelId,
+      text: data.text,
+      createdAt: data.createdAt || new Date().toISOString(),
+    };
+    const nextMap = {
+      ...unreadMapRef.current,
+      [data.channelId]: (unreadMapRef.current[data.channelId] || 0) + 1,
+    };
+    unreadMapRef.current = nextMap;
+    setUnreadMap(nextMap);
+    publishChatNotification(notification, nextMap);
+    showToast({ ...notification, id: `toast-${data.id}-${Date.now()}` });
   }, [showToast]);
+
+  useEffect(() => {
+    publishChatUnreadMap(unreadMapRef.current);
+  }, []);
 
   // ── Simulate "read" after another member receives message ────────────────
   const advanceStatusToRead = useCallback((msgId: string) => {
@@ -333,6 +369,7 @@ export default function ChatPage() {
               channelName: chName.replace('💬 ', '').replace('📢 ', ''),
               channelId,
               text: latestMsg.text,
+              createdAt: latestMsg.created_at,
             });
           }
         }
@@ -400,12 +437,13 @@ export default function ChatPage() {
           }
 
           triggerNotification({
-            id: `${ch.id}-${latestMsg.id}`,
+            id: latestMsg.id,
             senderName: latestMsg.user_name,
             senderAvatar: latestMsg.user_avatar,
             channelName: ch.name.replace('💬 ', '').replace('📢 ', ''),
             channelId: ch.id,
             text: latestMsg.text,
+            createdAt: latestMsg.created_at,
           });
         } catch {
           // Background notification polling should never interrupt the active chat.
@@ -454,12 +492,13 @@ export default function ChatPage() {
           if (!targetChannel || isCurrentUserMessage(msg)) return;
 
           triggerNotification({
-            id: `rt-${targetChannel.id}-${msg.id}`,
+            id: msg.id,
             senderName: msg.user_name,
             senderAvatar: msg.user_avatar,
             channelName: targetChannel.name.replace('💬 ', '').replace('📢 ', ''),
             channelId: targetChannel.id,
             text: msg.text,
+            createdAt: msg.created_at,
           });
         }
       )
@@ -516,7 +555,7 @@ export default function ChatPage() {
     setIsSelfTyping(false);
     isTypingRef.current = false;
     setOtherTypingUsers([]);
-    setUnreadMap((prev) => ({ ...prev, [activeChannelId]: 0 }));
+    markChannelRead(activeChannelId);
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem(chatCacheKey(activeChannelId));
@@ -527,7 +566,29 @@ export default function ChatPage() {
     }
     fetchActiveMessages(activeChannelId, true);
     fetchTypingStatus();
-  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus]);
+  }, [activeChannelId, fetchActiveMessages, fetchTypingStatus, markChannelRead]);
+
+  useEffect(() => {
+    const openChannel = (channelId: string) => {
+      if (!channelId) return;
+      setActiveChannelId(channelId);
+      markChannelRead(channelId);
+    };
+
+    const pendingChannelId = localStorage.getItem('bilik_chat_open_channel');
+    if (pendingChannelId) {
+      localStorage.removeItem('bilik_chat_open_channel');
+      openChannel(pendingChannelId);
+    }
+
+    const handleOpenChannel = (event: Event) => {
+      const channelId = (event as CustomEvent).detail?.channelId;
+      if (typeof channelId === 'string') openChannel(channelId);
+    };
+
+    window.addEventListener('bilik-open-chat-channel', handleOpenChannel);
+    return () => window.removeEventListener('bilik-open-chat-channel', handleOpenChannel);
+  }, [markChannelRead]);
 
   // Polling controlled by syncMode
   useEffect(() => {
@@ -828,7 +889,7 @@ export default function ChatPage() {
                 ${toast.exiting ? 'toast-exit' : 'toast-enter'}`}
               onClick={() => {
                 setActiveChannelId(toast.channelId);
-                setUnreadMap((prev) => ({ ...prev, [toast.channelId]: 0 }));
+                markChannelRead(toast.channelId);
                 setToasts((prev) => prev.filter((t) => t.id !== toast.id));
               }}
             >
@@ -895,7 +956,7 @@ export default function ChatPage() {
                       icon={<Hash className="w-3 h-3 text-[#F26B5E]" />}
                       onClick={() => {
                         setActiveChannelId(ch.id);
-                        setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                        markChannelRead(ch.id);
                         setMobileChannelsOpen(false);
                       }}
                     />
@@ -914,7 +975,7 @@ export default function ChatPage() {
                       icon={<Hash className="w-3 h-3 text-[#737680]" />}
                       onClick={() => {
                         setActiveChannelId(ch.id);
-                        setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                        markChannelRead(ch.id);
                         setMobileChannelsOpen(false);
                       }}
                     />
@@ -944,7 +1005,7 @@ export default function ChatPage() {
                       <button key={ch.id}
                         onClick={() => {
                           setActiveChannelId(ch.id);
-                          setUnreadMap((p) => ({ ...p, [ch.id]: 0 }));
+                          markChannelRead(ch.id);
                           setMobileChannelsOpen(false);
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold

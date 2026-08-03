@@ -138,12 +138,8 @@ export default function Sidebar() {
     };
   }, []);
 
-  // Clear unread badge immediately when user visits the respective page
+  // Keep chat unread counts visible until the user opens the specific channel.
   useEffect(() => {
-    if (pathname.startsWith('/chat')) {
-      setChatUnread(0);
-      localStorage.setItem('bilik_chat_unread_count', '0');
-    }
     if (pathname.startsWith('/notifications')) {
       setNotifUnread(0);
       localStorage.setItem('bilik_notif_unread_count', '0');
