@@ -11,6 +11,11 @@ import SyncUpButton from '@/components/syncup/SyncUpButton';
 import { AgencyChatMessage } from '@/lib/mock/data';
 import {
   clearChatChannelNotifications,
+  clearChatUnreadForChannel,
+  getChatChannelAliases,
+  getChatUnreadForChannel,
+  incrementChatUnread,
+  normalizeChatChannelId,
   publishChatNotification,
   publishChatUnreadMap,
   readChatNotifications,
@@ -234,8 +239,7 @@ export default function ChatPage() {
   }, []);
 
   const markChannelRead = useCallback((channelId: string) => {
-    const nextMap = { ...unreadMapRef.current };
-    delete nextMap[channelId];
+    const nextMap = clearChatUnreadForChannel(unreadMapRef.current, channelId);
     unreadMapRef.current = nextMap;
     setUnreadMap(nextMap);
     publishChatUnreadMap(nextMap);
@@ -246,19 +250,17 @@ export default function ChatPage() {
     if (notifiedMessageIdsRef.current.has(data.id)) return;
     notifiedMessageIdsRef.current.add(data.id);
 
+    const channelId = normalizeChatChannelId(data.channelId) || data.channelId;
     const notification: ChatNotification = {
       id: data.id,
       senderName: data.senderName,
       senderAvatar: data.senderAvatar,
       channelName: data.channelName,
-      channelId: data.channelId,
+      channelId,
       text: data.text,
       createdAt: data.createdAt || new Date().toISOString(),
     };
-    const nextMap = {
-      ...unreadMapRef.current,
-      [data.channelId]: (unreadMapRef.current[data.channelId] || 0) + 1,
-    };
+    const nextMap = incrementChatUnread(unreadMapRef.current, channelId);
     unreadMapRef.current = nextMap;
     const accepted = publishChatNotification(notification, nextMap);
     if (!accepted) {
@@ -577,8 +579,14 @@ export default function ChatPage() {
   useEffect(() => {
     const openChannel = (channelId: string) => {
       if (!channelId) return;
-      setActiveChannelId(channelId);
-      markChannelRead(channelId);
+      const normalizedId = normalizeChatChannelId(channelId);
+      const matchingChannel = channels.find((channel) =>
+        getChatChannelAliases(channel.id).includes(normalizedId) ||
+        getChatChannelAliases(channel.id).includes(channelId.trim().toLowerCase())
+      );
+      const targetId = matchingChannel?.id || channelId;
+      setActiveChannelId(targetId);
+      markChannelRead(targetId);
     };
 
     const pendingChannelId = localStorage.getItem('bilik_chat_open_channel');
@@ -594,7 +602,7 @@ export default function ChatPage() {
 
     window.addEventListener('bilik-open-chat-channel', handleOpenChannel);
     return () => window.removeEventListener('bilik-open-chat-channel', handleOpenChannel);
-  }, [markChannelRead]);
+  }, [channels, markChannelRead]);
 
   // Polling controlled by syncMode
   useEffect(() => {
@@ -958,7 +966,7 @@ export default function ChatPage() {
                 <div className="space-y-0.5">
                   {generalChannels.map((ch) => (
                     <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
-                      unread={unreadMap[ch.id] || 0} label={ch.name}
+                      unread={getChatUnreadForChannel(unreadMap, ch.id)} label={ch.name}
                       icon={<Hash className="w-3 h-3 text-[#F26B5E]" />}
                       onClick={() => {
                         setActiveChannelId(ch.id);
@@ -977,7 +985,7 @@ export default function ChatPage() {
                 <div className="space-y-0.5">
                   {spaceChannels.map((ch) => (
                     <ChannelButton key={ch.id} ch={ch} isActive={ch.id === activeChannelId}
-                      unread={unreadMap[ch.id] || 0} label={ch.name.replace('💬 ', '')}
+                      unread={getChatUnreadForChannel(unreadMap, ch.id)} label={ch.name.replace('💬 ', '')}
                       icon={<Hash className="w-3 h-3 text-[#737680]" />}
                       onClick={() => {
                         setActiveChannelId(ch.id);
@@ -999,7 +1007,7 @@ export default function ChatPage() {
                 <div className="space-y-0.5">
                   {dmChannels.map((ch) => {
                     const isActive = ch.id === activeChannelId;
-                    const unread   = unreadMap[ch.id] || 0;
+                    const unread   = getChatUnreadForChannel(unreadMap, ch.id);
                     const dmName   = ch.name.replace('👤 DM: ', '').replace('DM:', '').trim();
                     const initials = dmName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
                     const memberAvatar = ch.avatar || liveMembers.find((m) =>

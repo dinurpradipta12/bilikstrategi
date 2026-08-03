@@ -7,6 +7,9 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
   CHAT_NOTIFICATION_EVENT,
   getChatUnreadTotal,
+  getChatUnreadForChannel,
+  incrementChatUnread,
+  normalizeChatChannelId,
   publishChatNotification,
   readChatNotifications,
   readChatUnreadMap,
@@ -161,7 +164,8 @@ export default function FloatingChat() {
           const row = payload.new as any;
           const raw = row.raw_data || {};
           const messageId = String(row.id || raw.id || '');
-          const channelId = String(row.channel_id || raw.channel_id || row.normalized_channel_id || '');
+          const rawChannelId = String(row.channel_id || raw.channel_id || row.normalized_channel_id || '');
+          const channelId = normalizeChatChannelId(rawChannelId) || rawChannelId;
           if (!messageId || !channelId || seenMessageIdsRef.current.has(messageId)) return;
 
           const senderName = row.user_name || raw.user_name || 'Pengguna';
@@ -182,10 +186,7 @@ export default function FloatingChat() {
             createdAt: row.created_at || raw.created_at || new Date().toISOString(),
           };
           const currentUnread = readChatUnreadMap();
-          const nextUnread = {
-            ...currentUnread,
-            [channelId]: (currentUnread[channelId] || 0) + 1,
-          };
+          const nextUnread = incrementChatUnread(currentUnread, channelId);
           const accepted = publishChatNotification(notification, nextUnread);
           if (!accepted) return;
           setUnreadMap(nextUnread);
@@ -207,7 +208,7 @@ export default function FloatingChat() {
         tabMap.set(notification.channelId, {
           channelId: notification.channelId,
           channelName: notification.channelName,
-          unread: unreadMap[notification.channelId] || 0,
+          unread: getChatUnreadForChannel(unreadMap, notification.channelId),
           latest: notification,
         });
       }
