@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  MessageSquare, Send, Hash, RefreshCw,
+  MessageSquare, Send, Hash, List, RefreshCw,
   MessageCircle, X, Reply, ChevronRight,
   User, Bell, AtSign, Check, CheckCheck, PhoneCall,
 } from 'lucide-react';
@@ -47,6 +47,36 @@ interface ToastNotification extends Omit<ChatNotification, 'createdAt'> {
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+function cleanChannelName(name: string) {
+  return name
+    .replace('📢 ', '')
+    .replace('💬 ', '')
+    .replace('👤 DM: ', '')
+    .replace(/^DM:\s*/i, '')
+    .trim();
+}
+
+function isDirectChannel(channel?: { type?: string; name?: string } | null) {
+  return Boolean(channel && (channel.type === 'direct' || channel.name?.includes('DM:')));
+}
+
+function fallbackAvatar(name: string) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=24324A&color=fff`;
+}
+
+function findMemberForChannel(
+  channelName: string,
+  members: Array<{ username: string; avatar: string }>
+) {
+  const normalizedName = channelName.toLowerCase();
+  return members.find((member) => {
+    const normalizedMember = member.username.toLowerCase();
+    return normalizedMember === normalizedName ||
+      normalizedMember.includes(normalizedName) ||
+      normalizedName.includes(normalizedMember);
+  });
 }
 
 function chatCacheKey(channelId: string) {
@@ -867,6 +897,18 @@ export default function ChatPage() {
 
   const activeChannel  = channels.find((c) => c.id === activeChannelId) || channels[0];
   const totalUnread    = Object.values(unreadMap).reduce((s, n) => s + n, 0);
+  const activeIsDirect = isDirectChannel(activeChannel);
+  const activeDirectName = activeIsDirect ? cleanChannelName(activeChannel?.name || '') : '';
+  const activeDirectMember = activeIsDirect
+    ? findMemberForChannel(activeDirectName, liveMembers)
+    : undefined;
+  const activeDirectAvatar = activeChannel?.avatar || activeDirectMember?.avatar || fallbackAvatar(activeDirectName);
+  const directLastActiveMessage = activeIsDirect
+    ? [...rawMessages]
+      .filter((message) => !isCurrentUserMessage(message))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .pop() || null
+    : null;
 
   // isSelfTyping: true only when the current user is actively typing in the input box
   const [isSelfTyping, setIsSelfTyping] = useState(false);
@@ -1083,13 +1125,27 @@ export default function ChatPage() {
               <button
                 onClick={() => setMobileChannelsOpen(true)}
                 className="md:hidden p-1.5 rounded-lg border border-[#E8E8EC] text-[#24324A] hover:bg-[#F7F7F8] flex-shrink-0 cursor-pointer"
-                title="Buka Channel Discord Chat"
+                title="Buka daftar channel"
               >
-                <Hash className="w-4 h-4 text-[#F26B5E]" />
+                <List className="w-4 h-4 text-[#F26B5E]" />
               </button>
 
+              {activeIsDirect && (
+                <div className="relative flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={activeDirectAvatar}
+                    alt={activeDirectName}
+                    className="w-8 h-8 rounded-full object-cover border border-[#E8E8EC]"
+                  />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4F9D78] border-2 border-white rounded-full" />
+                </div>
+              )}
+
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">{activeChannel?.name}</h3>
+                <h3 className="text-sm font-extrabold text-[#24324A] leading-none truncate">
+                  {activeIsDirect ? activeDirectName : cleanChannelName(activeChannel?.name || '')}
+                </h3>
 
                 {/* Subtitle: switches between member count and "sedang mengetik" */}
                 <div className="h-4 mt-0.5 overflow-hidden">
@@ -1105,14 +1161,16 @@ export default function ChatPage() {
                     </p>
                   ) : (
                     <p className="text-[11px] text-[#737680] animate-fade-in">
-                      {liveMembers.length} anggota • Login sebagai {currentUser.username}
+                      {activeIsDirect
+                        ? `Aktif terakhir ${directLastActiveMessage ? formatTime(directLastActiveMessage.created_at) : 'belum ada aktivitas'}`
+                        : `${liveMembers.length} anggota`}
                     </p>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <SyncUpButton
                 variant="header"
                 roomTitle={`SyncUp - ${activeChannel?.name || 'Chat Room'}`}
