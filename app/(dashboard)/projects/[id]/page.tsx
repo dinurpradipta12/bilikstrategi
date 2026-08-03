@@ -33,6 +33,7 @@ import {
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 type ProjectTab = 'overview' | 'tasks' | 'timeline' | 'team' | 'files' | 'activity' | 'feedback';
 
@@ -109,6 +110,9 @@ export default function ProjectDetailPage() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [isTaskDrawerOpen, setIsTaskDrawerOpen] = useState(false);
+  const [openTaskInEditMode, setOpenTaskInEditMode] = useState(false);
+  const [deleteTargetTask, setDeleteTargetTask] = useState<any>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [timelineViewMode, setTimelineViewMode] = useState<'week' | 'month'>('week');
 
   // Client Edit Options State
@@ -502,6 +506,31 @@ export default function ProjectDetailPage() {
     status: meta.status || realProject?.status || 'in_progress',
   };
 
+  const handleDeleteProjectTask = async () => {
+    if (!deleteTargetTask) return;
+
+    const target = deleteTargetTask;
+    const taskId = String(target.clickup_task_id || target.id);
+    setIsDeletingTask(true);
+    setRealTasks((prev) => prev.filter((task) => {
+      const sameAppTask = task.id === target.id;
+      const sameClickUpTask = Boolean(target.clickup_task_id) && task.clickup_task_id === target.clickup_task_id;
+      return !sameAppTask && !sameClickUpTask;
+    }));
+
+    try {
+      await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      if (target.clickup_task_id && !String(target.clickup_task_id).startsWith('app-')) {
+        await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(target.clickup_task_id)}`, { method: 'DELETE' }).catch(() => {});
+      }
+      setDeleteTargetTask(null);
+      setIsTaskDrawerOpen(false);
+      setSelectedTask(null);
+    } finally {
+      setIsDeletingTask(false);
+    }
+  };
+
   // Toggle milestone status inline
   const toggleMilestoneStatus = (milestoneId: string) => {
     const updatedMilestones = meta.milestones.map((m) => {
@@ -763,17 +792,19 @@ export default function ProjectDetailPage() {
             <div className="divide-y divide-[#E8E8EC]">
               {realTasks.map((t: any) => (
                 <div
-                  key={t.id}
+                  key={`${t.id}-${t.clickup_task_id || 'app'}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => {
                     setSelectedTask(t);
+                    setOpenTaskInEditMode(false);
                     setIsTaskDrawerOpen(true);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       setSelectedTask(t);
+                      setOpenTaskInEditMode(false);
                       setIsTaskDrawerOpen(true);
                     }
                   }}
@@ -789,7 +820,22 @@ export default function ProjectDetailPage() {
                     </h4>
                     <p className="text-[11px] text-[#737680] max-w-xl truncate">{t.description || t.text_content || 'Tanpa deskripsi'}</p>
                   </div>
-                  <div className="flex items-center gap-3 text-xs">
+                  <div className="flex items-center gap-3 text-xs shrink-0">
+                    <div className="flex items-center gap-1.5 min-w-[120px]" title="PIC Task">
+                      {t.assignee_names?.[0] ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={t.assignee_avatars?.[0] || `https://ui-avatars.com/api/?name=${encodeURIComponent(t.assignee_names[0])}&background=24324A&color=fff`}
+                            alt={t.assignee_names[0]}
+                            className="w-5 h-5 rounded-full object-cover border border-[#E8E8EC]"
+                          />
+                          <span className="text-[11px] text-[#202124] truncate max-w-[90px]">{t.assignee_names[0]}</span>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-[#737680] italic">Belum ada PIC</span>
+                      )}
+                    </div>
                     <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase ${
                       (t.status?.type === 'closed' || t.status === 'completed' || t.status === 'closed') ? 'bg-[#EEF2F7] text-[#4F9D78]' : 'bg-[#EEF2F7] text-[#24324A]'
                     }`}>
@@ -807,6 +853,30 @@ export default function ProjectDetailPage() {
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
+                    <div className="flex items-center gap-1 border-l border-[#E8E8EC] pl-2" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTask(t);
+                          setOpenTaskInEditMode(true);
+                          setIsTaskDrawerOpen(true);
+                        }}
+                        className="p-1.5 text-[#737680] hover:text-[#24324A] hover:bg-[#EEF2F7] rounded-lg transition-colors cursor-pointer"
+                        title="Edit Task"
+                        aria-label={`Edit ${t.name || t.task_name}`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTargetTask(t)}
+                        className="p-1.5 text-[#737680] hover:text-[#D95858] hover:bg-[#FFF0ED] rounded-lg transition-colors cursor-pointer"
+                        title="Hapus Task"
+                        aria-label={`Hapus ${t.name || t.task_name}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1432,7 +1502,10 @@ export default function ProjectDetailPage() {
         onClose={() => setIsTaskModalOpen(false)}
         defaultListId={projectId}
         onTaskCreated={(newTask) => {
-          setRealTasks((prev) => [newTask, ...prev.filter((task) => task.id !== newTask.id)]);
+          setRealTasks((prev) => [
+            newTask,
+            ...prev.filter((task) => task.id !== newTask.id && task.clickup_task_id !== newTask.clickup_task_id),
+          ]);
         }}
       />
 
@@ -2123,11 +2196,32 @@ export default function ProjectDetailPage() {
       <TaskDetailDrawer
         task={selectedTask}
         isOpen={isTaskDrawerOpen}
-        onClose={() => setIsTaskDrawerOpen(false)}
+        onClose={() => {
+          setIsTaskDrawerOpen(false);
+          setOpenTaskInEditMode(false);
+        }}
+        startInEditMode={openTaskInEditMode}
+        onDeleteTask={(taskId) => {
+          const target = realTasks.find((task) => task.id === taskId || task.clickup_task_id === taskId) || selectedTask;
+          if (target) setDeleteTargetTask(target);
+        }}
         onTaskUpdated={(updatedTask) => {
           setSelectedTask(updatedTask);
+          setOpenTaskInEditMode(false);
           setRealTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
         }}
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(deleteTargetTask)}
+        title="Hapus Task"
+        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.name || deleteTargetTask.task_name}" dari aplikasi dan ClickUp?` : ''}
+        confirmText="Hapus Task"
+        cancelText="Batal"
+        confirmVariant="danger"
+        loading={isDeletingTask}
+        onConfirm={handleDeleteProjectTask}
+        onCancel={() => setDeleteTargetTask(null)}
       />
     </div>
   );

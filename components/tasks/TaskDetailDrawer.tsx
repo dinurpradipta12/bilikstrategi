@@ -33,6 +33,7 @@ interface TaskDetailDrawerProps {
   onPriorityChange?: (taskId: string, newPriority: AgencyTask['priority']) => void;
   onDeleteTask?: (taskId: string) => void;
   onTaskUpdated?: (updatedTask: AgencyTask) => void;
+  startInEditMode?: boolean;
 }
 
 interface ClickUpMember {
@@ -51,6 +52,7 @@ export default function TaskDetailDrawer({
   onPriorityChange,
   onDeleteTask,
   onTaskUpdated,
+  startInEditMode = false,
 }: TaskDetailDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -108,10 +110,10 @@ export default function TaskDetailDrawer({
       setTaskAssigneeId(task.assignee_ids?.[0] || '276885530');
       setSubtasks(Array.isArray(persistedSubtasks) ? persistedSubtasks : []);
       setComments(Array.isArray(persistedComments) ? persistedComments : []);
-      setIsEditing(false);
+      setIsEditing(startInEditMode);
       setSaveSuccessMsg(null);
     }
-  }, [task]);
+  }, [task, startInEditMode]);
 
   // Fetch real team members, ClickUp comments & subtasks when drawer opens
   useEffect(() => {
@@ -138,10 +140,11 @@ export default function TaskDetailDrawer({
       }
 
       async function fetchComments() {
-        if (!task?.id || String(task.id).startsWith('app-')) return;
+        const clickupTaskId = task?.clickup_task_id || task?.id;
+        if (!clickupTaskId || String(clickupTaskId).startsWith('app-')) return;
         setLoadingComments(true);
         try {
-          const res = await fetch(`/api/clickup/comments?taskId=${task.id}`);
+          const res = await fetch(`/api/clickup/comments?taskId=${clickupTaskId}`);
           if (res.ok) {
             const data = await res.json();
             const rawComments = data.comments || data;
@@ -164,10 +167,11 @@ export default function TaskDetailDrawer({
       }
 
       async function fetchSubtasks() {
-        if (!task?.id || String(task.id).startsWith('app-')) return;
+        const clickupTaskId = task?.clickup_task_id || task?.id;
+        if (!clickupTaskId || String(clickupTaskId).startsWith('app-')) return;
         setLoadingSubtasks(true);
         try {
-          const res = await fetch(`/api/clickup/subtasks?taskId=${task.id}`);
+          const res = await fetch(`/api/clickup/subtasks?taskId=${clickupTaskId}`);
           if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data.subtasks) && data.subtasks.length > 0) {

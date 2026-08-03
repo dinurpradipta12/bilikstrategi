@@ -188,6 +188,7 @@ export default function CreateTaskModal({
   if (!isOpen || !mounted) return null;
 
   const onSubmit = async (data: any) => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     try {
       const selectedProject = projects.find((p) => p.id === data.project_id);
@@ -240,22 +241,28 @@ export default function CreateTaskModal({
         onTaskCreated(savedTask);
       }
 
-      fetch('/api/clickup/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listId: selectedProject?.clickup_list_id || data.project_id,
-          name: data.task_name,
-          description: data.description,
-          priority: data.priority,
-          assignees: data.assignee_id ? [data.assignee_id] : undefined,
-          due_date: data.due_date,
-        }),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((resData) => {
+      // ClickUp is deliberately background-only. The app task above remains
+      // the single visible record while its ClickUp id is attached in place.
+      void (async () => {
+        try {
+          const clickupRes = await fetch('/api/clickup/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              listId: selectedProject?.clickup_list_id || data.project_id,
+              name: data.task_name,
+              description: data.description,
+              priority: data.priority,
+              assignees: data.assignee_id ? [data.assignee_id] : undefined,
+              due_date: data.due_date,
+            }),
+          });
+          if (!clickupRes.ok) return;
+
+          const resData = await clickupRes.json();
           if (!resData?.task?.id) return;
-          return fetch('/api/supabase/tasks', {
+
+          const appUpdateRes = await fetch('/api/supabase/tasks', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -267,8 +274,15 @@ export default function CreateTaskModal({
               project_name: selectedProject?.name || savedTask.project_name,
             }),
           });
-        })
-        .catch(() => {});
+
+          if (appUpdateRes.ok && onTaskCreated) {
+            const appUpdateData = await appUpdateRes.json();
+            if (appUpdateData?.task) onTaskCreated(appUpdateData.task);
+          }
+        } catch {
+          // The app record remains usable when ClickUp is unavailable.
+        }
+      })();
 
       setSuccessToast(true);
       setTimeout(() => {

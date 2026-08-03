@@ -97,6 +97,11 @@ function taskToRow(input: any, existing?: any) {
   };
 }
 
+function isLinkedClickUpRow(row: any) {
+  const clickupTaskId = String(row?.clickup_task_id || '');
+  return Boolean(clickupTaskId) && !clickupTaskId.startsWith('app-');
+}
+
 async function findExisting(taskId: string) {
   const byClickup = await supabase
     .from('task_cache')
@@ -105,6 +110,22 @@ async function findExisting(taskId: string) {
     .maybeSingle();
 
   if (!byClickup.error && byClickup.data) return byClickup.data;
+
+  // App-first tasks keep their temporary app id inside raw_data after the
+  // ClickUp id is attached. Resolve that identity before falling back to UUID.
+  const byAppIdentity = await supabase
+    .from('task_cache')
+    .select('*')
+    .eq('raw_data->>id', taskId)
+    .order('last_synced_at', { ascending: false });
+
+  if (!byAppIdentity.error && Array.isArray(byAppIdentity.data) && byAppIdentity.data[0]) {
+    return [...byAppIdentity.data].sort((a, b) => {
+      if (isLinkedClickUpRow(a) !== isLinkedClickUpRow(b)) return isLinkedClickUpRow(a) ? -1 : 1;
+      return new Date(b?.last_synced_at || 0).getTime() - new Date(a?.last_synced_at || 0).getTime();
+    })[0];
+  }
+
   if (!isUuid(taskId)) return null;
 
   const byId = await supabase
@@ -114,6 +135,28 @@ async function findExisting(taskId: string) {
     .maybeSingle();
 
   return byId.error ? null : byId.data;
+}
+
+function dedupeTaskRows(rows: any[]) {
+  const latestByIdentity = new Map<string, any>();
+
+  rows.forEach((row) => {
+    const raw = row?.raw_data || {};
+    const identity = String(raw.id || row?.clickup_task_id || row?.id || '');
+    if (!identity) return;
+
+    const previous = latestByIdentity.get(identity);
+    const currentTime = new Date(row?.last_synced_at || row?.clickup_updated_at || 0).getTime();
+    const previousTime = new Date(previous?.last_synced_at || previous?.clickup_updated_at || 0).getTime();
+    const shouldReplace = !previous
+      || (isLinkedClickUpRow(row) && !isLinkedClickUpRow(previous))
+      || (isLinkedClickUpRow(row) === isLinkedClickUpRow(previous) && currentTime >= previousTime);
+    if (shouldReplace) {
+      latestByIdentity.set(identity, row);
+    }
+  });
+
+  return Array.from(latestByIdentity.values());
 }
 
 export async function GET(req: NextRequest) {
@@ -128,7 +171,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    const rows = Array.isArray(data) ? data : [];
+    const rows = dedupeTaskRows(Array.isArray(data) ? data : []);
 
     fallbackTasks.length = 0;
     fallbackTasks.push(...rows);
@@ -143,7 +186,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ tasks }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
-    let tasks = fallbackTasks.map(rowToTask);
+    let tasks = dedupeTaskRows(fallbackTasks).map(rowToTask);
     if (projectId) tasks = tasks.filter((task) => task.project_id === projectId || task.clickup_task_id === projectId);
     if (assigneeId) tasks = tasks.filter((task) => task.assignee_ids.includes(String(assigneeId)));
     return NextResponse.json({ tasks, warning: error?.message || 'Supabase task cache unavailable' }, { headers: { 'Cache-Control': 'no-store' } });
@@ -180,6 +223,21 @@ export async function PUT(req: NextRequest) {
 
     const existing = await findExisting(taskId);
     const row = taskToRow({ ...body, id: body.id || existing?.raw_data?.id || taskId }, existing);
+
+    // When a temporary app task receives its real ClickUp id, update the
+    // existing database row by primary key instead of inserting a second row.
+    if (existing?.id && existing.clickup_task_id !== row.clickup_task_id) {
+      const rekeyed = await supabase
+        .from('task_cache')
+        .update(row)
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+
+      if (!rekeyed.error && rekeyed.data) {
+        return NextResponse.json({ success: true, task: rowToTask(rekeyed.data) }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+    }
 
     const { data, error } = await supabase
       .from('task_cache')

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   RefreshCw,
+  Edit3,
 } from 'lucide-react';
 import { AgencyTask } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
@@ -31,6 +32,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<AgencyTask | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [openTaskInEditMode, setOpenTaskInEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,6 +56,11 @@ export default function TasksPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const resolveClickUpTaskId = (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId || item.clickup_task_id === taskId);
+    return task?.clickup_task_id || taskId;
+  };
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -110,7 +117,7 @@ export default function TasksPage() {
       fetch('/api/clickup/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, status: newStatus }),
+        body: JSON.stringify({ taskId: resolveClickUpTaskId(taskId), status: newStatus }),
       }).catch(() => {});
     } catch {
       setToastMessage('Gagal menyimpan status task');
@@ -138,7 +145,7 @@ export default function TasksPage() {
       fetch('/api/clickup/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId, priority: newPriority }),
+        body: JSON.stringify({ taskId: resolveClickUpTaskId(taskId), priority: newPriority }),
       }).catch(() => {});
     } catch {
       setToastMessage('Gagal menyimpan prioritas task');
@@ -148,17 +155,18 @@ export default function TasksPage() {
 
   // Delete Task permanently from UI & persist in localStorage
   const handleDeleteTask = async (taskId: string) => {
+    const clickupTaskId = resolveClickUpTaskId(taskId);
     // 1. Optimistic removal
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setTasks((prev) => prev.filter((t) => t.id !== taskId && t.clickup_task_id !== clickupTaskId));
     setToastMessage('Task berhasil dihapus.');
 
     try {
       await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(taskId)}`, {
         method: 'DELETE',
       });
-      await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(taskId)}`, {
-        method: 'DELETE',
-      }).catch(() => {});
+      if (!clickupTaskId.startsWith('app-')) {
+        await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(clickupTaskId)}`, { method: 'DELETE' }).catch(() => {});
+      }
     } catch {
       // ignore network error
     }
@@ -204,12 +212,44 @@ export default function TasksPage() {
       });
 
       if (res.ok) {
+        const appData = await res.json().catch(() => ({}));
+        const savedTask = appData?.task;
         setNewTaskName('');
         setNewTaskDesc('');
         setIsModalOpen(false);
         setToastMessage('Task baru berhasil dibuat di aplikasi.');
         setTimeout(() => setToastMessage(null), 3000);
         await fetchTasks();
+
+        void (async () => {
+          try {
+            const clickupRes = await fetch('/api/clickup/tasks', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: newTaskName,
+                description: newTaskDesc,
+                priority: newTaskPriority,
+              }),
+            });
+            const clickupData = clickupRes.ok ? await clickupRes.json() : null;
+            if (!savedTask || !clickupData?.task?.id) return;
+
+            await fetch('/api/supabase/tasks', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...savedTask,
+                ...clickupData.task,
+                id: savedTask.id,
+                clickup_task_id: clickupData.task.clickup_task_id || clickupData.task.id,
+              }),
+            });
+            await fetchTasks();
+          } catch {
+            // Keep the app task when ClickUp is unavailable.
+          }
+        })();
       } else {
         alert('Gagal membuat task di aplikasi');
       }
@@ -396,7 +436,7 @@ export default function TasksPage() {
                 {filteredTasks.map((t) => (
                   <tr
                     key={t.id}
-                    onClick={() => { setSelectedTask(t); setDrawerOpen(true); }}
+                    onClick={() => { setSelectedTask(t); setOpenTaskInEditMode(false); setDrawerOpen(true); }}
                     className="hover:bg-[#F7F7F8] cursor-pointer transition-colors group"
                   >
                     <td className="py-3.5 px-4 font-semibold text-[#24324A]">
@@ -457,6 +497,14 @@ export default function TasksPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => { setSelectedTask(t); setOpenTaskInEditMode(true); setDrawerOpen(true); }}
+                        className="p-1.5 mr-1 text-[#737680] hover:text-[#24324A] hover:bg-[#EEF2F7] rounded-lg transition-colors cursor-pointer"
+                        title="Edit Task"
+                        aria-label={`Edit ${t.task_name}`}
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => setDeleteTargetTask(t)}
                         className="p-1.5 text-[#737680] hover:text-[#D95858] hover:bg-[#FFF0ED] rounded-lg transition-colors cursor-pointer"
@@ -524,7 +572,8 @@ export default function TasksPage() {
       <TaskDetailDrawer
         task={selectedTask}
         isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => { setDrawerOpen(false); setOpenTaskInEditMode(false); }}
+        startInEditMode={openTaskInEditMode}
         onStatusChange={handleStatusChange}
         onPriorityChange={handlePriorityChange}
         onDeleteTask={handleDeleteTask}
