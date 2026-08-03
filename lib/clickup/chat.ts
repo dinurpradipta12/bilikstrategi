@@ -146,8 +146,9 @@ export async function getChatChannels(workspaceId: string, token?: string): Prom
       const members = await getWorkspaceMembers(workspaceId, token);
       for (const m of members) {
         if (m.username && !m.username.includes('Dinur')) {
+          const cleanName = m.username.toLowerCase().split(' ')[0];
           chatChannels.push({
-            id: `dm_${m.id}`,
+            id: `dm_${cleanName}`,
             name: `👤 DM: ${m.username}`,
             type: 'direct',
             unread_count: 0,

@@ -108,6 +108,12 @@ export default function ChatPage() {
     { id: '6-901819386455-8', name: '💬 Brainstorming',    type: 'project', unread_count: 0 },
     { id: '6-901819384971-8', name: '💬 Approval Script',  type: 'project', unread_count: 0 },
     { id: '6-901819385000-8', name: '💬 Approval Content', type: 'project', unread_count: 0 },
+    { id: 'dm_allisha',       name: '👤 DM: Allisha',      type: 'direct',  unread_count: 0 },
+    { id: 'dm_doni',          name: '👤 DM: Doni Setiawan', type: 'direct', unread_count: 0 },
+    { id: 'dm_amalia',        name: '👤 DM: Amalia Fitriani', type: 'direct', unread_count: 0 },
+    { id: 'dm_bayu',          name: '👤 DM: Mohammad Nuris Bayu Samodro', type: 'direct', unread_count: 0 },
+    { id: 'dm_mei',           name: '👤 DM: Mei Indraningrum', type: 'direct', unread_count: 0 },
+    { id: 'dm_syaiful',       name: '👤 DM: Syaiful Akhsin', type: 'direct', unread_count: 0 },
   ]);
 
   const [activeChannelId, setActiveChannelId]       = useState('7-90182855619-8');
