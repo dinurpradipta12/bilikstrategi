@@ -124,6 +124,14 @@ export default function ChatPage() {
   const [liveMembers, setLiveMembers]               = useState<Array<{ id: number; username: string; email: string; avatar: string }>>([]);
   const [loadingMessages, setLoadingMessages]       = useState(false);
   const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>({});
+  
+  // Authenticated user (default Dinur Pradipta)
+  const [currentUser, setCurrentUser] = useState({
+    id: 276885530,
+    username: 'Dinur Pradipta',
+    email: 'snllabsarchive@gmail.com',
+    avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+  });
 
   // local status map: messageId → status (for own messages)
   const [statusMap, setStatusMap]     = useState<Record<string, MessageStatus>>({});
@@ -137,14 +145,6 @@ export default function ChatPage() {
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Authenticated user (dynamic initial state)
-  const [currentUser, setCurrentUser] = useState({
-    id: 0,
-    username: 'Pengguna',
-    email: '',
-    avatar: 'https://ui-avatars.com/api/?name=User&background=24324A&color=fff',
-  });
 
   // Toast
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -828,8 +828,10 @@ export default function ChatPage() {
               rootMessages.map((rawMsg) => {
                 const msg = getMessageWithReplies(rawMsg);
                 const isMe =
+                  String(msg.user_id) === '276885530' ||
+                  msg.user_name.toLowerCase().includes('dinur') ||
                   (currentUser.id > 0 && String(msg.user_id) === String(currentUser.id)) ||
-                  (currentUser.username !== 'Pengguna' &&
+                  (currentUser.username && currentUser.username !== 'Pengguna' &&
                     msg.user_name.toLowerCase().includes(currentUser.username.toLowerCase()));
                 const replyCount = msg.reply_count || 0;
                 const isSelected = activeThreadMessage?.id === msg.id;
@@ -847,7 +849,7 @@ export default function ChatPage() {
                       <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                         {/* Name + time */}
                         <div className={`flex items-center gap-1.5 mb-1 text-[11px] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                          <span className="font-bold text-[#24324A]">{isMe ? 'Saya' : msg.user_name}</span>
+                          <span className="font-bold text-[#24324A]">{msg.user_name}{isMe ? ' (Saya)' : ''}</span>
                           <span className="text-[#737680]">{formatTime(msg.created_at)}</span>
                         </div>
 
