@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MessageSquare, Send, Hash, RefreshCw,
   MessageCircle, X, Reply, ChevronRight,
-  User, Sparkles, Bell, AtSign, Check, CheckCheck,
+  User, Sparkles, Bell, AtSign, Check, CheckCheck, PhoneCall,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
