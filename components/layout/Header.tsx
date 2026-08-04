@@ -43,11 +43,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
     role: 'owner',
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
-  const [chatUnread, setChatUnread] = useState(() => getChatUnreadTotal(readChatUnreadMap()));
-  const [activityUnread, setActivityUnread] = useState(() =>
-    typeof window !== 'undefined' ? Number(localStorage.getItem('bilik_notif_unread_count') || '0') : 0
-  );
-  const [chatNotifications, setChatNotifications] = useState<ChatNotification[]>(() => readChatNotifications());
+  // Keep the server render identical to the first browser render. Browser-only
+  // unread state is loaded in the effect below after hydration.
+  const [chatUnread, setChatUnread] = useState(0);
+  const [activityUnread, setActivityUnread] = useState(0);
+  const [chatNotifications, setChatNotifications] = useState<ChatNotification[]>([]);
 
   const totalNotificationUnread = chatUnread + activityUnread;
 
@@ -60,6 +60,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   };
 
   useEffect(() => {
+    setChatUnread(getChatUnreadTotal(readChatUnreadMap()));
+    const storedActivityUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
+    setActivityUnread(Number.isFinite(storedActivityUnread) ? storedActivityUnread : 0);
+    setChatNotifications(readChatNotifications());
+
     const handleUnreadUpdate = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (detail?.type === 'chat' && typeof detail.count === 'number') {
@@ -133,9 +138,9 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
       if (savedUserStr) {
         try {
           const u = JSON.parse(savedUserStr);
-          if (u.email) currentEmail = u.email;
-          if (u.username) currentName = u.username;
-          if (u.avatar) currentAvatar = u.avatar;
+          if (u.email) currentEmail = String(u.email);
+          if (u.username) currentName = String(u.username);
+          if (u.avatar) currentAvatar = String(u.avatar);
         } catch {}
       }
 
@@ -143,11 +148,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
         const res = await fetch('/api/clickup/user');
         const data = await res.json();
         if (data.user) {
-          currentName = data.user.username || currentName;
-          currentEmail = data.user.email || currentEmail;
+          currentName = String(data.user.username || currentName);
+          currentEmail = String(data.user.email || currentEmail);
           serverAppRole = String(data.user.app_role || '').toLowerCase();
           serverIsSuperuser = data.user.is_superuser === true;
-          if (data.user.profilePicture) currentAvatar = data.user.profilePicture;
+          if (data.user.profilePicture) currentAvatar = String(data.user.profilePicture);
         }
       } catch (err) {
         console.warn('[Header] ClickUp profile fetch failed, using default workspace profile.', err);
@@ -164,8 +169,8 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
             if (Array.isArray(parsed)) {
               const found = parsed.find(
                 (m: any) =>
-                  (m.email && m.email.toLowerCase().trim() === currentEmail.toLowerCase().trim()) ||
-                  (m.name && m.name.toLowerCase().trim() === currentName.toLowerCase().trim())
+                  (m.email && String(m.email).toLowerCase().trim() === currentEmail.toLowerCase().trim()) ||
+                  (m.name && String(m.name).toLowerCase().trim() === currentName.toLowerCase().trim())
               );
               if (found && found.role) {
                 finalRole = found.role;

@@ -97,10 +97,19 @@ export function readChatNotifications(): ChatNotification[] {
     return Array.isArray(parsed)
       ? parsed
         .filter((item) => item && typeof item === 'object')
-        .map((item) => ({
-          ...item,
-          channelId: normalizeChatChannelId(String(item.channelId || '')),
-        })) as ChatNotification[]
+        .map((item) => {
+          const channelId = normalizeChatChannelId(String(item.channelId ?? item.channel_id ?? ''));
+          return {
+            id: String(item.id ?? ''),
+            senderName: String(item.senderName ?? item.sender_name ?? 'Pengguna'),
+            senderAvatar: String(item.senderAvatar ?? item.sender_avatar ?? ''),
+            channelName: String(item.channelName ?? item.channel_name ?? 'Agency Chat'),
+            channelId,
+            text: String(item.text ?? ''),
+            createdAt: String(item.createdAt ?? item.created_at ?? new Date().toISOString()),
+          } satisfies ChatNotification;
+        })
+        .filter((item) => Boolean(item.id && item.channelId))
       : [];
   } catch {
     return [];

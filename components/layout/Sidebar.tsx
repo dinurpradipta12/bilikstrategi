@@ -61,9 +61,9 @@ export default function Sidebar() {
       if (savedUserStr) {
         try {
           const u = JSON.parse(savedUserStr);
-          if (u.username) username = u.username;
-          if (u.email) email = u.email;
-          if (u.avatar) avatar = u.avatar;
+          if (u.username) username = String(u.username);
+          if (u.email) email = String(u.email);
+          if (u.avatar) avatar = String(u.avatar);
         } catch {}
       }
 
@@ -72,11 +72,11 @@ export default function Sidebar() {
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
-            username = userData.user.username || username;
-            email = userData.user.email || email;
+            username = String(userData.user.username || username);
+            email = String(userData.user.email || email);
             serverAppRole = String(userData.user.app_role || '').toLowerCase();
             serverIsSuperuser = userData.user.is_superuser === true;
-            if (userData.user.profilePicture) avatar = userData.user.profilePicture;
+            if (userData.user.profilePicture) avatar = String(userData.user.profilePicture);
           }
         }
       } catch (err) {
@@ -94,8 +94,8 @@ export default function Sidebar() {
             if (Array.isArray(parsed)) {
               const found = parsed.find(
                 (m: any) =>
-                  (m.email && m.email.toLowerCase().trim() === email.toLowerCase().trim()) ||
-                  (m.name && m.name.toLowerCase().trim() === username.toLowerCase().trim())
+                  (m.email && String(m.email).toLowerCase().trim() === email.toLowerCase().trim()) ||
+                  (m.name && String(m.name).toLowerCase().trim() === username.toLowerCase().trim())
               );
               if (found && found.role) {
                 resolvedRole = found.role;

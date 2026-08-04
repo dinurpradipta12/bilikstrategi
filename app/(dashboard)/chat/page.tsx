@@ -45,12 +45,18 @@ interface ToastNotification extends Omit<ChatNotification, 'createdAt'> {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function toSafeString(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
 function cleanChannelName(name: string) {
-  return name
+  return toSafeString(name)
     .replace('📢 ', '')
     .replace('💬 ', '')
     .replace('👤 DM: ', '')
@@ -59,20 +65,20 @@ function cleanChannelName(name: string) {
 }
 
 function isDirectChannel(channel?: { type?: string; name?: string } | null) {
-  return Boolean(channel && (channel.type === 'direct' || channel.name?.includes('DM:')));
+  return Boolean(channel && (channel.type === 'direct' || toSafeString(channel.name).includes('DM:')));
 }
 
-function fallbackAvatar(name: string) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=24324A&color=fff`;
+function fallbackAvatar(name: unknown) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(toSafeString(name, 'User'))}&background=24324A&color=fff`;
 }
 
 function findMemberForChannel(
   channelName: string,
   members: Array<{ username: string; avatar: string }>
 ) {
-  const normalizedName = channelName.toLowerCase();
+  const normalizedName = toSafeString(channelName).toLowerCase();
   return members.find((member) => {
-    const normalizedMember = member.username.toLowerCase();
+    const normalizedMember = toSafeString(member.username).toLowerCase();
     return normalizedMember === normalizedName ||
       normalizedMember.includes(normalizedName) ||
       normalizedName.includes(normalizedMember);
@@ -84,7 +90,7 @@ function chatCacheKey(channelId: string) {
 }
 
 function normalizeStoredChannelId(id: string) {
-  const clean = id.trim().toLowerCase();
+  const clean = toSafeString(id).trim().toLowerCase();
   if (clean === 'dm_allisha' || clean === 'dm_dinur' || clean.includes('allisha') || clean.includes('dinur')) {
     return 'dm_pair_allisha_dinur';
   }
@@ -106,21 +112,20 @@ function getRealtimeChannelAliases(row: any) {
 
 function rowToRealtimeMessage(row: any): ChatMessageItem {
   const raw = row.raw_data || {};
+  const userName = toSafeString(row.user_name || raw.user_name, 'Pengguna');
   return {
-    id: String(row.id || raw.id),
-    channel_id: raw.channel_id || row.channel_id || row.normalized_channel_id,
-    user_id: String(row.user_id || raw.user_id || ''),
-    user_name: row.user_name || raw.user_name || 'Pengguna',
+    id: toSafeString(row.id || raw.id),
+    channel_id: toSafeString(raw.channel_id || row.channel_id || row.normalized_channel_id),
+    user_id: toSafeString(row.user_id || raw.user_id),
+    user_name: userName,
     user_avatar:
-      row.user_avatar ||
-      raw.user_avatar ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(row.user_name || raw.user_name || 'Pengguna')}&background=24324A&color=fff`,
-    text: row.text || raw.text || '',
-    created_at: row.created_at || raw.created_at || new Date().toISOString(),
-    parent_id: row.parent_id || raw.parent_id || null,
+      toSafeString(row.user_avatar || raw.user_avatar) || fallbackAvatar(userName),
+    text: toSafeString(row.text || raw.text),
+    created_at: toSafeString(row.created_at || raw.created_at, new Date().toISOString()),
+    parent_id: toSafeString(row.parent_id || raw.parent_id) || null,
     reply_count: row.reply_count ?? raw.reply_count ?? 0,
-    reply_author: row.reply_author || raw.reply_author || null,
-    reply_text: row.reply_text || raw.reply_text || null,
+    reply_author: toSafeString(row.reply_author || raw.reply_author) || null,
+    reply_text: toSafeString(row.reply_text || raw.reply_text) || null,
   } as ChatMessageItem;
 }
 
@@ -201,7 +206,7 @@ export default function ChatPage() {
   const [activeThreadMessage, setActiveThreadMessage] = useState<ChatMessageItem | null>(null);
   const [liveMembers, setLiveMembers]               = useState<Array<{ id: number; username: string; email: string; avatar: string }>>([]);
   const [loadingMessages, setLoadingMessages]       = useState(false);
-  const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>(() => readChatUnreadMap());
+  const [unreadMap, setUnreadMap]                   = useState<Record<string, number>>({});
   const [mobileChannelsOpen, setMobileChannelsOpen] = useState(false);
   
   // Authenticated user (default Dinur Pradipta)
@@ -227,16 +232,11 @@ export default function ChatPage() {
 
   // Toast
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
-  const unreadMapRef = useRef<Record<string, number>>(readChatUnreadMap());
-  const notifiedMessageIdsRef = useRef<Set<string>>(new Set(readChatNotifications().map((item) => item.id)));
+  const unreadMapRef = useRef<Record<string, number>>({});
+  const notifiedMessageIdsRef = useRef<Set<string>>(new Set());
 
   // ── Sync Mode (Manual vs Realtime) ──────────────────────────────────────────
-  const [syncMode, setSyncMode] = useState<'manual' | 'realtime'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('bs_chat_sync_mode') as 'manual' | 'realtime') || 'manual';
-    }
-    return 'manual';
-  });
+  const [syncMode, setSyncMode] = useState<'manual' | 'realtime'>('manual');
 
   const [lastSyncedTime, setLastSyncedTime] = useState<string>('');
 
@@ -305,7 +305,17 @@ export default function ChatPage() {
   }, [showToast]);
 
   useEffect(() => {
-    publishChatUnreadMap(unreadMapRef.current);
+    const storedUnreadMap = readChatUnreadMap();
+    const storedNotifications = readChatNotifications();
+    unreadMapRef.current = storedUnreadMap;
+    notifiedMessageIdsRef.current = new Set(storedNotifications.map((item) => item.id));
+    setUnreadMap(storedUnreadMap);
+
+    const storedSyncMode = localStorage.getItem('bs_chat_sync_mode');
+    if (storedSyncMode === 'manual' || storedSyncMode === 'realtime') {
+      setSyncMode(storedSyncMode);
+    }
+    publishChatUnreadMap(storedUnreadMap);
   }, []);
 
   // ── Simulate "read" after another member receives message ────────────────
@@ -328,12 +338,12 @@ export default function ChatPage() {
       .then((res) => res.json())
       .then((userData) => {
         if (userData.user) {
+          const username = toSafeString(userData.user.username || userData.user.email, 'Pengguna');
           setCurrentUser({
-            id: userData.user.id,
-            username: userData.user.username,
-            email: userData.user.email,
-            avatar: userData.user.profilePicture ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.user.username)}&background=24324A&color=fff`,
+            id: Number(userData.user.id) || 0,
+            username,
+            email: toSafeString(userData.user.email),
+            avatar: toSafeString(userData.user.profilePicture) || fallbackAvatar(username),
           });
         }
       })
@@ -343,14 +353,16 @@ export default function ChatPage() {
     fetch('/api/clickup/teams')
       .then((res) => res.json())
       .then((teamData) => {
-        if (teamData.members?.length > 0) {
-          setLiveMembers(teamData.members.map((m: any) => ({
-            id: m.id,
-            username: m.username || m.email?.split('@')[0] || 'Team Member',
-            email: m.email || '',
-            avatar: m.profilePicture ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'User')}&background=24324A&color=fff`,
-          })));
+        if (Array.isArray(teamData.members) && teamData.members.length > 0) {
+          setLiveMembers(teamData.members.map((m: any) => {
+            const username = toSafeString(m.username || m.email?.split('@')[0], 'Team Member');
+            return {
+              id: Number(m.id) || 0,
+              username,
+              email: toSafeString(m.email),
+              avatar: toSafeString(m.profilePicture) || fallbackAvatar(username),
+            };
+          }));
         }
       })
       .catch((err) => console.warn('[Chat] Team fetch error:', err));
@@ -359,11 +371,19 @@ export default function ChatPage() {
     fetch('/api/clickup/chat')
       .then((res) => res.json())
       .then((chatData) => {
-        if (chatData.channels?.length > 0) {
+        if (Array.isArray(chatData.channels) && chatData.channels.length > 0) {
+          const incomingChannels = chatData.channels.map((channel: any) => ({
+            id: toSafeString(channel.id),
+            name: toSafeString(channel.name || channel.id, 'Agency Chat'),
+            type: toSafeString(channel.type),
+            unread_count: Number(channel.unread_count) || 0,
+            avatar: toSafeString(channel.avatar || channel.image) || undefined,
+            email: toSafeString(channel.email) || undefined,
+          })).filter((channel: { id: string }) => channel.id);
           setChannels((prev) => {
             const unique: typeof channels = [];
             const seen = new Set<string>();
-            [...prev, ...chatData.channels].forEach((c: any) => {
+            [...prev, ...incomingChannels].forEach((c) => {
               const key = c.id || `${c.type}-${c.name}`;
               if (!seen.has(key)) {
                 seen.add(key);
@@ -382,8 +402,8 @@ export default function ChatPage() {
     const currentUserId = String(currentUser.id || '');
     if (messageUserId && currentUserId && messageUserId === currentUserId) return true;
 
-    const messageName = (msg.user_name || '').toLowerCase().trim();
-    const currentName = (currentUser.username || '').toLowerCase().trim();
+    const messageName = toSafeString(msg.user_name).toLowerCase().trim();
+    const currentName = toSafeString(currentUser.username).toLowerCase().trim();
     if (!messageName || !currentName || currentName === 'pengguna') return false;
     return messageName === currentName;
   }, [currentUser.id, currentUser.username]);
@@ -613,7 +633,7 @@ export default function ChatPage() {
       const normalizedId = normalizeChatChannelId(channelId);
       const matchingChannel = channels.find((channel) =>
         getChatChannelAliases(channel.id).includes(normalizedId) ||
-        getChatChannelAliases(channel.id).includes(channelId.trim().toLowerCase())
+        getChatChannelAliases(channel.id).includes(toSafeString(channelId).trim().toLowerCase())
       );
       const targetId = matchingChannel?.id || channelId;
       setActiveChannelId(targetId);
@@ -652,9 +672,10 @@ export default function ChatPage() {
   // ── Mention autocomplete filtering ─────────────────────────────────────────
   const filteredMentionMembers = React.useMemo(() => {
     if (!mentionQuery) return liveMembers;
+    const normalizedQuery = toSafeString(mentionQuery).toLowerCase();
     return liveMembers.filter((m) =>
-      m.username.toLowerCase().includes(mentionQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(mentionQuery.toLowerCase())
+      toSafeString(m.username).toLowerCase().includes(normalizedQuery) ||
+      toSafeString(m.email).toLowerCase().includes(normalizedQuery)
     );
   }, [liveMembers, mentionQuery]);
 
@@ -886,11 +907,11 @@ export default function ChatPage() {
 
   // ── Sidebar grouping ──────────────────────────────────────────────────────
   const generalChannels = channels.filter((c) => c.type === 'general');
-  const spaceChannels   = channels.filter((c) => c.type === 'project' || (!c.type && !c.name.includes('DM:')));
+  const spaceChannels   = channels.filter((c) => c.type === 'project' || (!c.type && !toSafeString(c.name).includes('DM:')));
   const dmChannels      = channels.filter((c) => {
-    if (c.type !== 'direct' && !c.name.includes('DM:')) return false;
-    const cleanName = c.name.replace('👤 DM: ', '').replace('DM:', '').trim().toLowerCase();
-    const myName = (currentUser.username || '').toLowerCase().trim();
+    if (c.type !== 'direct' && !toSafeString(c.name).includes('DM:')) return false;
+    const cleanName = toSafeString(c.name).replace('👤 DM: ', '').replace('DM:', '').trim().toLowerCase();
+    const myName = toSafeString(currentUser.username).toLowerCase().trim();
     if (!myName || myName === 'pengguna') return true;
     return !cleanName.includes(myName) && !myName.includes(cleanName);
   });
@@ -1052,12 +1073,13 @@ export default function ChatPage() {
                   {dmChannels.map((ch) => {
                     const isActive = ch.id === activeChannelId;
                     const unread   = getChatUnreadForChannel(unreadMap, ch.id);
-                    const dmName   = ch.name.replace('👤 DM: ', '').replace('DM:', '').trim();
+                    const dmName   = toSafeString(ch.name).replace('👤 DM: ', '').replace('DM:', '').trim();
+                    const normalizedDmName = dmName.toLowerCase();
                     const initials = dmName.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
                     const memberAvatar = ch.avatar || liveMembers.find((m) =>
-                      m.username.toLowerCase() === dmName.toLowerCase() ||
-                      m.username.toLowerCase().includes(dmName.toLowerCase()) ||
-                      dmName.toLowerCase().includes(m.username.toLowerCase())
+                      toSafeString(m.username).toLowerCase() === normalizedDmName ||
+                      toSafeString(m.username).toLowerCase().includes(normalizedDmName) ||
+                      normalizedDmName.includes(toSafeString(m.username).toLowerCase())
                     )?.avatar;
                     return (
                       <button key={ch.id}

@@ -37,11 +37,18 @@ type FloatingTab = {
   latest: ChatNotification | null;
 };
 
-function fallbackAvatar(name: string) {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=24324A&color=fff`;
+function toSafeString(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+}
+
+function fallbackAvatar(name: unknown) {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(toSafeString(name, 'User'))}&background=24324A&color=fff`;
 }
 
 function channelLabel(channelId: string) {
+  const safeChannelId = toSafeString(channelId);
   const knownNames: Record<string, string> = {
     allisha: 'Allisha',
     dinur: 'Dinur Pradipta',
@@ -51,10 +58,10 @@ function channelLabel(channelId: string) {
     mei: 'Mei Indraningrum',
     syaiful: 'Syaiful Akhsin',
   };
-  if (channelId === 'dm_pair_allisha_dinur') return 'DM: Allisha & Dinur';
-  const dmSlug = channelId.match(/^dm_(.+)$/i)?.[1]?.toLowerCase();
+  if (safeChannelId === 'dm_pair_allisha_dinur') return 'DM: Allisha & Dinur';
+  const dmSlug = safeChannelId.match(/^dm_(.+)$/i)?.[1]?.toLowerCase();
   if (dmSlug) return `DM: ${knownNames[dmSlug] || dmSlug.replace(/[-_]/g, ' ')}`;
-  return channelId || 'Agency Chat';
+  return safeChannelId || 'Agency Chat';
 }
 
 function readStoredUser() {
@@ -62,10 +69,10 @@ function readStoredUser() {
   try {
     const parsed = JSON.parse(localStorage.getItem('bilik_current_user') || '{}');
     return {
-      id: String(parsed.id || parsed.user_id || ''),
-      name: parsed.username || parsed.name || '',
-      email: parsed.email || '',
-      avatar: parsed.avatar || '',
+      id: toSafeString(parsed.id || parsed.user_id),
+      name: toSafeString(parsed.username || parsed.name),
+      email: toSafeString(parsed.email),
+      avatar: toSafeString(parsed.avatar),
     };
   } catch {
     return { id: '', name: '', email: '', avatar: '' };
@@ -74,10 +81,12 @@ function readStoredUser() {
 
 function isOwnMessage(message: Pick<ChatNotification, 'senderName'> & { userId?: string }, currentUser: { id: string; name: string }) {
   if (message.userId && currentUser.id && message.userId === currentUser.id) return true;
+  const senderName = toSafeString(message.senderName).toLowerCase().trim();
+  const currentName = toSafeString(currentUser.name).toLowerCase().trim();
   return Boolean(
-    message.senderName &&
-    currentUser.name &&
-    message.senderName.toLowerCase().trim() === currentUser.name.toLowerCase().trim()
+    senderName &&
+    currentName &&
+    senderName === currentName
   );
 }
 
@@ -86,17 +95,19 @@ export default function FloatingChat() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<ChatNotification[]>(() => readChatNotifications());
-  const [unreadMap, setUnreadMap] = useState<Record<string, number>>(() => readChatUnreadMap());
+  // Browser storage is loaded after hydration so the server and first client
+  // render produce identical HTML.
+  const [notifications, setNotifications] = useState<ChatNotification[]>([]);
+  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
   const [channels, setChannels] = useState<FloatingChannel[]>([]);
-  const [currentUser, setCurrentUser] = useState<FloatingUser>(readStoredUser);
+  const [currentUser, setCurrentUser] = useState<FloatingUser>({ id: '', name: '', email: '', avatar: '' });
   const [replyText, setReplyText] = useState('');
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState('');
   const [sentReply, setSentReply] = useState<ChatNotification | null>(null);
   const currentUserRef = useRef(currentUser);
   const channelsRef = useRef<FloatingChannel[]>([]);
-  const seenMessageIdsRef = useRef<Set<string>>(new Set(notifications.map((item) => item.id)));
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -107,15 +118,23 @@ export default function FloatingChat() {
   }, [channels]);
 
   useEffect(() => {
+    const storedNotifications = readChatNotifications();
+    setNotifications(storedNotifications);
+    setUnreadMap(readChatUnreadMap());
+    setCurrentUser(readStoredUser());
+    seenMessageIdsRef.current = new Set(storedNotifications.map((item) => item.id));
+  }, []);
+
+  useEffect(() => {
     fetch('/api/clickup/user', { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (!data.user) return;
         setCurrentUser({
-          id: String(data.user.id || ''),
-          name: data.user.username || data.user.email || '',
-          email: data.user.email || '',
-          avatar: data.user.profilePicture || data.user.avatar || '',
+          id: toSafeString(data.user.id),
+          name: toSafeString(data.user.username || data.user.email),
+          email: toSafeString(data.user.email),
+          avatar: toSafeString(data.user.profilePicture || data.user.avatar),
         });
       })
       .catch(() => {
@@ -131,9 +150,9 @@ export default function FloatingChat() {
       .then((data) => {
         const nextChannels = Array.isArray(data.channels)
           ? data.channels.map((channel: any) => ({
-              id: String(channel.id || ''),
-              name: String(channel.name || channel.id || 'Agency Chat'),
-              avatar: channel.avatar || channel.image || undefined,
+              id: toSafeString(channel.id),
+              name: toSafeString(channel.name || channel.id, 'Agency Chat'),
+              avatar: channel.avatar || channel.image ? toSafeString(channel.avatar || channel.image) : undefined,
             })).filter((channel: FloatingChannel) => channel.id)
           : [];
         setChannels(nextChannels);
@@ -184,7 +203,7 @@ export default function FloatingChat() {
           const channelId = normalizeChatChannelId(rawChannelId) || rawChannelId;
           if (!messageId || !channelId || seenMessageIdsRef.current.has(messageId)) return;
 
-          const senderName = row.user_name || raw.user_name || 'Pengguna';
+          const senderName = toSafeString(row.user_name || raw.user_name, 'Pengguna');
           if (isOwnMessage({ senderName, userId: String(row.user_id || raw.user_id || '') }, currentUserRef.current)) {
             seenMessageIdsRef.current.add(messageId);
             return;
@@ -195,11 +214,11 @@ export default function FloatingChat() {
           const notification: ChatNotification = {
             id: messageId,
             senderName,
-            senderAvatar: row.user_avatar || raw.user_avatar || fallbackAvatar(senderName),
+            senderAvatar: toSafeString(row.user_avatar || raw.user_avatar) || fallbackAvatar(senderName),
             channelName: matchedChannel?.name || channelLabel(channelId),
             channelId,
-            text: row.text || raw.text || '',
-            createdAt: row.created_at || raw.created_at || new Date().toISOString(),
+            text: toSafeString(row.text || raw.text),
+            createdAt: toSafeString(row.created_at || raw.created_at, new Date().toISOString()),
           };
           const currentUnread = readChatUnreadMap();
           const nextUnread = incrementChatUnread(currentUnread, channelId);
@@ -272,11 +291,11 @@ export default function FloatingChat() {
     if (matchingChannels.length === 1) return matchingChannels[0].id;
 
     const selfTokens = [
-      currentUser.name.toLowerCase().trim().split(/\s+/)[0],
-      currentUser.email.toLowerCase().trim().split('@')[0].split(/[._-]/)[0],
+      toSafeString(currentUser.name).toLowerCase().trim().split(/\s+/)[0],
+      toSafeString(currentUser.email).toLowerCase().trim().split('@')[0].split(/[._-]/)[0],
     ].filter((token) => token.length > 2);
     return matchingChannels.find((channel) => {
-      const channelIdentity = channel.name.toLowerCase();
+      const channelIdentity = toSafeString(channel.name).toLowerCase();
       return !selfTokens.some((token) => channelIdentity.includes(token));
     })?.id || matchingChannels[0].id;
   };
@@ -316,12 +335,12 @@ export default function FloatingChat() {
 
       const reply: ChatNotification = {
         id: String(data.id || clientMessageId),
-        senderName: data.user_name || sender.name,
-        senderAvatar: data.user_avatar || sender.avatar,
+        senderName: toSafeString(data.user_name || sender.name, 'Pengguna'),
+        senderAvatar: toSafeString(data.user_avatar || sender.avatar),
         channelName: selectedTab.channelName,
         channelId: selectedTab.channelId,
-        text: data.text || text,
-        createdAt: data.created_at || new Date().toISOString(),
+        text: toSafeString(data.text || text),
+        createdAt: toSafeString(data.created_at, new Date().toISOString()),
       };
       setSentReply(reply);
       setReplyText('');

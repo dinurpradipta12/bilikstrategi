@@ -7,10 +7,10 @@ export const config = {
      * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
+     * - public PWA assets (manifest and app icons)
      * - login (auth page)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|login).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|favicon.png|manifest.json|apple-touch-icon.png|icon-192.png|icon-512.png|login).*)',
   ],
 };
 
