@@ -356,6 +356,127 @@ html.dark .calendar-month-header {
   border-color: #2D343E !important;
 }
 
+/* Calendar dividers use Tailwind's logical border properties. Set each
+   direction explicitly so the light-mode white divider cannot leak into dark mode. */
+html.dark .calendar-grid-lines > * {
+  border-left-color: #2D343E !important;
+  border-inline-start-color: #2D343E !important;
+  border-right-color: #2D343E !important;
+  border-inline-end-color: #2D343E !important;
+}
+
+html.dark .calendar-week-rows > .calendar-week-row + .calendar-week-row {
+  border-top-color: #2D343E !important;
+  border-block-start-color: #2D343E !important;
+}
+
+html.dark .calendar-week-header > * {
+  border-left-color: #2D343E !important;
+  border-inline-start-color: #2D343E !important;
+  border-right-color: #2D343E !important;
+  border-inline-end-color: #2D343E !important;
+}
+
+html.dark .calendar-week-header,
+html.dark .calendar-month-header {
+  border-bottom-color: #2D343E !important;
+}
+
+html.dark .timeline-week-calendar,
+html.dark .timeline-month-calendar {
+  border-color: #2D343E !important;
+}
+
+/* Preserve event identity in dark mode: each event keeps a distinct, muted
+   tone instead of inheriting the generic light-surface conversion. */
+html.dark [data-calendar-tone='blue'] {
+  background-color: #2E4059 !important;
+  border-color: #4E6A8D !important;
+  color: #B8D0EE !important;
+}
+
+html.dark [data-calendar-tone='blue'] [class~='bg-[#E8F1FF]'] {
+  background-color: #2E4059 !important;
+}
+
+html.dark [data-calendar-tone='blue'] [class~='border-[#BDD7FF]'] {
+  border-color: #4E6A8D !important;
+}
+
+html.dark [data-calendar-tone='blue'] [class~='text-[#1E56B3]'] {
+  color: #B8D0EE !important;
+}
+
+html.dark [data-calendar-tone='blue'] * {
+  color: #B8D0EE !important;
+}
+
+html.dark [data-calendar-tone='green'] {
+  background-color: #294536 !important;
+  border-color: #47735B !important;
+  color: #B0E0C0 !important;
+}
+
+html.dark [data-calendar-tone='green'] [class~='bg-[#E3F8E9]'] {
+  background-color: #294536 !important;
+}
+
+html.dark [data-calendar-tone='green'] [class~='border-[#B4ECC2]'] {
+  border-color: #47735B !important;
+}
+
+html.dark [data-calendar-tone='green'] [class~='text-[#1D7434]'] {
+  color: #B0E0C0 !important;
+}
+
+html.dark [data-calendar-tone='green'] * {
+  color: #B0E0C0 !important;
+}
+
+html.dark [data-calendar-tone='purple'] {
+  background-color: #3C3152 !important;
+  border-color: #6F5A98 !important;
+  color: #D0BFF5 !important;
+}
+
+html.dark [data-calendar-tone='purple'] [class~='bg-[#F2E8FF]'] {
+  background-color: #3C3152 !important;
+}
+
+html.dark [data-calendar-tone='purple'] [class~='border-[#DAAFFE]'] {
+  border-color: #6F5A98 !important;
+}
+
+html.dark [data-calendar-tone='purple'] [class~='text-[#6929C4]'] {
+  color: #D0BFF5 !important;
+}
+
+html.dark [data-calendar-tone='purple'] * {
+  color: #D0BFF5 !important;
+}
+
+html.dark [data-calendar-tone='coral'] {
+  background-color: #4B3034 !important;
+  border-color: #8A5156 !important;
+  color: #F0B1B2 !important;
+}
+
+html.dark [data-calendar-tone='coral'] [class~='bg-[#FFE8E8]'] {
+  background-color: #4B3034 !important;
+}
+
+html.dark [data-calendar-tone='coral'] [class~='border-[#FFB8B8]'] {
+  border-color: #8A5156 !important;
+}
+
+html.dark [data-calendar-tone='coral'] [class~='text-[#C22929]'] {
+  color: #F0B1B2 !important;
+}
+
+html.dark [data-calendar-tone='coral'] * {
+  color: #F0B1B2 !important;
+}
+
 html.dark .calendar-outside-month [class~='text-[#202124]'],
 html.dark .calendar-outside-month [class~='text-[#A0A3BD]'] {
   color: #687385 !important;

@@ -35,10 +35,10 @@ const WEEK_DAYS: DayColumn[] = [
 ];
 
 const PASTEL_THEMES = [
-  { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
-  { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
-  { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
-  { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+  { tone: 'blue', bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+  { tone: 'green', bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+  { tone: 'purple', bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+  { tone: 'coral', bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
 ];
 
 // Full Month Weeks Structure for August 2026
@@ -352,8 +352,10 @@ export default function TimelinePage() {
               <div className="relative z-10 space-y-3">
                 {filteredTasks.map((task, idx) => {
                   const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
-                  const dueD = task.due_date ? new Date(task.due_date).getDate() : 5;
-                  const startD = task.start_date ? new Date(task.start_date).getDate() : Math.max(2, dueD - 3);
+                  const startDateD = task.start_date ? new Date(task.start_date).getDate() : null;
+                  const dueDateD = task.due_date ? new Date(task.due_date).getDate() : null;
+                  const startD = startDateD ?? dueDateD ?? 5;
+                  const dueD = dueDateD ?? startDateD ?? 5;
 
                   const startCol = Math.max(0, Math.min(6, startD - 2));
                   const endCol = Math.max(startCol, Math.min(6, dueD - 2));
@@ -367,7 +369,8 @@ export default function TimelinePage() {
                           setSelectedTask(task);
                           setDrawerOpen(true);
                         }}
-                        className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
+                        data-calendar-tone={theme.tone}
+                        className={`calendar-event group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-sm flex-shrink-0">{theme.icon}</span>
@@ -445,8 +448,10 @@ export default function TimelinePage() {
                 <div className="relative z-10 pt-9 pb-2 px-1 space-y-1.5">
                   {filteredTasks.map((task, tIdx) => {
                     const theme = PASTEL_THEMES[tIdx % PASTEL_THEMES.length];
-                    const dueD = task.due_date ? new Date(task.due_date).getDate() : 5;
-                    const startD = task.start_date ? new Date(task.start_date).getDate() : Math.max(1, dueD - 3);
+                    const startDateD = task.start_date ? new Date(task.start_date).getDate() : null;
+                    const dueDateD = task.due_date ? new Date(task.due_date).getDate() : null;
+                    const startD = startDateD ?? dueDateD ?? 5;
+                    const dueD = dueDateD ?? startDateD ?? 5;
 
                     // Find which columns in THIS week row fall inside [startD, dueD]
                     const activeColsInWeek: number[] = [];
@@ -470,7 +475,8 @@ export default function TimelinePage() {
                             setSelectedTask(task);
                             setDrawerOpen(true);
                           }}
-                          className={`${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-3 py-1 text-[11px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
+                              data-calendar-tone={theme.tone}
+                              className={`calendar-event ${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-3 py-1 text-[11px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer`}
                           title={`${task.task_name} (${task.project_name})`}
                         >
                           <div className="flex items-center gap-1.5 min-w-0 truncate">

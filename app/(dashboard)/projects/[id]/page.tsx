@@ -975,15 +975,18 @@ export default function ProjectDetailPage() {
                   ) : (
                     meta.milestones.map((m, idx) => {
                       const themes = [
-                        { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
-                        { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
-                        { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
-                        { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                        { tone: 'blue', bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                        { tone: 'green', bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                        { tone: 'purple', bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                        { tone: 'coral', bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
                       ];
                       const theme = themes[idx % themes.length];
 
-                      const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
-                      const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : (m.date ? parseInt(m.date.split('-')[2] || '15', 10) : 15);
+                      const startDateD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : null;
+                      const dueDateD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : null;
+                      const milestoneDateD = m.date ? parseInt(m.date.split('-')[2] || '15', 10) : null;
+                      const startD = startDateD ?? dueDateD ?? milestoneDateD ?? 1;
+                      const endD = dueDateD ?? startDateD ?? milestoneDateD ?? 1;
 
                       const startCol = Math.max(0, Math.min(6, startD - 2));
                       const endCol = Math.max(startCol, Math.min(6, endD - 2));
@@ -994,7 +997,8 @@ export default function ProjectDetailPage() {
                           <div
                             style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
                             onClick={() => toggleMilestoneStatus(m.id)}
-                            className={`group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
+                            data-calendar-tone={theme.tone}
+                            className={`calendar-event group ${theme.bg} ${theme.border} border rounded-xl p-2.5 flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-sm flex-shrink-0">{theme.icon}</span>
@@ -1140,15 +1144,18 @@ export default function ProjectDetailPage() {
                     <div className="relative z-10 pt-8 pb-2 px-1 space-y-1.5">
                       {meta.milestones.map((m, mIdx) => {
                         const themes = [
-                          { bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
-                          { bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
-                          { bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
-                          { bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
+                          { tone: 'blue', bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
+                          { tone: 'green', bg: 'bg-[#E3F8E9]', text: 'text-[#1D7434]', border: 'border-[#B4ECC2]', icon: '📝' },
+                          { tone: 'purple', bg: 'bg-[#F2E8FF]', text: 'text-[#6929C4]', border: 'border-[#DAAFFE]', icon: '🚀' },
+                          { tone: 'coral', bg: 'bg-[#FFE8E8]', text: 'text-[#C22929]', border: 'border-[#FFB8B8]', icon: '📦' },
                         ];
                         const theme = themes[mIdx % themes.length];
 
-                        const startD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : 1;
-                        const endD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : 15;
+                        const startDateD = m.start_date ? parseInt(m.start_date.split('-')[2] || '1', 10) : null;
+                        const dueDateD = m.due_date ? parseInt(m.due_date.split('-')[2] || '31', 10) : null;
+                        const milestoneDateD = m.date ? parseInt(m.date.split('-')[2] || '15', 10) : null;
+                        const startD = startDateD ?? dueDateD ?? milestoneDateD ?? 1;
+                        const endD = dueDateD ?? startDateD ?? milestoneDateD ?? 1;
 
                         const activeColsInWeek: number[] = [];
                         week.days.forEach((day, colIdx) => {
@@ -1168,7 +1175,8 @@ export default function ProjectDetailPage() {
                             <div
                               style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
                               onClick={() => toggleMilestoneStatus(m.id)}
-                              className={`${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-2.5 py-1 text-[10px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
+                              data-calendar-tone={theme.tone}
+                              className={`calendar-event ${theme.bg} ${theme.text} ${theme.border} border rounded-xl px-2.5 py-1 text-[10px] font-extrabold flex items-center justify-between shadow-2xs hover:shadow-md transition-all cursor-pointer`}
                               title={m.name}
                             >
                               <div className="flex items-center gap-1 min-w-0 truncate">
