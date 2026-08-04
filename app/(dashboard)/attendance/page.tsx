@@ -33,6 +33,8 @@ import {
   Loader2,
   MessageSquare,
   Ban,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
@@ -141,6 +143,7 @@ export default function AttendancePage() {
   const [scheduleSaving, setScheduleSaving] = useState<boolean>(false);
   const [scheduleMessage, setScheduleMessage] = useState<string>('');
   const [accessRequests, setAccessRequests] = useState<AttendanceAccessRequest[]>([]);
+  const [isWorkScheduleExpanded, setIsWorkScheduleExpanded] = useState<boolean>(false);
 
   // Helper function to strictly check if user is Admin or Owner
   const checkIsAdminOrOwner = (userEmail?: string, userRole?: string): boolean => {
@@ -1427,54 +1430,69 @@ export default function AttendancePage() {
       )}
 
       {/* Weekly Work Schedule: full-width control above the live attendance cards */}
-      <section className="w-full bg-white border border-[#E8E8EC] rounded-2xl p-5 md:p-6 shadow-2xs space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 border-b border-[#E8E8EC] pb-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#EEF2F7] text-[#24324A] flex items-center justify-center flex-shrink-0">
-              <Settings2 className="w-5 h-5" />
+      <section className="w-full bg-white border border-[#E8E8EC] rounded-2xl p-3 md:p-5 lg:p-6 shadow-2xs space-y-3 md:space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 md:gap-4 border-b border-[#E8E8EC] pb-3 md:pb-4">
+          <div className="flex items-start gap-2.5 md:gap-3">
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-[#EEF2F7] text-[#24324A] flex items-center justify-center flex-shrink-0">
+              <Settings2 className="w-4 h-4 md:w-5 md:h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-extrabold text-[#24324A]">Hari Kerja & Jam Kerja</h2>
+                <h2 className="text-xs md:text-sm font-extrabold text-[#24324A]">Hari Kerja & Jam Kerja</h2>
                 {isAdminOrOwner && (
                   <span className="px-2 py-0.5 rounded-full bg-[#24324A] text-white text-[9px] font-extrabold">Admin dapat mengatur</span>
                 )}
               </div>
-              <p className="text-[11px] text-[#737680] mt-1">
+              <p className="text-[10px] md:text-[11px] text-[#737680] mt-1">
                 Jadwal ini menjadi dasar presensi, status hari libur, dan penguncian akses workspace.
               </p>
             </div>
           </div>
 
-          {isAdminOrOwner && workSchedule && (
+          <div className="flex flex-wrap items-center justify-end gap-2 self-end lg:self-auto">
             <button
               type="button"
-              onClick={handleSaveSchedule}
-              disabled={scheduleSaving || !scheduleStorageReady}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#24324A] text-white text-xs font-extrabold hover:bg-[#1A2536] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
-              title="Simpan jadwal ke Supabase"
+              onClick={() => setIsWorkScheduleExpanded((previous) => !previous)}
+              className="md:hidden inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#EEF2F7] text-[#24324A] text-[10px] font-extrabold border border-[#E8E8EC] cursor-pointer"
+              aria-expanded={isWorkScheduleExpanded}
+              aria-controls="attendance-work-schedule-body"
+              title={isWorkScheduleExpanded ? 'Tutup jadwal kerja' : 'Buka jadwal kerja'}
             >
-              {scheduleSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Simpan Jadwal
+              {isWorkScheduleExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              {isWorkScheduleExpanded ? 'Tutup' : 'Buka'}
             </button>
-          )}
+
+            {isAdminOrOwner && workSchedule && (
+              <button
+                type="button"
+                onClick={handleSaveSchedule}
+                disabled={scheduleSaving || !scheduleStorageReady}
+                className="inline-flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-xl bg-[#24324A] text-white text-[10px] md:text-xs font-extrabold hover:bg-[#1A2536] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+                title="Simpan jadwal ke Supabase"
+              >
+                {scheduleSaving ? <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" /> : <Save className="w-3.5 h-3.5 md:w-4 md:h-4" />}
+                Simpan Jadwal
+              </button>
+            )}
+          </div>
         </div>
 
-        {scheduleLoading && !workSchedule ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-            {Array.from({ length: 7 }).map((_, index) => (
-              <div key={index} className="h-36 rounded-xl bg-[#F7F7F8] border border-[#E8E8EC] animate-pulse" />
-            ))}
-          </div>
-        ) : workSchedule ? (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+        <div id="attendance-work-schedule-body" className={isWorkScheduleExpanded ? 'block' : 'hidden md:block'}>
+          {scheduleLoading && !workSchedule ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2 md:gap-3">
+              {Array.from({ length: 7 }).map((_, index) => (
+                <div key={index} className="h-32 md:h-36 rounded-xl bg-[#F7F7F8] border border-[#E8E8EC] animate-pulse" />
+              ))}
+            </div>
+          ) : workSchedule ? (
+            <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2 md:gap-3">
               {workSchedule.days.map((day) => {
                 const isToday = day.day === currentDayIndex;
                 return (
                   <div
                     key={day.day}
-                    className={`rounded-xl border p-3 space-y-3 transition-colors ${
+                    className={`min-w-0 rounded-xl border p-2.5 md:p-3 space-y-2 md:space-y-3 transition-colors ${
                       isToday
                         ? 'border-[#7B68EE]/50 bg-[#7B68EE]/5'
                         : 'border-[#E8E8EC] bg-[#F7F7F8]'
@@ -1508,7 +1526,7 @@ export default function AttendancePage() {
                     )}
 
                     {day.isWorking ? (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-1.5 md:gap-2">
                         <label className="space-y-1">
                           <span className="block text-[9px] font-bold text-[#737680]">Mulai</span>
                           <input
@@ -1516,7 +1534,7 @@ export default function AttendancePage() {
                             value={day.startTime}
                             onChange={(event) => updateScheduleDay(day.day, { startTime: event.target.value })}
                             disabled={!isAdminOrOwner}
-                            className="w-full min-w-0 px-2 py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-bold text-[#24324A] disabled:opacity-70"
+                            className="w-full min-w-0 h-8 px-1.5 md:px-2 md:py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[10px] md:text-[11px] font-bold text-[#24324A] disabled:opacity-70"
                           />
                         </label>
                         <label className="space-y-1">
@@ -1526,7 +1544,7 @@ export default function AttendancePage() {
                             value={day.endTime}
                             onChange={(event) => updateScheduleDay(day.day, { endTime: event.target.value })}
                             disabled={!isAdminOrOwner}
-                            className="w-full min-w-0 px-2 py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-bold text-[#24324A] disabled:opacity-70"
+                            className="w-full min-w-0 h-8 px-1.5 md:px-2 md:py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[10px] md:text-[11px] font-bold text-[#24324A] disabled:opacity-70"
                           />
                         </label>
                       </div>
@@ -1596,10 +1614,11 @@ export default function AttendancePage() {
                 </div>
               </div>
             )}
-          </>
-        ) : (
-          <p className="text-xs text-[#737680]">Jadwal kerja belum dapat dimuat.</p>
-        )}
+            </>
+          ) : (
+            <p className="text-xs text-[#737680]">Jadwal kerja belum dapat dimuat.</p>
+          )}
+        </div>
       </section>
 
       {/* Main Presensi Dashboard Layout */}
