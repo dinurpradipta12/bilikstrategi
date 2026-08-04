@@ -179,12 +179,6 @@ function renderLinks(value: string, own: boolean, keyPrefix: string) {
     linkIndex += 1;
   }
 
-    if (trailing) nodes.push(...renderWithLineBreaks(trailing, `${keyPrefix}-trailing-${linkIndex}`));
-
-    cursor = start + raw.length;
-    linkIndex += 1;
-  }
-
   nodes.push(...renderWithLineBreaks(value.slice(cursor), `${keyPrefix}-tail`));
   return nodes;
 }
