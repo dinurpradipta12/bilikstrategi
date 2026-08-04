@@ -96,10 +96,47 @@ function addDays(date: Date, days: number) {
   return dateValue(next);
 }
 
-function generateInvoiceNumber() {
-  const date = dateValue(new Date()).replaceAll('-', '');
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `INV-${date}-${suffix}`;
+const INVOICE_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const AGENCY_PREFIXES = new Set(['PT', 'CV', 'UD', 'FA', 'TB', 'LTD', 'INC', 'YAYASAN']);
+
+function generateInvoiceId(length = 6) {
+  const values = new Uint32Array(length);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(values);
+    return Array.from(values, (value) => INVOICE_ID_ALPHABET[value % INVOICE_ID_ALPHABET.length]).join('');
+  }
+  return Array.from({ length }, () => INVOICE_ID_ALPHABET[Math.floor(Math.random() * INVOICE_ID_ALPHABET.length)]).join('');
+}
+
+function abbreviateAgencyName(name: string) {
+  const words = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .filter((word) => !AGENCY_PREFIXES.has(word));
+
+  if (words.length === 0) return 'AG';
+  if (words.length === 1) return words[0].slice(0, 4);
+  return words.map((word) => word[0]).join('').slice(0, 5);
+}
+
+function invoiceDateParts(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) return { year: match[1], day: match[3], month: match[2] };
+
+  const today = new Date();
+  return {
+    year: String(today.getFullYear()),
+    day: String(today.getDate()).padStart(2, '0'),
+    month: String(today.getMonth() + 1).padStart(2, '0'),
+  };
+}
+
+function generateInvoiceNumber(agencyName = 'Bilik Strategi', invoiceDate = dateValue(new Date())) {
+  const { year, day, month } = invoiceDateParts(invoiceDate);
+  return `INV/${generateInvoiceId()}/${abbreviateAgencyName(agencyName)}/${day}${month}/${year}`;
 }
 
 function generateId() {
@@ -120,10 +157,11 @@ function toText(value: unknown, fallback = '') {
 
 function createDefaultInvoice(): InvoiceData {
   const today = new Date();
+  const todayValue = dateValue(today);
   return {
-    invoiceNumber: generateInvoiceNumber(),
+    invoiceNumber: generateInvoiceNumber('Bilik Strategi', todayValue),
     title: 'INVOICE',
-    invoiceDate: dateValue(today),
+    invoiceDate: todayValue,
     dueDate: addDays(today, 14),
     currency: 'IDR',
     fontFamily: FONT_OPTIONS[0].value,
@@ -208,10 +246,15 @@ function normalizeInvoiceData(value: unknown, invoiceNumber?: string): InvoiceDa
 }
 
 function normalizeRecord(value: any, fallbackWorkspaceId: string): InvoiceRecord {
+  const rawData = value?.data && typeof value.data === 'object' && !Array.isArray(value.data) ? value.data : {};
+  const fallbackInvoiceNumber = generateInvoiceNumber(
+    toText(rawData.issuerName, 'Bilik Strategi'),
+    toText(rawData.invoiceDate, dateValue(new Date())),
+  );
   return {
     id: toText(value?.id, `local-${Date.now()}`),
     workspace_id: toText(value?.workspace_id, fallbackWorkspaceId),
-    invoice_number: toText(value?.invoice_number, value?.data?.invoiceNumber || generateInvoiceNumber()),
+    invoice_number: toText(value?.invoice_number, rawData.invoiceNumber || fallbackInvoiceNumber),
     status: ['draft', 'sent', 'paid', 'void'].includes(value?.status) ? value.status : 'draft',
     data: normalizeInvoiceData(value?.data, value?.invoice_number),
     created_by_email: value?.created_by_email || null,
@@ -476,7 +519,7 @@ export default function InvoicesPage() {
   };
 
   const saveInvoice = async () => {
-    const invoiceNumber = draft.invoiceNumber.trim() || generateInvoiceNumber();
+    const invoiceNumber = draft.invoiceNumber.trim() || generateInvoiceNumber(draft.issuerName, draft.invoiceDate);
     const normalizedDraft = normalizeInvoiceData({ ...draft, invoiceNumber }, invoiceNumber);
     setDraft(normalizedDraft);
     setSaving(true);
@@ -710,7 +753,7 @@ export default function InvoicesPage() {
                   <InputLabel htmlFor="invoice-number">Nomor Invoice</InputLabel>
                   <div className="flex gap-2">
                     <input id="invoice-number" className={inputClass} value={draft.invoiceNumber} onChange={(event) => updateField('invoiceNumber', event.target.value)} />
-                    <button type="button" onClick={() => updateField('invoiceNumber', generateInvoiceNumber())} title="Buat nomor invoice baru" className="shrink-0 rounded-lg border border-[#DDE1E7] px-2.5 text-[#24324A] hover:border-[#24324A]"><RefreshCw className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => updateField('invoiceNumber', generateInvoiceNumber(draft.issuerName, draft.invoiceDate))} title="Buat nomor invoice baru" className="shrink-0 rounded-lg border border-[#DDE1E7] px-2.5 text-[#24324A] hover:border-[#24324A]"><RefreshCw className="h-4 w-4" /></button>
                   </div>
                 </div>
                 <div>
