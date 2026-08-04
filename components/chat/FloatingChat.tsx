@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronRight, Hash, LoaderCircle, MessageCircle, Send, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { renderChatMessageText } from '@/lib/chat/message-content';
 import {
   CHAT_NOTIFICATION_EVENT,
   getChatChannelAliases,
@@ -418,15 +419,15 @@ export default function FloatingChat() {
                         </p>
                       </div>
                     </div>
-                    <div className="bg-[#F4F4F5] rounded-2xl rounded-tl-sm px-3 py-2.5 text-xs text-[#202124] whitespace-pre-wrap break-words">
-                      {latestForSelectedTab.text}
+                    <div className="bg-[#F5F7F9] border border-[#E5EAF0] rounded-2xl rounded-tl-sm px-3 py-2.5 text-xs text-[#334155] whitespace-pre-wrap break-words">
+                      {renderChatMessageText(latestForSelectedTab.text)}
                     </div>
                     <p className="text-[10px] text-[#737680]">
                       {selectedTab.unread} pesan belum dibaca di percakapan ini.
                     </p>
                     {sentReply?.channelId === selectedTab.channelId && (
                       <div className="border border-[#4F9D78]/25 bg-[#EEF8F3] rounded-xl px-3 py-2 text-[10px] text-[#356D53]">
-                        Balasan terkirim: <span className="font-semibold">{sentReply.text}</span>
+                        Balasan terkirim: <span className="font-semibold">{renderChatMessageText(sentReply.text, [], { own: true })}</span>
                       </div>
                     )}
                   </div>

@@ -9,6 +9,7 @@ import {
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
 import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
+import { renderChatMessageText } from '@/lib/chat/message-content';
 import { AgencyChatMessage } from '@/lib/mock/data';
 import {
   clearChatChannelNotifications,
@@ -134,7 +135,7 @@ function MessageStatusIcon({ status }: { status: MessageStatus }) {
   if (status === 'sending') {
     return (
       <span title="Mengirim…" className="inline-flex items-center">
-        <svg className="w-3 h-3 text-white/40 animate-spin" viewBox="0 0 24 24" fill="none">
+        <svg className="w-3 h-3 text-[#94A3B8] animate-spin" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
         </svg>
@@ -142,40 +143,13 @@ function MessageStatusIcon({ status }: { status: MessageStatus }) {
     );
   }
   if (status === 'sent') {
-    return <Check className="w-3 h-3 text-white/50" aria-label="Terkirim" />;
+    return <Check className="w-3 h-3 text-[#64748B]" aria-label="Terkirim" />;
   }
   if (status === 'delivered') {
-    return <CheckCheck className="w-3 h-3 text-white/60" aria-label="Tersampaikan" />;
+    return <CheckCheck className="w-3 h-3 text-[#64748B]" aria-label="Tersampaikan" />;
   }
   // read
   return <CheckCheck className="w-3 h-3 text-[#4FC3F7]" aria-label="Dibaca" />;
-}
-
-function renderMentionedText(text: string, members: Array<{ username: string }> = []) {
-  if (!text || !text.includes('@')) return text;
-
-  const memberNames = members.map((m) => m.username).filter(Boolean);
-  const allNames = Array.from(new Set(memberNames)).sort((a, b) => b.length - a.length);
-  if (allNames.length === 0) return text;
-
-  const escaped = allNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-  const regex = new RegExp(`(@(?:${escaped}))`, 'gi');
-
-  const parts = text.split(regex);
-  return parts.map((part, idx) => {
-    if (part.startsWith('@')) {
-      return (
-        <span
-          key={idx}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#7B68EE]/20 text-[#7B68EE] font-extrabold text-[11px] mx-0.5 border border-[#7B68EE]/30"
-        >
-          <AtSign className="w-3 h-3 text-[#7B68EE] inline flex-shrink-0" />
-          {part.slice(1)}
-        </span>
-      );
-    }
-    return part;
-  });
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -1267,8 +1241,8 @@ export default function ChatPage() {
                             className={`px-4 py-2.5 rounded-2xl text-xs whitespace-pre-wrap cursor-pointer
                               transition-all select-text
                               ${isMe
-                                ? 'bg-[#24324A] text-white rounded-br-sm shadow-sm hover:opacity-95'
-                                : 'bg-[#F4F4F5] text-[#202124] rounded-bl-sm hover:bg-[#EBEBED]'}
+                                ? 'bg-[#E8F0FA] text-[#24324A] border border-[#D4E0EF] rounded-br-sm shadow-sm hover:bg-[#E2ECF8]'
+                                : 'bg-[#F5F7F9] text-[#334155] border border-[#E5EAF0] rounded-bl-sm hover:bg-[#EFF2F5]'}
                               ${isSelected ? 'ring-2 ring-[#7B68EE] ring-offset-1' : ''}`}
                           >
                             {msg.text.includes('SyncUp Voice & Video Call') ? (
@@ -1287,7 +1261,7 @@ export default function ChatPage() {
                                 />
                               </div>
                             ) : (
-                              renderMentionedText(msg.text, liveMembers)
+                              renderChatMessageText(msg.text, liveMembers, { own: isMe })
                             )}
                           </div>
 
@@ -1407,7 +1381,7 @@ export default function ChatPage() {
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* root */}
-              <div className="p-3 bg-[#F4F4F5] rounded-2xl space-y-2">
+              <div className="p-3 bg-[#F5F7F9] border border-[#E5EAF0] rounded-2xl space-y-2">
                 <div className="flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={activeThreadMessage.user_avatar} alt={activeThreadMessage.user_name}
@@ -1415,7 +1389,9 @@ export default function ChatPage() {
                   <span className="text-[11px] font-bold text-[#24324A]">{activeThreadMessage.user_name}</span>
                   <span className="text-[10px] text-[#737680] ml-auto">{formatTime(activeThreadMessage.created_at)}</span>
                 </div>
-                <div className="text-xs text-[#202124] whitespace-pre-wrap">{renderMentionedText(activeThreadMessage.text, liveMembers)}</div>
+                <div className={`text-xs whitespace-pre-wrap ${isCurrentUserMessage(activeThreadMessage) ? 'text-[#24324A]' : 'text-[#334155]'}`}>
+                  {renderChatMessageText(activeThreadMessage.text, liveMembers, { own: isCurrentUserMessage(activeThreadMessage) })}
+                </div>
               </div>
 
               <div className="flex items-center justify-between text-[10px] text-[#737680] border-b border-[#E8E8EC] pb-2">
@@ -1452,9 +1428,9 @@ export default function ChatPage() {
                           </span>
                           <span className="text-[9px] text-[#737680]">{formatTime(reply.created_at)}</span>
                         </div>
-                        <div className={`px-3 py-2 rounded-xl text-xs whitespace-pre-wrap
-                          ${isReplyMe ? 'bg-[#7B68EE]/10 text-[#24324A]' : 'bg-[#F4F4F5] text-[#202124]'}`}>
-                          {renderMentionedText(reply.text, liveMembers)}
+                        <div className={`px-3 py-2 rounded-xl text-xs whitespace-pre-wrap border
+                          ${isReplyMe ? 'bg-[#EAF1FB] text-[#24324A] border-[#D7E3F2]' : 'bg-[#F5F7F9] text-[#334155] border-[#E5EAF0]'}`}>
+                          {renderChatMessageText(reply.text, liveMembers, { own: isReplyMe })}
                         </div>
                         {/* status for own thread replies */}
                         {isReplyMe && (
