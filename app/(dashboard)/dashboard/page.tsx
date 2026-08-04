@@ -39,6 +39,7 @@ import {
 import { supabase } from '@/lib/supabase/client';
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { mergeProjectSources } from '@/lib/projects/dedupe';
 
 interface TeamMember {
   id: string;
@@ -363,28 +364,22 @@ export default function DashboardPage() {
         fetch('/api/clickup/projects', { cache: 'no-store' }).catch(() => null),
       ]);
 
-      const projectMap = new Map<string, AgencyProject>();
+      let appProjects: AgencyProject[] = [];
+      let clickupProjects: AgencyProject[] = [];
 
       if (appProjectsRes?.ok) {
         const projectsData = await appProjectsRes.json();
-        const appProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
-        appProjects.forEach((p: AgencyProject) => {
-          projectMap.set(String(p.id), p);
-        });
+        appProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
       }
 
       if (clickupProjectsRes?.ok) {
         const projectsData = await clickupProjectsRes.json();
-        const clickupProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
-        clickupProjects.forEach((p: AgencyProject) => {
-          const id = String(p.id);
-          if (!projectMap.has(id)) {
-            projectMap.set(id, p);
-          }
-        });
+        clickupProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
       }
 
-      const liveProjects = Array.from(projectMap.values());
+      // The app project is canonical; ClickUp only enriches the matching row.
+      // Matching by ClickUp List ID/name prevents one project from counting twice.
+      const liveProjects = mergeProjectSources(appProjects, clickupProjects);
 
       // 2. Fetch live app tasks
       const tasksRes = await fetch('/api/supabase/tasks', { cache: 'no-store' });
