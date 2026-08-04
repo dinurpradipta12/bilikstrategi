@@ -9,6 +9,7 @@ export type PageAccessKey =
   | 'clients'
   | 'assets'
   | 'content_plan'
+  | 'invoices'
   | 'chat'
   | 'notifications'
   | 'activity_logs'
@@ -32,6 +33,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'clients', label: 'Client Listing', href: '/clients' },
   { key: 'assets', label: 'Asset Management', href: '/assets' },
   { key: 'content_plan', label: 'Content Plan & Sheets', href: '/content-plan' },
+  { key: 'invoices', label: 'Invoices', href: '/invoices' },
   { key: 'chat', label: 'Agency Chat', href: '/chat' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
@@ -50,6 +52,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   clients: true,
   assets: true,
   content_plan: true,
+  invoices: true,
   chat: true,
   notifications: true,
   activity_logs: true,

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, Clock, CheckSquare, FolderKanban } from 'lucide-react';
+import { MessageSquare, Clock, CheckSquare, FolderKanban, ReceiptText } from 'lucide-react';
 import {
   getChatUnreadTotal,
   readChatUnreadMap,
@@ -104,6 +104,14 @@ export default function MobileBottomNav() {
       href: '/projects',
       icon: FolderKanban,
       activeColor: '#3B82F6',
+    },
+    {
+      id: 'invoices',
+      accessKey: 'invoices',
+      label: 'Invoice',
+      href: '/invoices',
+      icon: ReceiptText,
+      activeColor: '#F26B5E',
     },
   ];
   const visibleNavItems = navItems.filter(

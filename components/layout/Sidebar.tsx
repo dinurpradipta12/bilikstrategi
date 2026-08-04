@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ShieldCheck,
   FileSpreadsheet,
+  ReceiptText,
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -182,6 +183,7 @@ export default function Sidebar() {
     { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
+    { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
     { key: 'chat', name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
