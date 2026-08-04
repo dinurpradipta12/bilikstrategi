@@ -285,7 +285,14 @@ function compressImage(file: File, maxDimension = 1400, quality = 0.86) {
           return;
         }
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        // Keep PNG transparency for logos and backgrounds. Converting every upload
+        // to JPEG turns transparent PNG pixels into a dark opaque background.
+        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        resolve(
+          outputType === 'image/png'
+            ? canvas.toDataURL(outputType)
+            : canvas.toDataURL(outputType, quality),
+        );
       };
       image.src = String(reader.result || '');
     };
@@ -808,9 +815,15 @@ export default function InvoicesPage() {
           <div className="overflow-x-auto rounded-lg border border-[#D7DEE8] bg-[#DDE4ED] p-3">
             <div ref={previewRef} className="invoice-print-target mx-auto min-h-[1123px] w-[794px] overflow-hidden bg-white shadow-xl" style={previewStyle}>
               <div className="flex min-h-[1123px] flex-col p-[64px]" style={{ color: draft.textColor }}>
-                <div className="flex items-start justify-between gap-8 border-b-2 pb-8" style={{ borderColor: draft.accentColor }}>
-                  <div className="flex min-w-0 items-start gap-4">
-                    {draft.logoUrl ? <img src={draft.logoUrl} alt="Logo" className="h-16 w-24 rounded object-contain object-left" /> : <div className="flex h-16 w-24 items-center justify-start text-xs font-bold uppercase tracking-widest opacity-30">Logo</div>}
+              <div className="flex items-start justify-between gap-8 border-b-2 pb-8" style={{ borderColor: draft.accentColor }}>
+                <div className="flex min-w-0 items-start gap-2">
+                  {draft.logoUrl ? (
+                    <div className="flex h-16 w-20 shrink-0 items-center justify-start">
+                      <img src={draft.logoUrl} alt="Logo" className="max-h-full max-w-full rounded object-contain object-left" />
+                    </div>
+                  ) : (
+                    <div className="flex h-16 w-20 shrink-0 items-center justify-start text-xs font-bold uppercase tracking-widest opacity-30">Logo</div>
+                  )}
                     <div className="min-w-0"><h3 className="text-xl font-extrabold" style={{ color: draft.textColor }}>{draft.issuerName || 'Nama Bisnis'}</h3><p className="mt-2 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.issuerAddress}</p><p className="text-[11px] opacity-70">{draft.issuerEmail}{draft.issuerPhone ? ` | ${draft.issuerPhone}` : ''}</p></div>
                   </div>
                   <div className="shrink-0 text-right"><h1 className="text-3xl font-black tracking-tight" style={{ color: draft.accentColor }}>{draft.title || 'INVOICE'}</h1><p className="mt-2 font-mono text-[11px] font-bold">{draft.invoiceNumber}</p><p className="mt-1 text-[11px] opacity-70">Tanggal: {formatDate(draft.invoiceDate)}</p><p className="text-[11px] opacity-70">Jatuh tempo: {formatDate(draft.dueDate)}</p></div>
