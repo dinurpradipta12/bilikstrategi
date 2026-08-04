@@ -732,7 +732,7 @@ export default function InvoicesPage() {
       </div>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(360px,520px)_minmax(640px,1fr)]">
-        <section className="invoice-editor min-w-0 rounded-xl border border-[#E8E8EC] bg-white shadow-sm">
+        <section className="invoice-editor min-w-0 self-start rounded-xl border border-[#E8E8EC] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#E8E8EC] px-5 py-4">
             <div>
               <h2 className="text-sm font-extrabold text-[#24324A]">Editor Invoice</h2>
@@ -745,7 +745,7 @@ export default function InvoicesPage() {
             )}
           </div>
 
-          <div className="max-h-[calc(100vh-220px)] space-y-6 overflow-y-auto p-5">
+          <div className="max-h-[calc(100vh-220px)] space-y-6 overflow-y-auto p-5 pb-12">
             <div className="space-y-3">
               <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Identitas Invoice</div>
               <div className="grid gap-3 sm:grid-cols-2">
