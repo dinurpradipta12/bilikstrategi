@@ -40,6 +40,7 @@ import { supabase } from '@/lib/supabase/client';
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { mergeProjectSources } from '@/lib/projects/dedupe';
+import { useTheme } from '@/lib/theme';
 
 interface TeamMember {
   id: string;
@@ -64,11 +65,50 @@ function toSafeString(value: unknown, fallback = ''): string {
 }
 
 export default function DashboardPage() {
+  const { isDark } = useTheme();
   const [dashboardTab, setDashboardTab] = useState<'team' | 'personal'>('team');
   const [projects, setProjects] = useState<AgencyProject[]>([]);
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const chartPalette = isDark
+    ? {
+        grid: '#3A4350',
+        axis: '#98A2B3',
+        tooltipBackground: '#20242C',
+        tooltipBorder: '#3A4350',
+        created: '#7186A5',
+        completed: '#62B58D',
+        hours: '#D17067',
+        capacity: '#3B4656',
+        progressStroke: '#8EA4C4',
+        progressFill: '#2E3745',
+        statusToDo: '#6B7585',
+        statusInProgress: '#7186A5',
+        statusInReview: '#C69A52',
+        statusRevision: '#D96D68',
+        statusCompleted: '#62B58D',
+        offline: '#D45F62',
+      }
+    : {
+        grid: '#E8E8EC',
+        axis: '#737680',
+        tooltipBackground: '#FFFFFF',
+        tooltipBorder: '#E8E8EC',
+        created: '#24324A',
+        completed: '#4F9D78',
+        hours: '#F26B5E',
+        capacity: '#EEF2F7',
+        progressStroke: '#24324A',
+        progressFill: '#EEF2F7',
+        statusToDo: '#737680',
+        statusInProgress: '#24324A',
+        statusInReview: '#E6A23C',
+        statusRevision: '#D95858',
+        statusCompleted: '#4F9D78',
+        offline: '#24324A',
+      };
 
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedAssignee, setSelectedAssignee] = useState('all');
@@ -472,11 +512,11 @@ export default function DashboardPage() {
   };
 
   const statusDistributionData = [
-    { name: 'To Do', value: statusCounts.to_do, color: '#737680' },
-    { name: 'In Progress', value: statusCounts.in_progress, color: '#24324A' },
-    { name: 'In Review', value: statusCounts.in_review, color: '#E6A23C' },
-    { name: 'Revision', value: statusCounts.revision, color: '#D95858' },
-    { name: 'Completed', value: statusCounts.completed, color: '#4F9D78' },
+    { name: 'To Do', value: statusCounts.to_do, color: chartPalette.statusToDo },
+    { name: 'In Progress', value: statusCounts.in_progress, color: chartPalette.statusInProgress },
+    { name: 'In Review', value: statusCounts.in_review, color: chartPalette.statusInReview },
+    { name: 'Revision', value: statusCounts.revision, color: chartPalette.statusRevision },
+    { name: 'Completed', value: statusCounts.completed, color: chartPalette.statusCompleted },
   ].filter((item) => item.value > 0 || filteredTasks.length === 0);
 
   // Workload Chart Data
@@ -647,9 +687,9 @@ export default function DashboardPage() {
             <span className="text-2xl font-black text-[#24324A]">{projects.length}</span>
             <span className="text-xs text-[#4F9D78] font-semibold">{activeProjectsCount} aktif</span>
           </div>
-          <div className="w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
+          <div className="dashboard-progress-track w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
             <div
-              className="bg-[#24324A] h-full rounded-full"
+              className="dashboard-project-progress-fill bg-[#24324A] h-full rounded-full"
               style={{ width: `${Math.min(100, (activeProjectsCount / Math.max(1, projects.length)) * 100)}%` }}
             ></div>
           </div>
@@ -665,7 +705,7 @@ export default function DashboardPage() {
             <span className="text-2xl font-black text-[#202124]">{pendingTasks.length}</span>
             <span className="text-xs text-[#737680]">in progress</span>
           </div>
-          <div className="w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
+          <div className="dashboard-progress-track w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
             <div
               className="bg-[#E6A23C] h-full rounded-full"
               style={{ width: `${Math.min(100, (pendingTasks.length / Math.max(1, filteredTasks.length)) * 100)}%` }}
@@ -683,7 +723,7 @@ export default function DashboardPage() {
             <span className="text-2xl font-black text-[#D95858]">{overdueTasks.length}</span>
             <span className="text-xs text-[#D95858] font-semibold">perlu tindakan</span>
           </div>
-          <div className="w-full bg-[#FFF0ED] h-1.5 rounded-full mt-3 overflow-hidden">
+          <div className="dashboard-progress-track w-full bg-[#FFF0ED] h-1.5 rounded-full mt-3 overflow-hidden">
             <div
               className="bg-[#D95858] h-full rounded-full"
               style={{ width: `${Math.min(100, (overdueTasks.length / Math.max(1, filteredTasks.length)) * 100)}%` }}
@@ -703,7 +743,7 @@ export default function DashboardPage() {
               {Math.round((completedTasks.length / Math.max(1, filteredTasks.length)) * 100)}% rasio
             </span>
           </div>
-          <div className="w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
+          <div className="dashboard-progress-track w-full bg-[#EEF2F7] h-1.5 rounded-full mt-3 overflow-hidden">
             <div
               className="bg-[#4F9D78] h-full rounded-full"
               style={{ width: `${Math.min(100, (completedTasks.length / Math.max(1, filteredTasks.length)) * 100)}%` }}
@@ -721,7 +761,7 @@ export default function DashboardPage() {
             <span className="text-2xl font-black text-[#24324A]">{teamMembers.length}</span>
             <span className="text-xs text-[#737680]">ClickUp Members</span>
           </div>
-          <div className="w-full bg-[#FFF0ED] h-1.5 rounded-full mt-3 overflow-hidden">
+          <div className="dashboard-progress-track w-full bg-[#FFF0ED] h-1.5 rounded-full mt-3 overflow-hidden">
             <div className="bg-[#F26B5E] h-full rounded-full" style={{ width: '100%' }}></div>
           </div>
         </div>
@@ -737,20 +777,20 @@ export default function DashboardPage() {
               <p className="text-xs text-[#737680]">Perbandingan laju pembuatan task vs penyelesaian di ClickUp</p>
             </div>
             <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-xs bg-[#24324A]" /> Dibuat</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-xs bg-[#4F9D78]" /> Selesai</span>
+              <span className="flex items-center gap-1.5"><span className="dashboard-chart-created-swatch w-3 h-3 rounded-xs bg-[#24324A]" /> Dibuat</span>
+              <span className="flex items-center gap-1.5"><span className="dashboard-chart-completed-swatch w-3 h-3 rounded-xs bg-[#4F9D78]" /> Selesai</span>
             </div>
           </div>
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={createdVsCompletedData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8E8EC" />
-                <XAxis dataKey="name" stroke="#737680" fontSize={11} />
-                <YAxis stroke="#737680" fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E8E8EC', borderRadius: '8px', fontSize: '12px' }} />
-                <Bar dataKey="Created" fill="#24324A" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Completed" fill="#4F9D78" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
+                <XAxis dataKey="name" stroke={chartPalette.axis} fontSize={11} />
+                <YAxis stroke={chartPalette.axis} fontSize={11} />
+                <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                <Bar dataKey="Created" fill={chartPalette.created} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Completed" fill={chartPalette.completed} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -777,13 +817,15 @@ export default function DashboardPage() {
                     outerRadius={95}
                     paddingAngle={3}
                     dataKey="value"
+                    stroke={chartPalette.tooltipBackground}
+                    strokeWidth={2}
                   >
                     {statusDistributionData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E8E8EC', borderRadius: '8px', fontSize: '12px' }} />
-                  <Legend iconSize={8} layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                  <Legend iconSize={8} layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', color: chartPalette.axis }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -808,12 +850,12 @@ export default function DashboardPage() {
             {workloadData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={workloadData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8E8EC" />
-                  <XAxis type="number" stroke="#737680" fontSize={11} />
-                  <YAxis dataKey="name" type="category" stroke="#737680" fontSize={11} width={80} />
-                  <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E8E8EC', borderRadius: '8px', fontSize: '12px' }} />
-                  <Bar dataKey="HoursTracked" fill="#F26B5E" radius={[0, 4, 4, 0]} name="Jam Terpakai" />
-                  <Bar dataKey="Capacity" fill="#EEF2F7" radius={[0, 4, 4, 0]} name="Kapasitas Max" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
+                  <XAxis type="number" stroke={chartPalette.axis} fontSize={11} />
+                  <YAxis dataKey="name" type="category" stroke={chartPalette.axis} fontSize={11} width={80} />
+                  <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                  <Bar dataKey="HoursTracked" fill={chartPalette.hours} radius={[0, 4, 4, 0]} name="Jam Terpakai" />
+                  <Bar dataKey="Capacity" fill={chartPalette.capacity} radius={[0, 4, 4, 0]} name="Kapasitas Max" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -834,11 +876,11 @@ export default function DashboardPage() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyProgressData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8E8EC" />
-                <XAxis dataKey="month" stroke="#737680" fontSize={11} />
-                <YAxis stroke="#737680" fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E8E8EC', borderRadius: '8px', fontSize: '12px' }} />
-                <Area type="monotone" dataKey="Progress" stroke="#24324A" fill="#EEF2F7" strokeWidth={2} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
+                <XAxis dataKey="month" stroke={chartPalette.axis} fontSize={11} />
+                <YAxis stroke={chartPalette.axis} fontSize={11} />
+                <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                <Area type="monotone" dataKey="Progress" stroke={chartPalette.progressStroke} fill={chartPalette.progressFill} fillOpacity={isDark ? 0.72 : 1} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -914,7 +956,7 @@ export default function DashboardPage() {
                     <span>Tasks: {project.completed_tasks}/{project.total_tasks}</span>
                     <span>{project.progress_percentage}%</span>
                   </div>
-                  <div className="w-full bg-[#E8E8EC] h-1.5 rounded-full overflow-hidden">
+                  <div className="dashboard-progress-track w-full bg-[#E8E8EC] h-1.5 rounded-full overflow-hidden">
                     <div
                       className="bg-[#4F9D78] h-full rounded-full"
                       style={{ width: `${project.progress_percentage}%` }}
@@ -950,7 +992,7 @@ export default function DashboardPage() {
 
           const teamGaugeData = [
             { name: 'Online Team', value: realOnlineCount || 0.1, color: '#4F9D78' },
-            { name: 'Offline Team', value: realOfflineCount || 0.1, color: '#24324A' },
+            { name: 'Offline Team', value: realOfflineCount || 0.1, color: chartPalette.offline },
           ];
 
           // Current logged in user's total hours
@@ -1047,7 +1089,11 @@ export default function DashboardPage() {
                             <span
                               key={idx}
                               className={`w-2 h-2 rounded-full ${
-                                val >= 8 ? 'bg-[#24324A]' : val >= 5 ? 'bg-[#4F9D78]' : 'bg-[#E8E8EC]'
+                                val >= 8
+                                  ? 'bg-[#24324A] avg-hours-dot-high'
+                                  : val >= 5
+                                    ? 'bg-[#4F9D78] avg-hours-dot-medium'
+                                    : 'bg-[#E8E8EC] avg-hours-dot-low'
                               }`}
                               title={`${val} jam kerja`}
                             />
@@ -1081,6 +1127,8 @@ export default function DashboardPage() {
                                   outerRadius={32}
                                   paddingAngle={3}
                                   dataKey="value"
+                                  stroke={chartPalette.tooltipBackground}
+                                  strokeWidth={2}
                                 >
                                   {teamGaugeData.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1096,7 +1144,7 @@ export default function DashboardPage() {
                             {realOnlineCount} Member Online
                           </span>
                           <span className="text-[#737680] font-semibold flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-[#24324A]" />
+                            <span className="dashboard-offline-dot w-2 h-2 rounded-full bg-[#24324A]" />
                             {realOfflineCount} Member Offline
                           </span>
                         </div>
@@ -1114,7 +1162,7 @@ export default function DashboardPage() {
                           <span className="text-3xl font-black text-[#24324A]">{myTotalHours}h</span>
                           <span className="text-xs text-[#737680]">{myRemainingHours}h tersisa</span>
                         </div>
-                        <div className="w-full bg-[#E8E8EC] h-2 rounded-full overflow-hidden">
+                        <div className="dashboard-progress-track w-full bg-[#E8E8EC] h-2 rounded-full overflow-hidden">
                           <div className="bg-[#4F9D78] h-full rounded-full" style={{ width: `${myCapacityPercent}%` }} />
                         </div>
                         <span className="text-[11px] text-[#737680] block">Status Kapasitas: <strong className="text-[#4F9D78]">Sangat Seimbang (Balanced)</strong></span>

@@ -469,10 +469,10 @@ export default function FloatingChat() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="relative w-14 h-14 rounded-full bg-[#24324A] text-white shadow-xl flex items-center justify-center hover:bg-[#1A2536] transition-colors"
+        className="floating-chat-launcher relative w-14 h-14 rounded-full bg-[#24324A] text-white shadow-xl flex items-center justify-center hover:bg-[#1A2536] transition-colors"
         title={open ? 'Tutup pesan' : 'Buka pesan masuk'}
       >
-        {open ? <X className="w-5 h-5" /> : <MessageCircle className="w-6 h-6 text-[#F26B5E]" />}
+        {open ? <X className="w-5 h-5" /> : <MessageCircle className="floating-chat-icon w-6 h-6 text-[#F26B5E]" />}
         {totalUnread > 0 && !open && (
           <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 flex items-center justify-center bg-[#F26B5E] text-white text-[9px] font-extrabold rounded-full ring-2 ring-white">
             {totalUnread > 99 ? '99+' : totalUnread}

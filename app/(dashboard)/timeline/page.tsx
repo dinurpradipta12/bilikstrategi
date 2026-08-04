@@ -419,9 +419,9 @@ export default function TimelinePage() {
                   {week.days.map((day, dIdx) => (
                     <div
                       key={dIdx}
-                      className={`p-2 flex flex-col justify-between ${
+                      className={`calendar-date-cell p-2 flex flex-col justify-between ${
                         !day.isCurrentMonth
-                          ? 'bg-[#F7F7F8]/40 text-[#A0A3BD]'
+                          ? 'calendar-outside-month bg-[#F7F7F8]/40 text-[#A0A3BD]'
                           : day.isToday
                           ? 'bg-[#EEF2F7]/50'
                           : 'bg-[#FFFFFF]'

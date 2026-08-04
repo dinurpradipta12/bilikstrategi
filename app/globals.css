@@ -307,6 +307,68 @@ html.dark [class~='hover:text-[#202124]']:hover {
   color: var(--text-primary) !important;
 }
 
+/* Dark-only readability refinements for analytics, calendar, assets, and chat. */
+html.dark .dashboard-progress-track {
+  background-color: #344152 !important;
+}
+
+html.dark .dashboard-project-progress-fill {
+  background-color: #7186A5 !important;
+}
+
+html.dark .avg-hours-dot-high {
+  background-color: #7186A5 !important;
+}
+
+html.dark .avg-hours-dot-medium {
+  background-color: #62B58D !important;
+}
+
+html.dark .avg-hours-dot-low {
+  background-color: #4B5666 !important;
+}
+
+html.dark .dashboard-offline-dot {
+  background-color: #D45F62 !important;
+}
+
+html.dark .dashboard-chart-created-swatch {
+  background-color: #7186A5 !important;
+}
+
+html.dark .dashboard-chart-completed-swatch {
+  background-color: #62B58D !important;
+}
+
+html.dark .calendar-outside-month {
+  background-color: #171B22 !important;
+  color: #687385 !important;
+}
+
+html.dark .calendar-outside-month [class~='text-[#202124]'],
+html.dark .calendar-outside-month [class~='text-[#A0A3BD]'] {
+  color: #687385 !important;
+}
+
+html.dark .assets-card-footer {
+  background-color: #242A33 !important;
+  border-color: var(--border) !important;
+}
+
+html.dark .floating-chat-launcher {
+  background-color: #2C3848 !important;
+  border: 1px solid #4D5C70;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
+}
+
+html.dark .floating-chat-launcher:hover {
+  background-color: #35445A !important;
+}
+
+html.dark .floating-chat-icon {
+  color: #FF8B80 !important;
+}
+
 html.dark ::-webkit-scrollbar-thumb {
   background: #4A5362;
 }

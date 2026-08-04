@@ -704,7 +704,7 @@ export default function AssetManagementPage() {
               </div>
 
               {/* Card Footer Buttons */}
-              <div className="p-4 pt-2 border-t border-[#E8E8EC] bg-[#F7F7F8]/50 flex items-center justify-between gap-2">
+              <div className="assets-card-footer p-4 pt-2 border-t border-[#E8E8EC] bg-[#F7F7F8]/50 flex items-center justify-between gap-2">
                 {/* Copy Link Button */}
                 <button
                   onClick={(e) => handleCopyLink(ast, e)}
