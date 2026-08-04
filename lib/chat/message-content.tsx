@@ -46,6 +46,10 @@ function renderWithLineBreaks(value: string, keyPrefix: string) {
 function isImageUrl(url: string) {
   if (!url) return false;
   if (url.startsWith('data:image/')) return true;
+
+  // MUST start with http:// or https:// to be a valid remote image URL!
+  if (!/^https?:\/\//i.test(url)) return false;
+
   const clean = url.toLowerCase().split('?')[0];
   if (
     clean.endsWith('.png') ||
@@ -73,6 +77,10 @@ function renderImagePreview(src: string, alt: string, own: boolean, key: string)
           alt={fileName}
           className="w-full max-h-72 object-contain bg-neutral-900/40 rounded-t-xl transition-transform duration-200 group-hover/img:scale-[1.01] cursor-pointer"
           loading="lazy"
+          onError={(e) => {
+            // Fallback if image fails to load
+            (e.target as HTMLElement).style.display = 'none';
+          }}
         />
       </a>
       <div className="p-2 bg-[#1E293B] text-white text-[11px] flex items-center justify-between gap-2 backdrop-blur-xs">
@@ -135,6 +143,11 @@ function renderLinks(value: string, own: boolean, keyPrefix: string) {
     const { url, trailing } = trimUrlPunctuation(raw);
     if (!url) continue;
 
+    // IMPORTANT: Skip converting plain filenames (like "20.20.26.png") into broken domains unless they start with http/https/www
+    if (!/^(?:https?:\/\/|www\.)/i.test(url) && !url.includes('/')) {
+      continue;
+    }
+
     nodes.push(...renderWithLineBreaks(value.slice(cursor, start), `${keyPrefix}-text-${linkIndex}`));
     const href = /^(?:https?:\/\/)/i.test(url) ? url : `https://${url}`;
 
@@ -149,7 +162,7 @@ function renderLinks(value: string, own: boolean, keyPrefix: string) {
           target="_blank"
           rel="noreferrer noopener"
           onClick={(event) => event.stopPropagation()}
-          className={`font-semibold underline decoration-1 underline-offset-2 break-all transition-colors ${
+          className={`font-semibold underline decoration-[#93C5FD] underline-offset-2 break-all transition-colors ${
             own
               ? 'text-[#1D4ED8] decoration-[#93C5FD] hover:text-[#1E40AF]'
               : 'text-[#0369A1] decoration-[#7DD3FC] hover:text-[#075985]'
@@ -159,6 +172,12 @@ function renderLinks(value: string, own: boolean, keyPrefix: string) {
         </a>,
       );
     }
+
+    if (trailing) nodes.push(...renderWithLineBreaks(trailing, `${keyPrefix}-trailing-${linkIndex}`));
+
+    cursor = start + raw.length;
+    linkIndex += 1;
+  }
 
     if (trailing) nodes.push(...renderWithLineBreaks(trailing, `${keyPrefix}-trailing-${linkIndex}`));
 

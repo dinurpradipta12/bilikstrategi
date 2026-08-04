@@ -768,6 +768,7 @@ export default function ChatPage() {
       let imageUrl = '';
       const fileExt = file.name.split('.').pop() || 'png';
       const fileName = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const mediaId = `media_${Date.now()}`;
 
       // 1. Upload to Supabase Storage 'chat-attachments'
       const { data, error } = await supabase.storage.from('chat-attachments').upload(fileName, file, {
@@ -778,6 +779,21 @@ export default function ChatPage() {
       if (!error && data?.path) {
         const { data: publicUrlData } = supabase.storage.from('chat-attachments').getPublicUrl(data.path);
         imageUrl = publicUrlData.publicUrl;
+
+        // Register tracking record in DB for auto-cleanup
+        try {
+          await supabase.from('app_chat_media_attachments').insert({
+            id: mediaId,
+            message_id: fileName,
+            channel_id: activeChannelId,
+            storage_path: data.path,
+            public_url: imageUrl,
+            sender_id: String(currentUser.id),
+            viewed_by: [String(currentUser.id)],
+          });
+        } catch {
+          // ignore tracking error
+        }
       } else {
         // 2. Fallback: Base64 data URL
         imageUrl = await new Promise<string>((resolve, reject) => {
