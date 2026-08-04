@@ -933,9 +933,9 @@ export default function ProjectDetailPage() {
 
           {/* VIEW MODE 1: MINGGU (WEEK VIEW BOARD) */}
           {timelineViewMode === 'week' && (
-            <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
+            <div className="timeline-week-calendar border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
               {/* Days Header Row */}
-              <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
+              <div className="calendar-week-header grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
                 {[
                   { dayName: 'SUN', dateNum: '02', isToday: true },
                   { dayName: 'MON', dateNum: '03', isToday: false },
@@ -948,7 +948,7 @@ export default function ProjectDetailPage() {
                   <div
                     key={day.dayName}
                     className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
-                      day.isToday ? 'bg-[#EEF2F7]/60' : ''
+                      day.isToday ? 'calendar-today bg-[#EEF2F7]/60' : ''
                     }`}
                   >
                     <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
@@ -965,7 +965,7 @@ export default function ProjectDetailPage() {
 
               {/* Schedule Board Body */}
               <div className="relative min-h-[380px] p-4 bg-[#FFFFFF]">
-                <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
+                <div className="calendar-grid-lines absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
 
                 <div className="relative z-10 space-y-3">
                   {meta.milestones.length === 0 ? (
@@ -1025,8 +1025,8 @@ export default function ProjectDetailPage() {
 
           {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR WITH ONE CONTINUOUS SPANNING BAR OVERLAY) */}
           {timelineViewMode === 'month' && (
-            <div className="border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
-              <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
+            <div className="timeline-month-calendar border border-[#E8E8EC] rounded-2xl overflow-hidden bg-[#FFFFFF]">
+              <div className="calendar-month-header grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
                 <span>SUN</span>
                 <span>MON</span>
                 <span>TUE</span>
@@ -1036,7 +1036,7 @@ export default function ProjectDetailPage() {
                 <span>SAT</span>
               </div>
 
-              <div className="divide-y divide-[#E8E8EC]">
+              <div className="calendar-week-rows divide-y divide-[#E8E8EC]">
                 {[
                   {
                     weekIndex: 0,
@@ -1111,16 +1111,16 @@ export default function ProjectDetailPage() {
                     ],
                   },
                 ].map((week) => (
-                  <div key={week.weekIndex} className="relative min-h-[100px]">
-                    <div className="grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
+                  <div key={week.weekIndex} className="calendar-week-row relative min-h-[100px]">
+                    <div className="calendar-grid-lines grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
                       {week.days.map((day, dIdx) => (
                         <div
                           key={dIdx}
                           className={`p-2 flex flex-col justify-between ${
                             !day.isCurrentMonth
-                              ? 'bg-[#F7F7F8]/40 text-[#A0A3BD]'
+                              ? 'calendar-outside-month bg-[#F7F7F8]/40 text-[#A0A3BD]'
                               : day.isToday
-                              ? 'bg-[#EEF2F7]/50'
+                              ? 'calendar-today bg-[#EEF2F7]/50'
                               : 'bg-[#FFFFFF]'
                           }`}
                         >

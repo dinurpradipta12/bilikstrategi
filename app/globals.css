@@ -345,6 +345,17 @@ html.dark .calendar-outside-month {
   color: #687385 !important;
 }
 
+html.dark .calendar-today {
+  background-color: #252C36 !important;
+}
+
+html.dark .calendar-grid-lines > :not([hidden]) ~ :not([hidden]),
+html.dark .calendar-week-rows > .calendar-week-row ~ .calendar-week-row,
+html.dark .calendar-week-header > :not([hidden]),
+html.dark .calendar-month-header {
+  border-color: #2D343E !important;
+}
+
 html.dark .calendar-outside-month [class~='text-[#202124]'],
 html.dark .calendar-outside-month [class~='text-[#A0A3BD]'] {
   color: #687385 !important;

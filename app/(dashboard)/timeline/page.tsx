@@ -313,14 +313,14 @@ export default function TimelinePage() {
 
       {/* VIEW MODE 1: MINGGU (WEEK VIEW) */}
       {viewMode === 'week' && (
-        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
+        <div className="timeline-week-calendar bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
           {/* Days Header Columns */}
-          <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
+          <div className="calendar-week-header grid grid-cols-7 border-b border-[#E8E8EC] bg-[#FFFFFF] text-center text-xs font-bold text-[#737680]">
             {WEEK_DAYS.map((day) => (
               <div
                 key={day.fullDate}
                 className={`py-3 border-r border-[#E8E8EC] last:border-r-0 flex flex-col items-center justify-center gap-1 ${
-                  day.isToday ? 'bg-[#EEF2F7]/60' : ''
+                  day.isToday ? 'calendar-today bg-[#EEF2F7]/60' : ''
                 }`}
               >
                 <span className="text-[10px] tracking-wider uppercase font-semibold">{day.dayName}</span>
@@ -337,7 +337,7 @@ export default function TimelinePage() {
 
           {/* Schedule Board Body */}
           <div className="relative min-h-[440px] p-4 bg-[#FFFFFF]">
-            <div className="absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
+            <div className="calendar-grid-lines absolute inset-0 grid grid-cols-7 divide-x divide-[#E8E8EC]/50 pointer-events-none" />
 
             {loading ? (
               <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
@@ -398,9 +398,9 @@ export default function TimelinePage() {
 
       {/* VIEW MODE 2: BULAN (FULL MONTHLY CALENDAR WITH ONE CONTINUOUS SPANNING BAR OVERLAY) */}
       {viewMode === 'month' && (
-        <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
+        <div className="timeline-month-calendar bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs overflow-hidden">
           {/* Day of Week Header Row */}
-          <div className="grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
+          <div className="calendar-month-header grid grid-cols-7 border-b border-[#E8E8EC] bg-[#F7F7F8] text-center text-xs font-bold text-[#737680] py-3 uppercase tracking-wider">
             <span>SUN</span>
             <span>MON</span>
             <span>TUE</span>
@@ -411,11 +411,11 @@ export default function TimelinePage() {
           </div>
 
           {/* 6 Week Rows Container */}
-          <div className="divide-y divide-[#E8E8EC]">
+          <div className="calendar-week-rows divide-y divide-[#E8E8EC]">
             {MONTH_WEEKS.map((week) => (
-              <div key={week.weekIndex} className="relative min-h-[105px]">
+              <div key={week.weekIndex} className="calendar-week-row relative min-h-[105px]">
                 {/* Background Date Cells Grid (7 Columns) */}
-                <div className="grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
+                <div className="calendar-grid-lines grid grid-cols-7 divide-x divide-[#E8E8EC] absolute inset-0 bg-[#FFFFFF]">
                   {week.days.map((day, dIdx) => (
                     <div
                       key={dIdx}
@@ -423,7 +423,7 @@ export default function TimelinePage() {
                         !day.isCurrentMonth
                           ? 'calendar-outside-month bg-[#F7F7F8]/40 text-[#A0A3BD]'
                           : day.isToday
-                          ? 'bg-[#EEF2F7]/50'
+                          ? 'calendar-today bg-[#EEF2F7]/50'
                           : 'bg-[#FFFFFF]'
                       }`}
                     >
