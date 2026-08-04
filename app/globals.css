@@ -359,6 +359,7 @@ html.dark .calendar-month-header {
 /* Calendar dividers use Tailwind's logical border properties. Set each
    direction explicitly so the light-mode white divider cannot leak into dark mode. */
 html.dark .calendar-grid-lines > * {
+  border-color: #2D343E !important;
   border-left-color: #2D343E !important;
   border-inline-start-color: #2D343E !important;
   border-right-color: #2D343E !important;
@@ -366,11 +367,13 @@ html.dark .calendar-grid-lines > * {
 }
 
 html.dark .calendar-week-rows > .calendar-week-row + .calendar-week-row {
+  border-color: #2D343E !important;
   border-top-color: #2D343E !important;
   border-block-start-color: #2D343E !important;
 }
 
 html.dark .calendar-week-header > * {
+  border-color: #2D343E !important;
   border-left-color: #2D343E !important;
   border-inline-start-color: #2D343E !important;
   border-right-color: #2D343E !important;
@@ -380,6 +383,12 @@ html.dark .calendar-week-header > * {
 html.dark .calendar-week-header,
 html.dark .calendar-month-header {
   border-bottom-color: #2D343E !important;
+}
+
+html.dark .calendar-week-rows,
+html.dark .calendar-week-row,
+html.dark .calendar-date-cell {
+  border-color: #2D343E !important;
 }
 
 html.dark .timeline-week-calendar,

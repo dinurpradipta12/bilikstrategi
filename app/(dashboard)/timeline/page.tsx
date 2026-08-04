@@ -16,6 +16,7 @@ import {
 import { AgencyTask, AgencyProject } from '@/lib/mock/data';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import { supabase } from '@/lib/supabase/client';
+import { formatCalendarDate, getCalendarMonthRange } from '@/lib/calendar-date';
 
 interface DayColumn {
   dayName: string;
@@ -33,6 +34,11 @@ const WEEK_DAYS: DayColumn[] = [
   { dayName: 'FRI', dateNum: '07', fullDate: '2026-08-07', isToday: false },
   { dayName: 'SAT', dateNum: '08', fullDate: '2026-08-08', isToday: false },
 ];
+
+const CALENDAR_YEAR = 2026;
+const CALENDAR_MONTH_INDEX = 7;
+const CALENDAR_WEEK_START_DAY = 2;
+const CALENDAR_WEEK_END_DAY = 8;
 
 const PASTEL_THEMES = [
   { tone: 'blue', bg: 'bg-[#E8F1FF]', text: 'text-[#1E56B3]', border: 'border-[#BDD7FF]', icon: '🎨' },
@@ -181,6 +187,13 @@ export default function TimelinePage() {
       t.task_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.project_name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesProject && matchesStatus && matchesSearch;
+  });
+
+  const filteredProjects = projects.filter((project) => {
+    const matchesProject = projectFilter === 'all' || String(project.id) === projectFilter;
+    const searchableText = `${project.name || ''} ${project.client_name || ''}`.toLowerCase();
+    const matchesSearch = !searchQuery.trim() || searchableText.includes(searchQuery.toLowerCase());
+    return matchesProject && matchesSearch;
   });
 
   // Task status counts
@@ -344,22 +357,77 @@ export default function TimelinePage() {
                 <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#F26B5E] mb-2" />
                 <span>Memuat kalender timeline schedule ClickUp...</span>
               </div>
-            ) : filteredTasks.length === 0 ? (
+            ) : filteredProjects.length === 0 && filteredTasks.length === 0 ? (
               <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
-                Tidak ada schedule task yang sesuai dengan filter.
+                Tidak ada project atau task yang sesuai dengan filter.
               </div>
             ) : (
               <div className="relative z-10 space-y-3">
+                {filteredProjects.map((project, idx) => {
+                  const range = getCalendarMonthRange(
+                    project.start_date,
+                    project.due_date,
+                    CALENDAR_YEAR,
+                    CALENDAR_MONTH_INDEX,
+                    5,
+                  );
+                  if (!range || range.endDay < CALENDAR_WEEK_START_DAY || range.startDay > CALENDAR_WEEK_END_DAY) {
+                    return null;
+                  }
+
+                  const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
+                  const startD = Math.max(CALENDAR_WEEK_START_DAY, range.startDay);
+                  const dueD = Math.min(CALENDAR_WEEK_END_DAY, range.endDay);
+                  const startCol = startD - CALENDAR_WEEK_START_DAY;
+                  const colSpan = dueD - startD + 1;
+
+                  return (
+                    <a
+                      key={`project-${project.id}`}
+                      href={`/projects/${project.id}`}
+                      data-calendar-tone={theme.tone}
+                      className="calendar-event calendar-project-event group grid grid-cols-7 gap-2"
+                      title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
+                    >
+                      <span
+                        style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                        className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border p-2.5 shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-md ${theme.bg} ${theme.border}`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="text-sm flex-shrink-0">📁</span>
+                          <span className="min-w-0 truncate">
+                            <span className={`block truncate text-xs font-bold ${theme.text}`}>{project.name}</span>
+                            <span className="block truncate text-[10px] opacity-80">
+                              {formatCalendarDate(project.start_date)} s/d {formatCalendarDate(project.due_date)}
+                            </span>
+                          </span>
+                        </span>
+                        <span className={`flex-shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${theme.bg} ${theme.text} ${theme.border}`}>
+                          {colSpan} Hari
+                        </span>
+                      </span>
+                    </a>
+                  );
+                })}
+
                 {filteredTasks.map((task, idx) => {
                   const theme = PASTEL_THEMES[idx % PASTEL_THEMES.length];
-                  const startDateD = task.start_date ? new Date(task.start_date).getDate() : null;
-                  const dueDateD = task.due_date ? new Date(task.due_date).getDate() : null;
-                  const startD = startDateD ?? dueDateD ?? 5;
-                  const dueD = dueDateD ?? startDateD ?? 5;
+                  const range = getCalendarMonthRange(
+                    task.start_date,
+                    task.due_date,
+                    CALENDAR_YEAR,
+                    CALENDAR_MONTH_INDEX,
+                    5,
+                  );
+                  if (!range || range.endDay < CALENDAR_WEEK_START_DAY || range.startDay > CALENDAR_WEEK_END_DAY) {
+                    return null;
+                  }
 
-                  const startCol = Math.max(0, Math.min(6, startD - 2));
-                  const endCol = Math.max(startCol, Math.min(6, dueD - 2));
-                  const colSpan = Math.max(1, endCol - startCol + 1);
+                  const startD = Math.max(CALENDAR_WEEK_START_DAY, range.startDay);
+                  const dueD = Math.min(CALENDAR_WEEK_END_DAY, range.endDay);
+
+                  const startCol = startD - CALENDAR_WEEK_START_DAY;
+                  const colSpan = dueD - startD + 1;
 
                   return (
                     <div key={task.id} className="grid grid-cols-7 gap-2">
@@ -444,14 +512,72 @@ export default function TimelinePage() {
                   ))}
                 </div>
 
-                {/* Foreground Task Timeline Spanning Overlay (MENYATU OVERLAY) */}
+                {/* Foreground Project and Task Timeline Spanning Overlay */}
                 <div className="relative z-10 pt-9 pb-2 px-1 space-y-1.5">
+                  {filteredProjects.map((project, pIdx) => {
+                    const range = getCalendarMonthRange(
+                      project.start_date,
+                      project.due_date,
+                      CALENDAR_YEAR,
+                      CALENDAR_MONTH_INDEX,
+                      5,
+                    );
+                    if (!range) return null;
+
+                    const activeColsInWeek: number[] = [];
+                    week.days.forEach((day, colIdx) => {
+                      if (day.isCurrentMonth && day.monthDay >= range.startDay && day.monthDay <= range.endDay) {
+                        activeColsInWeek.push(colIdx);
+                      }
+                    });
+
+                    if (activeColsInWeek.length === 0) return null;
+
+                    const theme = PASTEL_THEMES[pIdx % PASTEL_THEMES.length];
+                    const startCol = activeColsInWeek[0];
+                    const endCol = activeColsInWeek[activeColsInWeek.length - 1];
+                    const colSpan = endCol - startCol + 1;
+
+                    return (
+                      <a
+                        key={`project-${project.id}`}
+                        href={`/projects/${project.id}`}
+                        data-calendar-tone={theme.tone}
+                        className="calendar-event calendar-project-event grid grid-cols-7 gap-1"
+                        title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
+                      >
+                        <span
+                          style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                          className={`flex min-w-0 items-center justify-between gap-1 rounded-xl border px-3 py-1 text-[11px] font-extrabold shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-md ${theme.bg} ${theme.text} ${theme.border}`}
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5 truncate">
+                            <span className="text-xs flex-shrink-0">📁</span>
+                            <span className="truncate">{project.name}</span>
+                            <span className="hidden truncate text-[10px] font-normal opacity-75 sm:inline">
+                              ({formatCalendarDate(project.start_date)} s/d {formatCalendarDate(project.due_date)})
+                            </span>
+                          </span>
+                          <span className={`flex-shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${theme.border} ${theme.bg}`}>
+                            {colSpan} Hari
+                          </span>
+                        </span>
+                      </a>
+                    );
+                  })}
+
                   {filteredTasks.map((task, tIdx) => {
                     const theme = PASTEL_THEMES[tIdx % PASTEL_THEMES.length];
-                    const startDateD = task.start_date ? new Date(task.start_date).getDate() : null;
-                    const dueDateD = task.due_date ? new Date(task.due_date).getDate() : null;
-                    const startD = startDateD ?? dueDateD ?? 5;
-                    const dueD = dueDateD ?? startDateD ?? 5;
+                    const range = getCalendarMonthRange(
+                      task.start_date,
+                      task.due_date,
+                      CALENDAR_YEAR,
+                      CALENDAR_MONTH_INDEX,
+                      5,
+                    );
+                    if (!range) return null;
+
+                    const startD = range.startDay;
+                    const dueD = range.endDay;
 
                     // Find which columns in THIS week row fall inside [startD, dueD]
                     const activeColsInWeek: number[] = [];
