@@ -85,76 +85,103 @@ html.dark ::placeholder {
   opacity: 1;
 }
 
-/* Catch older page-specific light tokens before applying the semantic exceptions below. */
-html.dark [class*='bg-[#D'],
-html.dark [class*='bg-[#E'],
-html.dark [class*='bg-[#F'],
-html.dark [class*='bg-[#b'] {
-  background-color: var(--surface-raised) !important;
-}
-
 /* Common light surfaces used throughout the existing application. */
 html.dark [class~='bg-[#FFFFFF]'],
 html.dark [class~='bg-white'] {
-  background-color: var(--surface) !important;
+  background-color: var(--surface);
 }
 
 html.dark [class~='bg-[#F7F7F8]'] {
-  background-color: var(--bg-main) !important;
+  background-color: var(--bg-main);
 }
 
 html.dark [class~='bg-[#F4F4F5]'],
 html.dark [class~='bg-[#F1F1F3]'],
 html.dark [class~='bg-[#EBEBED]'],
 html.dark [class~='bg-[#E8E8EC]'] {
-  background-color: var(--surface-raised) !important;
+  background-color: var(--surface-raised);
 }
 
 html.dark [class~='bg-[#EEF2F7]'],
 html.dark [class~='bg-[#E8F0FA]'],
 html.dark [class~='bg-[#EAF1FB]'] {
-  background-color: #2A3443 !important;
+  background-color: #2A3443;
 }
 
 html.dark [class~='bg-[#EEF8F3]'] {
-  background-color: #1E392C !important;
+  background-color: #1E392C;
 }
 
 html.dark [class~='bg-[#FFF0ED]'] {
-  background-color: #3B272B !important;
+  background-color: #3B272B;
 }
 
 html.dark [class~='bg-[#FEF3D6]'] {
-  background-color: #3D321F !important;
+  background-color: #3D321F;
 }
 
 html.dark [class~='bg-[#24324A]'] {
-  background-color: #1F2733 !important;
+  background-color: #1F2733;
 }
 
 html.dark [class~='bg-[#1A2536]'] {
-  background-color: #111822 !important;
+  background-color: #111822;
 }
 
 html.dark [class~='bg-[#24324A]/95'] {
-  background-color: rgb(31 39 51 / 95%) !important;
+  background-color: rgb(31 39 51 / 95%);
 }
 
 /* Keep saturated status/action fills as accents in dark mode. */
-html.dark [class~='bg-[#F26B5E]'] { background-color: #C9574E !important; }
+html.dark [class~='bg-[#F26B5E]'] { background-color: #C9574E; }
 html.dark [class~='bg-[#D95858]'],
 html.dark [class~='bg-[#D95346]'],
 html.dark [class~='bg-[#DD5C51]'],
-html.dark [class~='bg-[#b84343]'] { background-color: #B74747 !important; }
-html.dark [class~='bg-[#E6A23C]'] { background-color: #A87528 !important; }
-html.dark [class~='bg-[#EF4444]'] { background-color: #B74747 !important; }
+html.dark [class~='bg-[#b84343]'] { background-color: #B74747; }
+html.dark [class~='bg-[#E6A23C]'] { background-color: #A87528; }
+html.dark [class~='bg-[#EF4444]'] { background-color: #B74747; }
 html.dark [class~='bg-[#4F9D78]'],
-html.dark [class~='bg-[#10B981]'] { background-color: #3F8667 !important; }
-html.dark [class~='bg-[#3B82F6]'] { background-color: #2E68C4 !important; }
+html.dark [class~='bg-[#10B981]'] { background-color: #3F8667; }
+html.dark [class~='bg-[#3B82F6]'] { background-color: #2E68C4; }
 html.dark [class~='bg-[#7B68EE]'],
 html.dark [class~='bg-[#6C5CE7]'],
 html.dark [class~='bg-[#6852ED]'],
-html.dark [class~='bg-[#6655D2]'] { background-color: #5848C7 !important; }
+html.dark [class~='bg-[#6655D2]'] { background-color: #5848C7; }
+
+html.dark [class~='bg-[#DCE9FF]'],
+html.dark [class~='bg-[#DDE4ED]'],
+html.dark [class~='bg-[#E2E9F2]'],
+html.dark [class~='bg-[#E2ECF8]'],
+html.dark [class~='bg-[#E8F1FF]'],
+html.dark [class~='bg-[#EBF5FF]'],
+html.dark [class~='bg-[#EFF2F5]'],
+html.dark [class~='bg-[#F5F7F9]'] {
+  background-color: var(--surface-raised);
+}
+
+html.dark [class~='bg-[#E3F8E9]'],
+html.dark [class~='bg-[#E6F4ED]'],
+html.dark [class~='bg-[#EEF8F2]'] {
+  background-color: #1E392C;
+}
+
+html.dark [class~='bg-[#F0EAFD]'],
+html.dark [class~='bg-[#F2E8FF]'],
+html.dark [class~='bg-[#F3E8FF]'] {
+  background-color: #32294C;
+}
+
+html.dark [class~='bg-[#FEE5E2]'],
+html.dark [class~='bg-[#FFE4DE]'],
+html.dark [class~='bg-[#FFE8E8]'] {
+  background-color: #3B272B;
+}
+
+html.dark [class~='bg-[#FFF8E7]'],
+html.dark [class~='bg-[#FFFBF0]'],
+html.dark [class~='bg-[#FFFBF2]'] {
+  background-color: #3D321F;
+}
 
 /* Preserve the product accent colors while improving contrast for text. */
 html.dark [class~='text-[#202124]'],
@@ -228,20 +255,14 @@ html.dark [class~='border-[#DDD6FE]'] {
   border-color: #5B4A90 !important;
 }
 
-html.dark [class*='border-[#D'],
-html.dark [class*='border-[#E'],
-html.dark [class*='border-[#F'] {
+html.dark [class~='border-[#DDE1E7]'],
+html.dark [class~='border-[#D7DEE8]'],
+html.dark [class~='border-[#D7E3F2]'],
+html.dark [class~='border-[#CBD3DE]'],
+html.dark [class~='border-[#C8D5E5]'],
+html.dark [class~='border-[#AAB5C5]'],
+html.dark [class~='border-[#F7F7F8]'] {
   border-color: var(--border) !important;
-}
-
-html.dark [class~='border-[#F26B5E]'],
-html.dark [class~='border-[#D95858]'],
-html.dark [class~='border-[#E6A23C]'],
-html.dark [class~='border-[#4F9D78]'],
-html.dark [class~='border-[#10B981]'],
-html.dark [class~='border-[#3B82F6]'],
-html.dark [class~='border-[#7B68EE]'] {
-  border-color: #5848C7 !important;
 }
 
 html.dark [class~='border-[#F26B5E]'] { border-color: #C9574E !important; }
@@ -250,6 +271,7 @@ html.dark [class~='border-[#E6A23C]'] { border-color: #A87528 !important; }
 html.dark [class~='border-[#4F9D78]'],
 html.dark [class~='border-[#10B981]'] { border-color: #3F8667 !important; }
 html.dark [class~='border-[#3B82F6]'] { border-color: #2E68C4 !important; }
+html.dark [class~='border-[#7B68EE]'] { border-color: #5848C7 !important; }
 
 html.dark [class~='placeholder-[#737680]']::placeholder {
   color: #7F8999 !important;

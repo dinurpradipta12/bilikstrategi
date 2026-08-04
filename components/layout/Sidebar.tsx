@@ -238,10 +238,10 @@ export default function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center border-l-2 border-transparent px-3 py-2.5 text-xs font-medium transition-colors ${
                 isActive
-                  ? 'bg-[#EEF2F7] text-[#24324A] font-semibold shadow-2xs'
-                  : 'text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124]'
+                  ? 'border-[#F26B5E] text-[#24324A] font-semibold'
+                  : 'text-[#737680] hover:text-[#202124]'
               } ${collapsed ? 'justify-center' : ''}`}
               title={collapsed ? item.name : undefined}
             >
@@ -258,7 +258,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer Profile Box */}
-      <div className="p-3 border-t border-[#E8E8EC] bg-[#F7F7F8]">
+      <div className="border-t border-[#E8E8EC] p-3">
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
