@@ -385,12 +385,12 @@ export default function TimelinePage() {
                     <a
                       key={`project-${project.id}`}
                       href={`/projects/${project.id}`}
-                      data-calendar-tone={theme.tone}
                       className="calendar-event calendar-project-event group grid grid-cols-7 gap-2"
                       title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
                     >
                       <span
                         style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                        data-calendar-tone={theme.tone}
                         className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border p-2.5 shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-md ${theme.bg} ${theme.border}`}
                       >
                         <span className="flex min-w-0 items-center gap-2">
@@ -542,12 +542,12 @@ export default function TimelinePage() {
                       <a
                         key={`project-${project.id}`}
                         href={`/projects/${project.id}`}
-                        data-calendar-tone={theme.tone}
                         className="calendar-event calendar-project-event grid grid-cols-7 gap-1"
                         title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
                       >
                         <span
                           style={{ gridColumnStart: startCol + 1, gridColumnEnd: `span ${colSpan}` }}
+                          data-calendar-tone={theme.tone}
                           className={`flex min-w-0 items-center justify-between gap-1 rounded-xl border px-3 py-1 text-[11px] font-extrabold shadow-2xs transition-all hover:-translate-y-0.5 hover:shadow-md ${theme.bg} ${theme.text} ${theme.border}`}
                         >
                           <span className="flex min-w-0 items-center gap-1.5 truncate">
