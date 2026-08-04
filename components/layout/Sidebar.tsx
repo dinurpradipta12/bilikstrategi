@@ -26,9 +26,13 @@ import {
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
+import { useTheme } from '@/lib/theme';
+import darkExpandedLogo from '@/src/lcputihbilik.png';
+import darkCollapsedLogo from '@/src/whitebilik.png';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { isDark } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [userProfile, setUserProfile] = useState({
     name: 'Bilik Strategi',
@@ -205,7 +209,7 @@ export default function Sidebar() {
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/landscape.png"
+              src={isDark ? darkExpandedLogo.src : '/landscape.png'}
               alt="Bilik Strategi Workspace"
               className="h-9 max-w-[170px] object-contain"
             />
@@ -214,7 +218,7 @@ export default function Sidebar() {
           <Link href="/dashboard" className="flex items-center justify-center p-1 rounded-lg hover:bg-[#F7F7F8] transition-colors flex-shrink-0" title="Bilik Strategi Workspace">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logobilik-hitam.png"
+              src={isDark ? darkCollapsedLogo.src : '/logobilik-hitam.png'}
               alt="Bilik Strategi Workspace"
               className="w-7 h-7 object-contain"
             />

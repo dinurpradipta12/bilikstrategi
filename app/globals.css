@@ -50,7 +50,7 @@ html.dark {
   --bg-main: #171A20;
   --surface: #20242C;
   --surface-raised: #282D36;
-  --border: #353C48;
+  --border: #303742;
   --text-primary: #F4F6FA;
   --text-secondary: #98A2B3;
   --primary-navy: #1F2733;
@@ -240,9 +240,23 @@ html.dark [class~='text-[#6D28D9]'] {
 }
 
 /* Light borders/dividers become visible but restrained on charcoal surfaces. */
+html.dark [class~='border'],
+html.dark [class~='border-t'],
+html.dark [class~='border-r'],
+html.dark [class~='border-b'],
+html.dark [class~='border-l'] {
+  border-color: var(--border);
+}
+
 html.dark [class~='border-[#E8E8EC]'],
 html.dark [class~='divide-[#E8E8EC'] > :not([hidden]) ~ :not([hidden])],
 html.dark [class~='border-[#E5EAF0]'] {
+  border-color: var(--border) !important;
+}
+
+/* Some components append hover/focus variants to the same light border token. */
+html.dark [class*='border-[#E8E8EC]'],
+html.dark [class*='border-[#E5EAF0]'] {
   border-color: var(--border) !important;
 }
 
