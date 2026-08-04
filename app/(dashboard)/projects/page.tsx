@@ -24,6 +24,88 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar';
 
+const PROJECT_STATUSES = new Set(['planning', 'in_progress', 'on_hold', 'completed', 'cancelled']);
+
+function projectText(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : value == null ? fallback : String(value);
+}
+
+function projectNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeProjectName(value: unknown) {
+  return projectText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function projectReference(project: AgencyProject) {
+  return projectText(project.clickup_list_id || project.id).trim();
+}
+
+function uniqueProjectsByReference(projects: AgencyProject[]) {
+  return projects.filter((project, index, source) => {
+    const reference = projectReference(project);
+    return source.findIndex((candidate) => candidate.id === project.id || (reference && projectReference(candidate) === reference)) === index;
+  });
+}
+
+function normalizeAppProject(value: any): AgencyProject {
+  const projectId = projectText(value?.id || value?.clickup_list_id, `project-${Date.now()}`);
+  const statusValue = projectText(value?.status, 'planning');
+  const today = new Date().toISOString().split('T')[0];
+  const defaultDueDate = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+
+  return {
+    id: projectId,
+    name: projectText(value?.name, 'Project'),
+    description: projectText(value?.description || value?.content, ''),
+    client_id: projectText(value?.client_id, 'c1'),
+    client_name: projectText(value?.client_name || value?.client?.company_name, 'Bilik Strategi Workspace'),
+    status: PROJECT_STATUSES.has(statusValue) ? statusValue as AgencyProject['status'] : 'planning',
+    clickup_space_id: projectText(value?.clickup_space_id, ''),
+    clickup_folder_id: projectText(value?.clickup_folder_id, ''),
+    clickup_list_id: projectText(value?.clickup_list_id || value?.list_id, projectId),
+    team_lead_id: projectText(value?.team_lead_id, 'u1'),
+    team_lead_name: projectText(value?.team_lead_name, 'Dinur Pradipta'),
+    member_ids: Array.isArray(value?.member_ids) ? value.member_ids.map((id: unknown) => projectText(id)) : [],
+    start_date: projectText(value?.start_date, today),
+    due_date: projectText(value?.due_date, defaultDueDate),
+    total_tasks: Math.max(0, projectNumber(value?.total_tasks ?? value?.task_count)),
+    completed_tasks: Math.max(0, projectNumber(value?.completed_tasks)),
+    overdue_tasks: Math.max(0, projectNumber(value?.overdue_tasks)),
+    progress_percentage: Math.min(100, Math.max(0, projectNumber(value?.progress_percentage ?? value?.progress))),
+  };
+}
+
+function projectsRepresentSameEntity(appProject: AgencyProject, clickupProject: AgencyProject) {
+  const appListId = projectText(appProject.clickup_list_id).trim();
+  const clickupListId = projectText(clickupProject.clickup_list_id || clickupProject.id).trim();
+  if (appListId && clickupListId && appListId === clickupListId) return true;
+  if (projectText(appProject.id).trim() === projectText(clickupProject.id).trim()) return true;
+
+  const appUsesPlaceholderReference = !appListId || appListId === projectText(appProject.id).trim();
+  return appUsesPlaceholderReference && normalizeProjectName(appProject.name) !== '' && normalizeProjectName(appProject.name) === normalizeProjectName(clickupProject.name);
+}
+
+function mergeAppProjectWithClickUp(appProject: AgencyProject, clickupProject: AgencyProject): AgencyProject {
+  const appHasTaskSummary = appProject.total_tasks > 0;
+  return {
+    ...clickupProject,
+    ...appProject,
+    id: appProject.id,
+    clickup_list_id: projectText(clickupProject.clickup_list_id || clickupProject.id || appProject.clickup_list_id),
+    total_tasks: appHasTaskSummary ? appProject.total_tasks : clickupProject.total_tasks,
+    completed_tasks: appHasTaskSummary ? appProject.completed_tasks : clickupProject.completed_tasks,
+    overdue_tasks: appHasTaskSummary ? appProject.overdue_tasks : clickupProject.overdue_tasks,
+    progress_percentage: appHasTaskSummary ? appProject.progress_percentage : clickupProject.progress_percentage,
+  };
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<AgencyProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,22 +151,25 @@ export default function ProjectsPage() {
   // 1. Fetch Projects (combining Supabase DB, Shared Server Store, and ClickUp)
   const fetchProjects = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
-    let combinedProjects: AgencyProject[] = [];
+    const appProjects: AgencyProject[] = [];
+    let clickupProjects: AgencyProject[] = [];
     const deletedIdsRaw = typeof window !== 'undefined' ? localStorage.getItem('bilik_deleted_project_ids') : null;
     const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
 
-    // a. Fetch from shared server API store
+    // The application database is canonical. ClickUp is only used to enrich
+    // matching projects with task/progress data in the background.
     try {
       const apiRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
       if (apiRes.ok) {
         const apiData = await apiRes.json();
         if (Array.isArray(apiData.projects)) {
-          combinedProjects.push(...apiData.projects);
+          appProjects.push(...apiData.projects.map(normalizeAppProject));
         }
       }
     } catch {}
 
-    // b. Fetch from Supabase direct table
+    // Direct Supabase fallback is only added when the API store did not return
+    // the same application project.
     try {
       const { data: dbData } = await supabase
         .from('projects')
@@ -93,47 +178,37 @@ export default function ProjectsPage() {
 
       if (dbData && dbData.length > 0) {
         dbData.forEach((dp: any) => {
-          if (!combinedProjects.some((cp) => cp.id === String(dp.id))) {
-            combinedProjects.push({
-              id: String(dp.id),
-              name: dp.name || 'Project',
-              client_id: dp.client_id || 'c1',
-              client_name: dp.client_name || 'Bilik Strategi Workspace',
-              clickup_space_id: '',
-              clickup_folder_id: '',
-              clickup_list_id: String(dp.id),
-              team_lead_id: 'u1',
-              team_lead_name: dp.team_lead_name || 'Dinur Pradipta',
-              member_ids: [],
-              status: dp.status || 'in_progress',
-              progress_percentage: dp.progress || 0,
-              total_tasks: 0,
-              completed_tasks: 0,
-              overdue_tasks: 0,
-              start_date: dp.start_date || new Date().toISOString().split('T')[0],
-              due_date: dp.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-              description: dp.description || '',
-            });
-          }
+          const normalizedProject = normalizeAppProject(dp);
+          if (!appProjects.some((project) => project.id === normalizedProject.id)) appProjects.push(normalizedProject);
         });
       }
     } catch {}
 
-    // c. Fetch ClickUp Projects
+    // ClickUp lists are kept as fallback records only when no application
+    // project represents the same list/name.
     try {
       const cuRes = await fetch('/api/clickup/projects');
       if (cuRes.ok) {
         const cuData = await cuRes.json();
-        const cuProjects: AgencyProject[] = Array.isArray(cuData.projects) ? cuData.projects : [];
-        cuProjects.forEach((cp) => {
-          if (!combinedProjects.some((p) => p.id === cp.id)) {
-            combinedProjects.push(cp);
-          }
-        });
+        clickupProjects = Array.isArray(cuData.projects) ? cuData.projects.map(normalizeAppProject) : [];
       }
     } catch {}
 
-    const cleanProjects = combinedProjects.filter((p) => !deletedIds.includes(p.id));
+    const canonicalAppProjects = uniqueProjectsByReference(appProjects);
+    const canonicalClickUpProjects = uniqueProjectsByReference(clickupProjects);
+    const matchedClickUpIds = new Set<string>();
+    const mergedProjects = canonicalAppProjects.map((appProject) => {
+      const clickupProject = canonicalClickUpProjects.find((candidate) => projectsRepresentSameEntity(appProject, candidate));
+      if (!clickupProject) return appProject;
+
+      matchedClickUpIds.add(projectText(clickupProject.id || clickupProject.clickup_list_id));
+      return mergeAppProjectWithClickUp(appProject, clickupProject);
+    });
+
+    const clickupOnlyProjects = canonicalClickUpProjects.filter(
+      (clickupProject) => !matchedClickUpIds.has(projectText(clickupProject.id || clickupProject.clickup_list_id)),
+    );
+    const cleanProjects = [...mergedProjects, ...clickupOnlyProjects].filter((project) => !deletedIds.includes(project.id));
     setProjects(cleanProjects);
     if (typeof window !== 'undefined') {
       localStorage.setItem('bilik_agency_projects_db', JSON.stringify(cleanProjects));
@@ -233,12 +308,33 @@ export default function ProjectsPage() {
       console.warn('[ProjectsPage] Could not save project to server store:', err);
     }
 
-    // 2. Fire-and-forget ClickUp sync in background (never blocks user)
+    // 2. Fire-and-forget ClickUp sync in background (never blocks the app).
+    // Persist the returned ClickUp list ID so later refreshes merge both records.
     fetch('/api/clickup/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newProjectName, content: newProjectDesc, due_date: newDueDate }),
-    }).catch(() => {});
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const result = await response.json().catch(() => null);
+        const clickupListId = result?.id || result?.list_id || result?.list?.id;
+        if (!clickupListId) return;
+
+        const normalizedClickUpListId = String(clickupListId);
+        setProjects((current) => {
+          const next = current.map((project) => project.id === newId ? { ...project, clickup_list_id: normalizedClickUpListId } : project);
+          if (typeof window !== 'undefined') localStorage.setItem('bilik_agency_projects_db', JSON.stringify(next));
+          return next;
+        });
+
+        await fetch('/api/supabase/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update', id: newId, clickup_list_id: normalizedClickUpListId }),
+        });
+      })
+      .catch(() => {});
 
     // 3. Update local state & storage
     const updated = [newProjectObj, ...projects.filter((p) => p.id !== newId)];
