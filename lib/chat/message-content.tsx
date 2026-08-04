@@ -92,7 +92,7 @@ export function renderChatMessageText(
   text: string,
   members: ChatMember[] = [],
   options: RenderChatMessageOptions = {},
-) {
+): React.ReactNode[] {
   const own = Boolean(options.own);
   const memberNames = Array.from(
     new Set(members.map((member) => member.username.trim()).filter(Boolean)),
@@ -102,15 +102,19 @@ export function renderChatMessageText(
     ? new RegExp(`(@(?:${memberNames.map(escapeRegExp).join('|')}))`, 'gi')
     : null;
   const parts = mentionRegex ? text.split(mentionRegex) : [text];
+  const nodes: React.ReactNode[] = [];
 
-  return parts.flatMap((part, index) => {
+  parts.forEach((part, index) => {
     const matchedMember = part.startsWith('@') && memberNames.some(
       (name) => name.toLowerCase() === part.slice(1).toLowerCase(),
     );
 
-    if (!matchedMember) return renderLinks(part, own, `part-${index}`);
+    if (!matchedMember) {
+      nodes.push(...renderLinks(part, own, `part-${index}`));
+      return;
+    }
 
-    return [
+    nodes.push(
       <span
         key={`mention-${index}`}
         className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md font-extrabold text-[11px] mx-0.5 border align-baseline ${
@@ -122,6 +126,8 @@ export function renderChatMessageText(
         <span aria-hidden="true">@</span>
         {part.slice(1)}
       </span>,
-    ];
+    );
   });
+
+  return nodes;
 }
