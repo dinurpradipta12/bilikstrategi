@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat/notification-store';
 import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import ThemeToggle from '@/components/theme/ThemeToggle';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -355,6 +356,9 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
             </div>
           )}
         </div>
+
+        {/* Light / dark mode switch */}
+        <ThemeToggle />
 
         {/* Profile Menu Dropdown */}
         <div className="relative">

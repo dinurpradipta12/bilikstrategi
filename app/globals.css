@@ -40,6 +40,245 @@
   --color-danger: #D95858;
 }
 
+/* ─── Application dark theme ────────────────────────────────
+   The product historically uses a light token palette in many
+   page-level Tailwind classes. These semantic overrides keep the
+   existing page structure intact while giving every surface a
+   consistent charcoal theme. */
+html.dark {
+  color-scheme: dark;
+  --bg-main: #171A20;
+  --surface: #20242C;
+  --surface-raised: #282D36;
+  --border: #353C48;
+  --text-primary: #F4F6FA;
+  --text-secondary: #98A2B3;
+  --primary-navy: #1F2733;
+  --accent-coral: #F26B5E;
+  --soft-coral: #3B272B;
+  --soft-navy: #2A3340;
+  --success: #62B58D;
+  --warning: #E9A955;
+  --danger: #EF7373;
+}
+
+html.dark body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+html.dark input:not([type='checkbox']):not([type='radio']),
+html.dark textarea,
+html.dark select {
+  background-color: var(--surface) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+
+html.dark option {
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+html.dark ::placeholder {
+  color: #7F8999;
+  opacity: 1;
+}
+
+/* Catch older page-specific light tokens before applying the semantic exceptions below. */
+html.dark [class*='bg-[#D'],
+html.dark [class*='bg-[#E'],
+html.dark [class*='bg-[#F'],
+html.dark [class*='bg-[#b'] {
+  background-color: var(--surface-raised) !important;
+}
+
+/* Common light surfaces used throughout the existing application. */
+html.dark [class~='bg-[#FFFFFF]'],
+html.dark [class~='bg-white'] {
+  background-color: var(--surface) !important;
+}
+
+html.dark [class~='bg-[#F7F7F8]'] {
+  background-color: var(--bg-main) !important;
+}
+
+html.dark [class~='bg-[#F4F4F5]'],
+html.dark [class~='bg-[#F1F1F3]'],
+html.dark [class~='bg-[#EBEBED]'],
+html.dark [class~='bg-[#E8E8EC]'] {
+  background-color: var(--surface-raised) !important;
+}
+
+html.dark [class~='bg-[#EEF2F7]'],
+html.dark [class~='bg-[#E8F0FA]'],
+html.dark [class~='bg-[#EAF1FB]'] {
+  background-color: #2A3443 !important;
+}
+
+html.dark [class~='bg-[#EEF8F3]'] {
+  background-color: #1E392C !important;
+}
+
+html.dark [class~='bg-[#FFF0ED]'] {
+  background-color: #3B272B !important;
+}
+
+html.dark [class~='bg-[#FEF3D6]'] {
+  background-color: #3D321F !important;
+}
+
+html.dark [class~='bg-[#24324A]'] {
+  background-color: #1F2733 !important;
+}
+
+html.dark [class~='bg-[#1A2536]'] {
+  background-color: #111822 !important;
+}
+
+html.dark [class~='bg-[#24324A]/95'] {
+  background-color: rgb(31 39 51 / 95%) !important;
+}
+
+/* Keep saturated status/action fills as accents in dark mode. */
+html.dark [class~='bg-[#F26B5E]'] { background-color: #C9574E !important; }
+html.dark [class~='bg-[#D95858]'],
+html.dark [class~='bg-[#D95346]'],
+html.dark [class~='bg-[#DD5C51]'],
+html.dark [class~='bg-[#b84343]'] { background-color: #B74747 !important; }
+html.dark [class~='bg-[#E6A23C]'] { background-color: #A87528 !important; }
+html.dark [class~='bg-[#EF4444]'] { background-color: #B74747 !important; }
+html.dark [class~='bg-[#4F9D78]'],
+html.dark [class~='bg-[#10B981]'] { background-color: #3F8667 !important; }
+html.dark [class~='bg-[#3B82F6]'] { background-color: #2E68C4 !important; }
+html.dark [class~='bg-[#7B68EE]'],
+html.dark [class~='bg-[#6C5CE7]'],
+html.dark [class~='bg-[#6852ED]'],
+html.dark [class~='bg-[#6655D2]'] { background-color: #5848C7 !important; }
+
+/* Preserve the product accent colors while improving contrast for text. */
+html.dark [class~='text-[#202124]'],
+html.dark [class~='text-[#24324A]'] {
+  color: var(--text-primary) !important;
+}
+
+html.dark [class~='text-[#737680]'],
+html.dark [class~='text-[#8C9BAE]'] {
+  color: var(--text-secondary) !important;
+}
+
+html.dark [class~='text-[#334155]'] {
+  color: #CBD5E1 !important;
+}
+
+html.dark [class~='text-[#40536F]'],
+html.dark [class~='text-[#64748B]'],
+html.dark [class~='text-[#1E40AF]'],
+html.dark [class~='text-[#1E56B3]'],
+html.dark [class~='text-[#2563EB]'] {
+  color: #AFC0D5 !important;
+}
+
+html.dark [class~='text-[#1D7434]'],
+html.dark [class~='text-[#2F7D58]'],
+html.dark [class~='text-[#317A58]'],
+html.dark [class~='text-[#356D53]'],
+html.dark [class~='text-[#3D8362]'] {
+  color: #8DD0A9 !important;
+}
+
+html.dark [class~='text-[#B5473D]'],
+html.dark [class~='text-[#C22929]'],
+html.dark [class~='text-[#C94D43]'],
+html.dark [class~='text-[#D97706]'] {
+  color: #FF9B90 !important;
+}
+
+html.dark [class~='text-[#6852ED]'],
+html.dark [class~='text-[#6929C4]'],
+html.dark [class~='text-[#9333EA]'] {
+  color: #C4B5FD !important;
+}
+
+html.dark [class~='text-[#1D4ED8]'] {
+  color: #9CC1FF !important;
+}
+
+html.dark [class~='text-[#0369A1]'] {
+  color: #7DD3FC !important;
+}
+
+html.dark [class~='text-[#6D28D9]'] {
+  color: #C4B5FD !important;
+}
+
+/* Light borders/dividers become visible but restrained on charcoal surfaces. */
+html.dark [class~='border-[#E8E8EC]'],
+html.dark [class~='divide-[#E8E8EC'] > :not([hidden]) ~ :not([hidden])],
+html.dark [class~='border-[#E5EAF0]'] {
+  border-color: var(--border) !important;
+}
+
+html.dark [class~='border-[#D4E0EF]'],
+html.dark [class~='border-[#B8D1FF]'] {
+  border-color: #40536B !important;
+}
+
+html.dark [class~='border-[#DDD6FE]'] {
+  border-color: #5B4A90 !important;
+}
+
+html.dark [class*='border-[#D'],
+html.dark [class*='border-[#E'],
+html.dark [class*='border-[#F'] {
+  border-color: var(--border) !important;
+}
+
+html.dark [class~='border-[#F26B5E]'],
+html.dark [class~='border-[#D95858]'],
+html.dark [class~='border-[#E6A23C]'],
+html.dark [class~='border-[#4F9D78]'],
+html.dark [class~='border-[#10B981]'],
+html.dark [class~='border-[#3B82F6]'],
+html.dark [class~='border-[#7B68EE]'] {
+  border-color: #5848C7 !important;
+}
+
+html.dark [class~='border-[#F26B5E]'] { border-color: #C9574E !important; }
+html.dark [class~='border-[#D95858]'] { border-color: #B74747 !important; }
+html.dark [class~='border-[#E6A23C]'] { border-color: #A87528 !important; }
+html.dark [class~='border-[#4F9D78]'],
+html.dark [class~='border-[#10B981]'] { border-color: #3F8667 !important; }
+html.dark [class~='border-[#3B82F6]'] { border-color: #2E68C4 !important; }
+
+html.dark [class~='placeholder-[#737680]']::placeholder {
+  color: #7F8999 !important;
+}
+
+html.dark [class~='ring-white'] {
+  --tw-ring-color: #20242C !important;
+}
+
+html.dark [class~='hover:bg-[#F7F7F8]']:hover {
+  background-color: var(--surface-raised) !important;
+}
+
+html.dark [class~='hover:bg-[#EEF2F7]']:hover {
+  background-color: #2A3340 !important;
+}
+
+html.dark [class~='hover:text-[#202124]']:hover {
+  color: var(--text-primary) !important;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #4A5362;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #687487;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
+    <html lang="id" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <meta name="theme-color" content="#24324A" />
@@ -39,6 +39,11 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try { if (localStorage.getItem('bilik_theme') === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.dataset.theme = 'dark'; document.documentElement.style.colorScheme = 'dark'; } } catch (_) {}`,
+          }}
+        />
       </head>
       <body>
         <Providers>{children}</Providers>
