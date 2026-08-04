@@ -4,24 +4,27 @@ export const runtime = 'edge';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
 import { appRoleToClickUpRole, isSuperuserEmail, normalizeAppRole } from '@/lib/auth/app-role';
+import { normalizePageAccess } from '@/lib/auth/page-access';
 
 async function withAppRole(payload: any) {
   const baseUser = payload?.user || payload || {};
   const email = String(baseUser.email || '').trim().toLowerCase();
   let appRole = normalizeAppRole(baseUser.role);
   let isSuperuser = isSuperuserEmail(email);
+  let pageAccess = normalizePageAccess(undefined);
 
   if (email) {
     try {
       const roleResult = await supabase
         .from('app_user_roles')
-        .select('role,is_superuser,status')
+        .select('role,is_superuser,status,page_access')
         .ilike('email', email)
         .maybeSingle();
 
       if (!roleResult.error && roleResult.data?.status !== 'inactive') {
         appRole = normalizeAppRole(roleResult.data?.role || appRole);
         isSuperuser = isSuperuser || roleResult.data?.is_superuser === true;
+        pageAccess = normalizePageAccess(roleResult.data?.page_access);
       }
     } catch {
       // The app remains usable before the role migration is applied.
@@ -37,6 +40,7 @@ async function withAppRole(payload: any) {
       role: appRoleToClickUpRole(appRole),
       app_role: appRole,
       is_superuser: isSuperuser,
+      page_access: pageAccess,
     },
   };
 }

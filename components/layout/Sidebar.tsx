@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -36,6 +37,7 @@ export default function Sidebar() {
 
   const [chatUnread, setChatUnread] = useState<number>(0);
   const [notifUnread, setNotifUnread] = useState<number>(0);
+  const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
 
   useEffect(() => {
     const isCollapsedSaved = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
@@ -56,6 +58,7 @@ export default function Sidebar() {
       let avatar = '';
       let serverAppRole = '';
       let serverIsSuperuser = false;
+      let resolvedPageAccess = normalizePageAccess(undefined);
 
       const savedUserStr = localStorage.getItem('bilik_current_user');
       if (savedUserStr) {
@@ -76,6 +79,7 @@ export default function Sidebar() {
             email = String(userData.user.email || email);
             serverAppRole = String(userData.user.app_role || '').toLowerCase();
             serverIsSuperuser = userData.user.is_superuser === true;
+            resolvedPageAccess = normalizePageAccess(userData.user.page_access);
             if (userData.user.profilePicture) avatar = String(userData.user.profilePicture);
           }
         }
@@ -100,6 +104,9 @@ export default function Sidebar() {
               if (found && found.role) {
                 resolvedRole = found.role;
               }
+              if (found?.page_access) {
+                resolvedPageAccess = normalizePageAccess(found.page_access);
+              }
             }
           } catch {}
         }
@@ -110,6 +117,11 @@ export default function Sidebar() {
         role: resolvedRole,
         avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
       });
+      setPageAccess(
+        resolvedRole === 'Owner' || resolvedRole === 'Admin'
+          ? normalizePageAccess(undefined)
+          : resolvedPageAccess
+      );
     }
 
     loadClickUpProfile();
@@ -153,22 +165,31 @@ export default function Sidebar() {
     }
   }, [pathname]);
 
-  const navItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Projects', href: '/projects', icon: Briefcase },
-    { name: 'ClickUp Tasks', href: '/tasks', icon: CheckSquare },
-    { name: 'My Tasks', href: '/my-tasks', icon: ListTodo },
-    { name: 'Timeline', href: '/timeline', icon: GanttChartSquare },
-    { name: 'Team Workload', href: '/team', icon: Users },
-    { name: 'Presensi Live', href: '/attendance', icon: Clock },
-    { name: 'Client Listing', href: '/clients', icon: Building2 },
-    { name: 'Asset Management', href: '/assets', icon: FolderArchive },
-    { name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
-    { name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
-    { name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
-    { name: 'Activity Log', href: '/activity-logs', icon: History },
-    { name: 'Settings', href: '/settings', icon: Settings },
+  const navItems: Array<{
+    key: PageAccessKey;
+    name: string;
+    href: string;
+    icon: typeof LayoutDashboard;
+    badge?: number;
+  }> = [
+    { key: 'dashboard', name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { key: 'projects', name: 'Projects', href: '/projects', icon: Briefcase },
+    { key: 'tasks', name: 'ClickUp Tasks', href: '/tasks', icon: CheckSquare },
+    { key: 'my_tasks', name: 'My Tasks', href: '/my-tasks', icon: ListTodo },
+    { key: 'timeline', name: 'Timeline', href: '/timeline', icon: GanttChartSquare },
+    { key: 'team', name: 'Team Workload', href: '/team', icon: Users },
+    { key: 'attendance', name: 'Presensi Live', href: '/attendance', icon: Clock },
+    { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
+    { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
+    { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
+    { key: 'chat', name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
+    { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
+    { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
+    { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
+  const visibleNavItems = navItems.filter(
+    (item) => userProfile.role === 'Owner' || userProfile.role === 'Admin' || pageAccess[item.key]
+  );
 
   return (
     <aside
@@ -208,7 +229,7 @@ export default function Sidebar() {
 
       {/* Navigation Menu */}
       <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
           const Icon = item.icon;
           return (

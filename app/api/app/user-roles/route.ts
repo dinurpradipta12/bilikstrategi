@@ -6,6 +6,7 @@ import {
   isSupabaseAdminConfigured,
   supabaseAdminFetch,
 } from '@/lib/supabase/admin-rest-client';
+import { normalizePageAccess } from '@/lib/auth/page-access';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -91,7 +92,7 @@ export async function GET(req: NextRequest) {
 
     const result = await supabaseRest
       .from('app_user_roles')
-      .select('email,display_name,role,is_superuser,status,updated_at')
+      .select('email,display_name,role,is_superuser,status,page_access,updated_at')
       .order('display_name', { ascending: true });
 
     if (result.error) throw result.error;
@@ -136,7 +137,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const existingResponse = await supabaseAdminFetch(
-      `app_user_roles?select=is_superuser,status&email=eq.${encodeURIComponent(email)}`
+      `app_user_roles?select=is_superuser,status,page_access&email=eq.${encodeURIComponent(email)}`
     );
     if (!existingResponse.ok) {
       return errorResponse(await existingResponse.text(), 'Gagal membaca role pengguna.', 502);
@@ -145,6 +146,9 @@ export async function PUT(req: NextRequest) {
     if (Array.isArray(existingRows) && existingRows[0]?.is_superuser === true) {
       return NextResponse.json({ error: 'Akun superuser utama tidak dapat diubah dari menu ini.' }, { status: 403 });
     }
+
+    const existingPageAccess = Array.isArray(existingRows) ? existingRows[0]?.page_access : undefined;
+    const pageAccess = normalizePageAccess(body.page_access ?? existingPageAccess);
 
     const upsertResponse = await supabaseAdminFetch('app_user_roles?on_conflict=email', {
       method: 'POST',
@@ -157,6 +161,7 @@ export async function PUT(req: NextRequest) {
         role,
         is_superuser: false,
         status: 'active',
+        page_access: pageAccess,
         updated_at: new Date().toISOString(),
       }),
     });
@@ -167,7 +172,10 @@ export async function PUT(req: NextRequest) {
 
     const savedRows = await upsertResponse.json().catch(() => []);
     const savedRole = Array.isArray(savedRows) ? savedRows[0] : savedRows;
-    return NextResponse.json({ success: true, role: savedRole || { email, display_name: displayName, role } });
+    return NextResponse.json({
+      success: true,
+      role: savedRole || { email, display_name: displayName, role, page_access: pageAccess },
+    });
   } catch (error) {
     return errorResponse(error, 'Gagal menyimpan role pengguna. Pastikan migration app_user_roles sudah dijalankan.');
   }

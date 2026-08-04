@@ -10,12 +10,18 @@ import ChatNotificationSound from '@/components/chat/ChatNotificationSound';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
+import {
+  firstAllowedPagePath,
+  normalizePageAccess,
+  pageKeyForPathname,
+} from '@/lib/auth/page-access';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [pageAccessState, setPageAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
   const pathname = usePathname();
   const router = useRouter();
 
@@ -60,12 +66,91 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [pathname, router]);
 
+  useEffect(() => {
+    if (isAuthenticated !== true) {
+      setPageAccessState('checking');
+      return;
+    }
+
+    const pageKey = pageKeyForPathname(pathname);
+    if (!pageKey) {
+      setPageAccessState('allowed');
+      return;
+    }
+
+    let cancelled = false;
+    setPageAccessState('checking');
+
+    fetch('/api/clickup/user', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+
+        // Keep the app usable while the optional page-access migration is not
+        // deployed yet. Once the API returns access data, it becomes the source
+        // of truth for members and clients.
+        if (!data?.user) {
+          setPageAccessState('allowed');
+          return;
+        }
+
+        const role = String(data.user.app_role || '').toLowerCase();
+        const hasFullAccess = data.user.is_superuser === true || role === 'owner' || role === 'admin';
+        const access = normalizePageAccess(data.user.page_access);
+        const allowed = hasFullAccess || access[pageKey] !== false;
+
+        if (allowed) {
+          setPageAccessState('allowed');
+          return;
+        }
+
+        setPageAccessState('denied');
+        const fallback = firstAllowedPagePath(access);
+        if (fallback && fallback !== pathname) {
+          router.replace(fallback);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPageAccessState('allowed');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, pathname, router]);
+
   if (isAuthenticated === false) {
     return (
       <div className="min-h-screen bg-[#24324A] flex items-center justify-center text-white">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-xs font-bold tracking-wide">Mengarahkan ke Halaman Login...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated !== true || pageAccessState === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center text-[#24324A]">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-3 border-[#24324A]/20 border-t-[#F26B5E] rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold tracking-wide">Memeriksa akses halaman...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (pageAccessState === 'denied') {
+    return (
+      <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center text-[#24324A] p-6">
+        <div className="max-w-sm text-center space-y-3">
+          <div className="w-12 h-12 rounded-full bg-[#FFF0ED] text-[#F26B5E] flex items-center justify-center mx-auto text-xl">!</div>
+          <h1 className="text-base font-extrabold">Halaman Tidak Tersedia</h1>
+          <p className="text-xs text-[#737680]">Admin Workspace menyembunyikan halaman ini untuk akun Anda.</p>
         </div>
       </div>
     );

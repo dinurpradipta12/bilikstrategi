@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Search, PlusCircle, CheckSquare, Briefcase, Users, MessageSquare, Settings, X, ArrowRight } from 'lucide-react';
+import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 interface CommandMenuProps {
   isOpen: boolean;
@@ -18,9 +19,23 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   const [tasks, setTasks] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
+  const [userRole, setUserRole] = useState('member');
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/clickup/user', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data?.user) return;
+        const role = String(data.user.app_role || '').toLowerCase();
+        setUserRole(data.user.is_superuser === true ? 'owner' : role);
+        setPageAccess(normalizePageAccess(data.user.page_access));
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -84,6 +99,9 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
 
   if (!isOpen || !mounted) return null;
 
+  const canSeePage = (pageKey: PageAccessKey) =>
+    userRole === 'owner' || userRole === 'admin' || pageAccess[pageKey];
+
   const toSafeString = (value: unknown) => {
     if (typeof value === 'string') return value;
     if (value === null || value === undefined) return '';
@@ -132,46 +150,46 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
             <div>
               <div className="px-3 py-1 text-xs font-semibold text-[#737680] uppercase tracking-wider">Aksi Cepat</div>
               <div className="mt-1 space-y-1">
-                <button
+                {canSeePage('tasks') && <button
                   onClick={() => { onClose(); onOpenCreateTask(); }}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <PlusCircle className="w-4 h-4 text-[#F26B5E] mr-3" />
                   <span className="font-medium text-[#24324A]">Buat Task Baru</span>
                   <span className="ml-auto text-xs text-[#737680]">Shortcut</span>
-                </button>
-                <button
+                </button>}
+                {canSeePage('my_tasks') && <button
                   onClick={() => handleNavigate('/my-tasks')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <CheckSquare className="w-4 h-4 text-[#24324A] mr-3" />
                   <span>Buka My Tasks Saya</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
-                </button>
-                <button
+                </button>}
+                {canSeePage('chat') && <button
                   onClick={() => handleNavigate('/chat')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <MessageSquare className="w-4 h-4 text-[#24324A] mr-3" />
                   <span>Buka Agency Chat</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
-                </button>
-                <button
+                </button>}
+                {canSeePage('team') && <button
                   onClick={() => handleNavigate('/team')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <Users className="w-4 h-4 text-[#24324A] mr-3" />
                   <span>Lihat Team Workload</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
-                </button>
-                <button
+                </button>}
+                {canSeePage('settings') && <button
                   onClick={() => handleNavigate('/settings')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <Settings className="w-4 h-4 text-[#737680] mr-3" />
                   <span>Pengaturan ClickUp Integration</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
-                </button>
+                </button>}
               </div>
             </div>
           )}
@@ -179,7 +197,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
           {/* Search Results */}
           {query && (
             <>
-              {filteredTasks.length > 0 && (
+              {canSeePage('tasks') && filteredTasks.length > 0 && (
                 <div>
                   <div className="px-3 py-1 text-xs font-semibold text-[#737680] uppercase tracking-wider">Task ({filteredTasks.length})</div>
                   {filteredTasks.map((t) => (
@@ -196,7 +214,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 </div>
               )}
 
-              {filteredProjects.length > 0 && (
+              {canSeePage('projects') && filteredProjects.length > 0 && (
                 <div>
                   <div className="px-3 py-1 text-xs font-semibold text-[#737680] uppercase tracking-wider">Project ({filteredProjects.length})</div>
                   {filteredProjects.map((p) => (
@@ -213,7 +231,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 </div>
               )}
 
-              {filteredClients.length > 0 && (
+              {canSeePage('clients') && filteredClients.length > 0 && (
                 <div>
                   <div className="px-3 py-1 text-xs font-semibold text-[#737680] uppercase tracking-wider">Client ({filteredClients.length})</div>
                   {filteredClients.map((c) => (
@@ -230,7 +248,9 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 </div>
               )}
 
-              {filteredTasks.length === 0 && filteredProjects.length === 0 && filteredClients.length === 0 && (
+              {(!canSeePage('tasks') || filteredTasks.length === 0) &&
+                (!canSeePage('projects') || filteredProjects.length === 0) &&
+                (!canSeePage('clients') || filteredClients.length === 0) && (
                 <div className="py-8 text-center text-sm text-[#737680]">
                   Tidak ada hasil yang cocok dengan &quot;{query}&quot;.
                 </div>

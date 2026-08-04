@@ -9,10 +9,31 @@ import {
   readChatUnreadMap,
   UNREAD_BADGE_EVENT,
 } from '@/lib/chat/notification-store';
+import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const [chatUnread, setChatUnread] = useState(0);
+  const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
+  const [userRole, setUserRole] = useState('member');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch('/api/clickup/user', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled || !data?.user) return;
+        const role = String(data.user.app_role || '').toLowerCase();
+        setUserRole(data.user.is_superuser === true ? 'owner' : role);
+        setPageAccess(normalizePageAccess(data.user.page_access));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const syncUnreadCount = () => {
@@ -44,9 +65,17 @@ export default function MobileBottomNav() {
     };
   }, []);
 
-  const navItems = [
+  const navItems: Array<{
+    id: string;
+    accessKey: PageAccessKey;
+    label: string;
+    href: string;
+    icon: typeof MessageSquare;
+    activeColor: string;
+  }> = [
     {
       id: 'chat',
+      accessKey: 'chat',
       label: 'Agency Chat',
       href: '/chat',
       icon: MessageSquare,
@@ -54,6 +83,7 @@ export default function MobileBottomNav() {
     },
     {
       id: 'attendance',
+      accessKey: 'attendance',
       label: 'Presensi',
       href: '/attendance',
       icon: Clock,
@@ -61,6 +91,7 @@ export default function MobileBottomNav() {
     },
     {
       id: 'tasks',
+      accessKey: 'tasks',
       label: 'Task',
       href: '/tasks',
       icon: CheckSquare,
@@ -68,17 +99,21 @@ export default function MobileBottomNav() {
     },
     {
       id: 'projects',
+      accessKey: 'projects',
       label: 'Project',
       href: '/projects',
       icon: FolderKanban,
       activeColor: '#3B82F6',
     },
   ];
+  const visibleNavItems = navItems.filter(
+    (item) => userRole === 'owner' || userRole === 'admin' || pageAccess[item.accessKey]
+  );
 
   return (
     <div className="fixed bottom-4 left-4 right-4 z-[90] md:hidden pointer-events-auto">
       <nav className="bg-[#24324A]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl px-2 py-2 flex items-center justify-around">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 

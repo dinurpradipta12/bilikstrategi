@@ -30,8 +30,11 @@ import {
   UserPlus,
   CalendarDays,
   SlidersHorizontal,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { normalizePageAccess, PAGE_ACCESS_OPTIONS, type PageAccessMap } from '@/lib/auth/page-access';
 
 interface TeamMemberWorkload {
   id: string;
@@ -41,6 +44,7 @@ interface TeamMemberWorkload {
   custom_role?: string;
   division?: string;
   phone?: string;
+  page_access?: PageAccessMap;
   avatar_url: string;
   assigned_tasks_count: number;
   overdue_tasks_count: number;
@@ -70,6 +74,7 @@ export default function TeamWorkloadPage() {
   const [formPhone, setFormPhone] = useState('');
   const [formCapacity, setFormCapacity] = useState(40);
   const [formIsAdmin, setFormIsAdmin] = useState(false);
+  const [formPageAccess, setFormPageAccess] = useState<PageAccessMap>(normalizePageAccess(undefined));
   const [showEditMemberModal, setShowEditMemberModal] = useState(false);
   const [savingMemberInfo, setSavingMemberInfo] = useState(false);
   const [memberSaveError, setMemberSaveError] = useState('');
@@ -331,6 +336,7 @@ export default function TeamWorkloadPage() {
     setFormEmail(member.email);
     setFormPhone(member.phone || '+62 812-3456-7890');
     setFormCapacity(member.capacity_hours);
+    setFormPageAccess(normalizePageAccess(member.page_access));
 
     const isAlreadyAdmin =
       (member.role || '').toLowerCase().includes('admin') ||
@@ -367,6 +373,7 @@ export default function TeamWorkloadPage() {
           display_name: editingMember.full_name,
           role: formIsAdmin ? 'admin' : 'member',
           is_admin: formIsAdmin,
+          page_access: formPageAccess,
         }),
       });
       const roleData = await roleResponse.json().catch(() => ({}));
@@ -390,6 +397,7 @@ export default function TeamWorkloadPage() {
         phone: formPhone,
         capacity: formCapacity,
         is_admin: formIsAdmin,
+        page_access: formPageAccess,
       };
 
       customInfoMap[editingMember.full_name] = updatedInfo;
@@ -417,6 +425,7 @@ export default function TeamWorkloadPage() {
         division: formDivision,
         capacity: formCapacity,
         is_admin: formIsAdmin,
+        page_access: formPageAccess,
       };
 
       if (memberIdx >= 0) {
@@ -448,6 +457,7 @@ export default function TeamWorkloadPage() {
               email: targetEmail,
               phone: formPhone,
               capacity_hours: formCapacity,
+              page_access: formPageAccess,
             };
           }
           return m;
@@ -456,7 +466,11 @@ export default function TeamWorkloadPage() {
 
       window.dispatchEvent(new Event('storage'));
       window.dispatchEvent(new CustomEvent('bilik-role-updated', {
-        detail: { email: targetEmail, role: formIsAdmin ? 'admin' : 'member' },
+        detail: {
+          email: targetEmail,
+          role: formIsAdmin ? 'admin' : 'member',
+          page_access: formPageAccess,
+        },
       }));
       setShowEditMemberModal(false);
     } catch (error: any) {
@@ -853,6 +867,7 @@ export default function TeamWorkloadPage() {
           custom_role: cInfo.custom_role || defaultCustomRole,
           division: cInfo.division || 'Agency Team',
           phone: cInfo.phone || '+62 812-3456-7890',
+          page_access: normalizePageAccess(persistedRole?.page_access || cInfo.page_access),
           avatar_url: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=24324A&color=fff`,
           assigned_tasks_count: activeTasks.length,
           overdue_tasks_count: overdueTasks.length,
@@ -1901,6 +1916,63 @@ export default function TeamWorkloadPage() {
                   />
                   <div className="w-11 h-6 bg-[#E8E8EC] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#4F9D78]"></div>
                 </label>
+              </div>
+
+              <div className="p-3.5 bg-white border border-[#E8E8EC] rounded-xl space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 font-extrabold text-[#24324A]">
+                      <Eye className="w-4 h-4 text-[#3B82F6]" />
+                      <span>Page yang Bisa Dilihat</span>
+                    </div>
+                    <p className="text-[10px] text-[#737680] leading-snug mt-0.5">
+                      Matikan halaman tertentu agar tidak muncul di menu dan tidak bisa dibuka lewat URL.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold text-[#737680] whitespace-nowrap">
+                    {formIsAdmin ? 'Full Access' : Object.values(formPageAccess).filter(Boolean).length + '/' + PAGE_ACCESS_OPTIONS.length}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1">
+                  {PAGE_ACCESS_OPTIONS.map((page) => {
+                    const isEnabled = formIsAdmin || formPageAccess[page.key] !== false;
+                    return (
+                      <label
+                        key={page.key}
+                        className={[
+                          'flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[11px] font-semibold transition-colors',
+                          formIsAdmin
+                            ? 'border-[#E8E8EC] bg-[#F7F7F8] text-[#737680] cursor-not-allowed'
+                            : isEnabled
+                              ? 'border-[#4F9D78]/30 bg-[#4F9D78]/5 text-[#24324A] cursor-pointer'
+                              : 'border-[#E8E8EC] bg-white text-[#737680] cursor-pointer',
+                        ].join(' ')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isEnabled}
+                          disabled={formIsAdmin}
+                          onChange={(event) => {
+                            setFormPageAccess((current) => ({
+                              ...current,
+                              [page.key]: event.target.checked,
+                            }));
+                          }}
+                          className="accent-[#4F9D78]"
+                        />
+                        {isEnabled ? <Eye className="w-3.5 h-3.5 text-[#4F9D78]" /> : <EyeOff className="w-3.5 h-3.5 text-[#737680]" />}
+                        <span className="truncate">{page.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {formIsAdmin && (
+                  <p className="text-[10px] text-[#4F9D78] font-semibold">
+                    Admin / Owner selalu mendapatkan semua halaman. Matikan Full Access untuk mengatur akses satu per satu.
+                  </p>
+                )}
               </div>
 
               {memberSaveError && (
