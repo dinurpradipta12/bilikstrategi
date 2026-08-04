@@ -35,10 +35,12 @@ function trimUrlPunctuation(value: string) {
 }
 
 function renderWithLineBreaks(value: string, keyPrefix: string) {
-  return value.split('\n').flatMap((line, index) => [
-    index > 0 ? <br key={`${keyPrefix}-break-${index}`} /> : null,
-    line,
-  ]);
+  return value.split('\n').map((line, index) => (
+    <React.Fragment key={`${keyPrefix}-line-${index}`}>
+      {index > 0 && <br />}
+      {line}
+    </React.Fragment>
+  ));
 }
 
 function renderLinks(value: string, own: boolean, keyPrefix: string) {
