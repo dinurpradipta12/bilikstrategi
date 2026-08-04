@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MessageSquare, Send, Hash, List, RefreshCw,
   MessageCircle, X, Reply, ChevronRight,
-  User, Bell, AtSign, Check, CheckCheck, PhoneCall,
+  User, Bell, AtSign, Check, CheckCheck, PhoneCall, Image as ImageIcon, Paperclip,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import SyncUpButton from '@/components/syncup/SyncUpButton';
@@ -203,6 +203,8 @@ export default function ChatPage() {
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Toast
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -751,6 +753,92 @@ export default function ChatPage() {
     replies: replyMap[msg.id] ?? msg.replies ?? [],
     reply_count: (replyMap[msg.id]?.length ?? 0) || msg.reply_count || 0,
   });
+
+  // ── Upload Image ─────────────────────────────────────────────────────────
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Mohon pilih berkas foto/gambar (JPG, PNG, GIF, WebP, SVG).');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      let imageUrl = '';
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+      // 1. Upload to Supabase Storage 'chat-attachments'
+      const { data, error } = await supabase.storage.from('chat-attachments').upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+      if (!error && data?.path) {
+        const { data: publicUrlData } = supabase.storage.from('chat-attachments').getPublicUrl(data.path);
+        imageUrl = publicUrlData.publicUrl;
+      } else {
+        // 2. Fallback: Base64 data URL
+        imageUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      const imageMarkdown = `![${file.name}](${imageUrl})`;
+      const tempId = `msg-${Date.now()}`;
+      const tempMsg: ChatMessageItem = {
+        id: tempId,
+        channel_id: activeChannelId,
+        user_id: String(currentUser.id),
+        user_name: currentUser.username,
+        user_avatar: currentUser.avatar,
+        text: imageMarkdown,
+        created_at: new Date().toISOString(),
+        parent_id: null,
+        localStatus: 'sending',
+        isOptimistic: true,
+      };
+
+      setRawMessages((prev) => {
+        const next = [...prev, tempMsg];
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(chatCacheKey(activeChannelId), JSON.stringify(next));
+        }
+        return next;
+      });
+      setStatusMap((prev) => ({ ...prev, [tempId]: 'sending' }));
+      scrollToBottom(true);
+
+      await fetch('/api/clickup/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: activeChannelId,
+          text: imageMarkdown,
+          sender: {
+            id: currentUser.id,
+            name: currentUser.username,
+            email: currentUser.email,
+            avatar: currentUser.avatar,
+          },
+          clientMessageId: tempId,
+        }),
+      });
+
+      setStatusMap((prev) => ({ ...prev, [tempId]: 'sent' }));
+      advanceStatusToRead(tempId);
+      await fetchActiveMessages(activeChannelId, true);
+    } catch (err) {
+      console.error('[Chat] Gagal mengunggah gambar:', err);
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // ── Send main message ─────────────────────────────────────────────────────
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -1345,6 +1433,29 @@ export default function ChatPage() {
 
             <form onSubmit={handleSendMessage}
               className="px-4 py-3 border-t border-[#E8E8EC] flex items-center gap-2 bg-[#F7F7F8]">
+              
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="p-2.5 bg-white border border-[#E8E8EC] text-[#737680] hover:text-[#24324A] hover:bg-[#F0EAFD] rounded-xl transition-colors cursor-pointer flex items-center justify-center flex-shrink-0"
+                title="Kirim Foto / Gambar"
+              >
+                {uploadingImage ? (
+                  <RefreshCw className="w-4 h-4 text-[#7B68EE] animate-spin" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-[#7B68EE]" />
+                )}
+              </button>
+
               <input
                 ref={inputRef}
                 type="text"

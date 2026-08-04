@@ -258,6 +258,25 @@ function getMemberFromMap(memberMap: Map<string, Participant>, message: any, aut
   return null;
 }
 
+function extractAttachmentsText(item: any): string {
+  if (!item) return '';
+  const urls: string[] = [];
+  if (Array.isArray(item.attachments)) {
+    item.attachments.forEach((att: any) => {
+      const url = att?.url || att?.thumbnail_large || att?.thumbnail_small;
+      if (url) urls.push(url);
+    });
+  }
+  if (Array.isArray(item.comment)) {
+    item.comment.forEach((part: any) => {
+      const url = part?.attachment?.url || part?.attachment?.thumbnail_large;
+      if (url) urls.push(url);
+    });
+  }
+  if (urls.length === 0) return '';
+  return '\n' + urls.map((u) => `![Gambar](${u})`).join('\n');
+}
+
 function formatChatApiMessage(
   message: any,
   channelId: string,
@@ -281,13 +300,15 @@ function formatChatApiMessage(
     fallbackParticipant?.avatar ||
     fallbackAvatar(userName);
 
+  const fullText = (parsed.text || '') + extractAttachmentsText(message);
+
   return {
     id: String(message.id || `msg-${parsedTimestamp}`),
     channel_id: channelId,
     user_id: String(appSender?.id || mappedMember?.id || author.id || author.user_id || fallbackParticipant?.id || ''),
     user_name: userName,
     user_avatar: userAvatar,
-    text: parsed.text,
+    text: fullText,
     created_at: new Date(parsedTimestamp).toISOString(),
     parent_id: null,
     reply_count: 0,
@@ -305,13 +326,15 @@ function formatClickUpComment(c: any, channelId: string) {
   const userName = appSender?.name || clickUpName;
   const userAvatar = appSender?.avatar || c.user?.profilePicture || fallbackAvatar(userName);
 
+  const fullText = (parsed.text || '') + extractAttachmentsText(c);
+
   return {
     id: c.id,
     channel_id: channelId,
     user_id: String(appSender?.id || c.user?.id || ''),
     user_name: userName,
     user_avatar: userAvatar,
-    text: parsed.text,
+    text: fullText,
     created_at: new Date(parsedTimestamp).toISOString(),
     parent_id: null,
     reply_count: 0,

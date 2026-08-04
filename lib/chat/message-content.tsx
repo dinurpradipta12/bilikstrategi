@@ -43,9 +43,84 @@ function renderWithLineBreaks(value: string, keyPrefix: string) {
   ));
 }
 
+function isImageUrl(url: string) {
+  if (!url) return false;
+  if (url.startsWith('data:image/')) return true;
+  const clean = url.toLowerCase().split('?')[0];
+  if (
+    clean.endsWith('.png') ||
+    clean.endsWith('.jpg') ||
+    clean.endsWith('.jpeg') ||
+    clean.endsWith('.gif') ||
+    clean.endsWith('.webp') ||
+    clean.endsWith('.svg') ||
+    clean.includes('attachments.clickup.com') ||
+    clean.includes('supabase.co/storage')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function renderImagePreview(src: string, alt: string, own: boolean, key: string) {
+  const fileName = alt || src.split('/').pop()?.split('?')[0] || 'Gambar';
+  return (
+    <div key={key} className="my-2 max-w-xs md:max-w-sm rounded-xl overflow-hidden border border-[#E8E8EC] shadow-sm bg-black/5 group/img relative">
+      <a href={src} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={fileName}
+          className="w-full max-h-72 object-contain bg-neutral-900/40 rounded-t-xl transition-transform duration-200 group-hover/img:scale-[1.01] cursor-pointer"
+          loading="lazy"
+        />
+      </a>
+      <div className="p-2 bg-[#1E293B] text-white text-[11px] flex items-center justify-between gap-2 backdrop-blur-xs">
+        <span className="truncate max-w-[180px] font-medium text-neutral-200">{fileName}</span>
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={(e) => e.stopPropagation()}
+          className="text-xs font-bold text-blue-300 hover:text-blue-100 underline decoration-1 underline-offset-2 flex-shrink-0"
+        >
+          Buka Full ↗
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function renderLinks(value: string, own: boolean, keyPrefix: string) {
   if (!value) return [];
 
+  // 1. Check markdown image pattern: ![alt](url)
+  const markdownImgRegex = /!\[([^\]]*)\]\(((?:https?:\/\/|data:image\/)[^\s)]+)\)/gi;
+  const mdMatches = Array.from(value.matchAll(markdownImgRegex));
+
+  if (mdMatches.length > 0) {
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+    mdMatches.forEach((match, idx) => {
+      const start = match.index ?? 0;
+      const alt = match[1] || 'Gambar';
+      const imgUrl = match[2];
+
+      if (start > cursor) {
+        nodes.push(...renderLinks(value.slice(cursor, start), own, `${keyPrefix}-premd-${idx}`));
+      }
+
+      nodes.push(renderImagePreview(imgUrl, alt, own, `${keyPrefix}-mdimg-${idx}`));
+      cursor = start + match[0].length;
+    });
+
+    if (cursor < value.length) {
+      nodes.push(...renderLinks(value.slice(cursor), own, `${keyPrefix}-postmd`));
+    }
+    return nodes;
+  }
+
+  // 2. Standard URL pattern matching
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
   let linkIndex = 0;
@@ -62,22 +137,29 @@ function renderLinks(value: string, own: boolean, keyPrefix: string) {
 
     nodes.push(...renderWithLineBreaks(value.slice(cursor, start), `${keyPrefix}-text-${linkIndex}`));
     const href = /^(?:https?:\/\/)/i.test(url) ? url : `https://${url}`;
-    nodes.push(
-      <a
-        key={`${keyPrefix}-link-${linkIndex}`}
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-        onClick={(event) => event.stopPropagation()}
-        className={`font-semibold underline decoration-1 underline-offset-2 break-all transition-colors ${
-          own
-            ? 'text-[#1D4ED8] decoration-[#93C5FD] hover:text-[#1E40AF]'
-            : 'text-[#0369A1] decoration-[#7DD3FC] hover:text-[#075985]'
-        }`}
-      >
-        {url}
-      </a>,
-    );
+
+    if (isImageUrl(href)) {
+      const fileName = url.split('/').pop()?.split('?')[0] || 'Gambar';
+      nodes.push(renderImagePreview(href, fileName, own, `${keyPrefix}-img-${linkIndex}`));
+    } else {
+      nodes.push(
+        <a
+          key={`${keyPrefix}-link-${linkIndex}`}
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={(event) => event.stopPropagation()}
+          className={`font-semibold underline decoration-1 underline-offset-2 break-all transition-colors ${
+            own
+              ? 'text-[#1D4ED8] decoration-[#93C5FD] hover:text-[#1E40AF]'
+              : 'text-[#0369A1] decoration-[#7DD3FC] hover:text-[#075985]'
+          }`}
+        >
+          {url}
+        </a>,
+      );
+    }
+
     if (trailing) nodes.push(...renderWithLineBreaks(trailing, `${keyPrefix}-trailing-${linkIndex}`));
 
     cursor = start + raw.length;
