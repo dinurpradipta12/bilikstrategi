@@ -84,10 +84,22 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
 
   if (!isOpen || !mounted) return null;
 
-  const normalizedQuery = query.toLowerCase();
-  const filteredTasks = tasks.filter((t) => (t.task_name || t.name || '').toLowerCase().includes(normalizedQuery));
-  const filteredProjects = projects.filter((p) => (p.name || '').toLowerCase().includes(normalizedQuery));
-  const filteredClients = clients.filter((c) => (c.company_name || c.name || '').toLowerCase().includes(normalizedQuery));
+  const toSafeString = (value: unknown) => {
+    if (typeof value === 'string') return value;
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const key of ['name', 'username', 'email', 'value', 'label']) {
+        if (typeof record[key] === 'string') return record[key] as string;
+      }
+    }
+    return String(value);
+  };
+
+  const normalizedQuery = toSafeString(query).toLowerCase();
+  const filteredTasks = tasks.filter((t) => toSafeString(t.task_name || t.name).toLowerCase().includes(normalizedQuery));
+  const filteredProjects = projects.filter((p) => toSafeString(p.name).toLowerCase().includes(normalizedQuery));
+  const filteredClients = clients.filter((c) => toSafeString(c.company_name || c.name).toLowerCase().includes(normalizedQuery));
 
   const handleNavigate = (path: string) => {
     router.push(path);

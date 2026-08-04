@@ -48,6 +48,20 @@ interface TeamMember {
   capacity: number;
 }
 
+function toSafeString(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of ['name', 'username', 'email', 'value', 'label']) {
+      if (typeof record[key] === 'string') return record[key] as string;
+    }
+  }
+
+  return String(value);
+}
+
 export default function DashboardPage() {
   const [dashboardTab, setDashboardTab] = useState<'team' | 'personal'>('team');
   const [projects, setProjects] = useState<AgencyProject[]>([]);
@@ -67,8 +81,8 @@ export default function DashboardPage() {
   });
 
   const checkIsAdminOrOwner = (userEmail: string, defaultRole: string) => {
-    const emailLower = (userEmail || '').toLowerCase().trim();
-    const roleLower = (defaultRole || '').toLowerCase().trim();
+    const emailLower = toSafeString(userEmail).toLowerCase().trim();
+    const roleLower = toSafeString(defaultRole).toLowerCase().trim();
 
     // The server-resolved app role is authoritative. Do not let a stale
     // localStorage member record downgrade or upgrade this account.
@@ -101,7 +115,7 @@ export default function DashboardPage() {
       try {
         const parsed = JSON.parse(storeStr);
         Object.keys(parsed).forEach((key) => {
-          sessionsMap[key.toLowerCase()] = parsed[key];
+          sessionsMap[toSafeString(key).toLowerCase()] = parsed[key];
         });
       } catch {}
     }
@@ -110,7 +124,7 @@ export default function DashboardPage() {
     if (activeStr) {
       try {
         const parsed = JSON.parse(activeStr);
-        const userName = parsed.userName || parsed.user_name;
+        const userName = toSafeString(parsed.userName || parsed.user_name);
         const timestamp = Number(parsed.timestamp || parsed.checkInTimestamp || 0);
         if (userName && timestamp) {
           sessionsMap[userName.toLowerCase()] = {
@@ -136,8 +150,9 @@ export default function DashboardPage() {
         const rows = await res.json();
         if (Array.isArray(rows)) {
           rows.forEach((r: any) => {
-            if (r.user_name) {
-              sessionsMap[r.user_name.toLowerCase()] = {
+            const userName = toSafeString(r.user_name);
+            if (userName) {
+              sessionsMap[userName.toLowerCase()] = {
                 checkInTimestamp: Number(r.check_in_timestamp || Date.now()),
                 project_name: r.project_name || r.selected_project,
                 isPaused: r.is_paused === true,
@@ -173,9 +188,9 @@ export default function DashboardPage() {
         const logs = await res.json();
         if (Array.isArray(logs)) {
           logs.forEach((log: any) => {
-            const userName = log.user_name;
-            const dayName = log.day_name;
-            const dateStr = log.date;
+            const userName = toSafeString(log.user_name);
+            const dayName = toSafeString(log.day_name);
+            const dateStr = toSafeString(log.date);
             if (userName) {
               if (!recapMap[userName]) recapMap[userName] = {};
               if (dateStr) {
@@ -231,7 +246,7 @@ export default function DashboardPage() {
   }, []);
 
   const getMemberOnlineTime = (memberName: string) => {
-    const mName = memberName.toLowerCase().trim();
+    const mName = toSafeString(memberName).toLowerCase().trim();
     const sessionKey = Object.keys(activeSessions).find(
       (k) => k === mName || mName.includes(k) || k.includes(mName)
     );
@@ -250,14 +265,14 @@ export default function DashboardPage() {
   };
 
   const getMemberTotalHours = (memberName: string, memberEmail?: string) => {
-    const mName = memberName.toLowerCase().trim();
-    const mEmail = (memberEmail || '').toLowerCase().trim();
+    const mName = toSafeString(memberName).toLowerCase().trim();
+    const mEmail = toSafeString(memberEmail).toLowerCase().trim();
 
     let totalReg = 0;
     let totalOT = 0;
 
     Object.keys(timesheetRecap).forEach((key) => {
-      const kLower = key.toLowerCase().trim();
+      const kLower = toSafeString(key).toLowerCase().trim();
       if (kLower === mName || mName.includes(kLower) || kLower.includes(mName) || (mEmail && kLower.includes(mEmail.split('@')[0]))) {
         const userDays = timesheetRecap[key];
         Object.keys(userDays).forEach((dayKey) => {
@@ -285,8 +300,8 @@ export default function DashboardPage() {
     }
 
     const applyUserProfile = (u: any) => {
-      const email = String(u?.email || '').trim();
-      const username = u?.username || 'Bilik Strategi';
+      const email = toSafeString(u?.email).trim();
+      const username = toSafeString(u?.username, 'Bilik Strategi');
       const isSuperOwner = u?.is_superuser === true || isSuperuserEmail(email);
       const appRole = String(u?.app_role || '').toLowerCase();
       const role = isSuperOwner
@@ -386,9 +401,13 @@ export default function DashboardPage() {
 
       // Map team members with task hours
       const mappedMembers: TeamMember[] = liveMembers.map((m: any) => {
-        const name = m.username || (m.email ? m.email.split('@')[0] : 'Member');
+        const memberUsername = toSafeString(m.username);
+        const memberEmail = toSafeString(m.email);
+        const name = memberUsername || (memberEmail ? memberEmail.split('@')[0] : 'Member');
         const assignedTasks = liveTasks.filter((t: AgencyTask) =>
-          t.assignee_names?.some((an: string) => an.toLowerCase().includes(name.toLowerCase()))
+          t.assignee_names?.some((an: string) =>
+            toSafeString(an).toLowerCase().includes(toSafeString(name).toLowerCase())
+          )
         );
         const hoursTracked = assignedTasks.reduce((acc: number, t: AgencyTask) => acc + (t.time_tracked_hours || 4), 0);
         return {
@@ -434,7 +453,9 @@ export default function DashboardPage() {
       selectedAssignee === 'all' ||
       t.assignee_names?.some((an) => {
         const member = teamMembers.find((m) => m.id === selectedAssignee);
-        return member ? an.toLowerCase().includes(member.name.toLowerCase()) : false;
+        return member
+          ? toSafeString(an).toLowerCase().includes(toSafeString(member.name).toLowerCase())
+          : false;
       });
     return matchesProject && matchesAssignee;
   });
@@ -497,8 +518,8 @@ export default function DashboardPage() {
   // Personal Tasks & Projects Filtered for currentUser
   const myTasks = tasks.filter((t) =>
     t.assignee_names?.some((name) =>
-      name.toLowerCase().includes(currentUser.username.toLowerCase()) ||
-      currentUser.username.toLowerCase().includes(name.toLowerCase())
+      toSafeString(name).toLowerCase().includes(toSafeString(currentUser.username).toLowerCase()) ||
+      toSafeString(currentUser.username).toLowerCase().includes(toSafeString(name).toLowerCase())
     )
   );
 
@@ -509,7 +530,7 @@ export default function DashboardPage() {
   const myProjects = projects.filter((p) => {
     return (
       myTasks.some((t) => t.project_id === p.id || t.project_name === p.name) ||
-      ((p as any).owner_name && (p as any).owner_name.toLowerCase().includes(currentUser.username.toLowerCase())) ||
+      (toSafeString((p as any).owner_name).toLowerCase().includes(toSafeString(currentUser.username).toLowerCase())) ||
       projects.length <= 3
     );
   });
