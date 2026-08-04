@@ -1256,7 +1256,7 @@ export default function AttendancePage() {
   const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.role);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12 relative">
+    <div className="space-y-6 animate-fade-in pb-12 relative">
       {/* Title Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
         <div>
