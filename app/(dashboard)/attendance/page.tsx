@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -27,9 +27,20 @@ import {
   Users,
   Activity,
   BarChart3,
+  Save,
+  Settings2,
+  Check,
+  Loader2,
+  MessageSquare,
+  Ban,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import {
+  type AttendanceAccessRequest,
+  type AttendanceSchedule,
+  type WorkDaySchedule,
+} from '@/lib/attendance/schedule';
 
 export interface AttendanceRecord {
   id: string;
@@ -123,6 +134,14 @@ export default function AttendancePage() {
   const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
   const [showAdminResetModal, setShowAdminResetModal] = useState<boolean>(false);
 
+  // Weekly work schedule and holiday access approval.
+  const [workSchedule, setWorkSchedule] = useState<AttendanceSchedule | null>(null);
+  const [scheduleStorageReady, setScheduleStorageReady] = useState<boolean>(true);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
+  const [scheduleSaving, setScheduleSaving] = useState<boolean>(false);
+  const [scheduleMessage, setScheduleMessage] = useState<string>('');
+  const [accessRequests, setAccessRequests] = useState<AttendanceAccessRequest[]>([]);
+
   // Helper function to strictly check if user is Admin or Owner
   const checkIsAdminOrOwner = (userEmail?: string, userRole?: string): boolean => {
     const emailClean = (userEmail || '').toLowerCase().trim();
@@ -174,6 +193,76 @@ export default function AttendancePage() {
     project: isCheckedIn ? selectedProject : undefined,
     statusText: isCheckedIn ? (isPaused ? 'Paused / Dijeda' : 'Online & Bekerja') : 'Belum Check-In',
   });
+
+  const loadWorkSchedule = useCallback(async () => {
+    try {
+      const response = await fetch('/api/attendance/schedule?include_requests=1', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal memuat jadwal kerja.');
+
+      if (data.schedule) setWorkSchedule(data.schedule as AttendanceSchedule);
+      setScheduleStorageReady(data.storage_ready !== false);
+      if (Array.isArray(data.requests)) setAccessRequests(data.requests as AttendanceAccessRequest[]);
+      setScheduleMessage('');
+    } catch (error) {
+      setScheduleMessage(error instanceof Error ? error.message : 'Gagal memuat jadwal kerja.');
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, []);
+
+  const updateScheduleDay = (day: number, changes: Partial<WorkDaySchedule>) => {
+    setWorkSchedule((previous) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        days: previous.days.map((item) => (item.day === day ? { ...item, ...changes } : item)),
+      };
+    });
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!workSchedule || !checkIsAdminOrOwner(currentUser.email, currentUser.role)) return;
+
+    setScheduleSaving(true);
+    setScheduleMessage('');
+    try {
+      const response = await fetch('/api/attendance/schedule', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timezone: workSchedule.timezone,
+          days: workSchedule.days,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal menyimpan jadwal kerja.');
+      if (data.schedule) setWorkSchedule(data.schedule as AttendanceSchedule);
+      setScheduleStorageReady(true);
+      setScheduleMessage('Jadwal hari dan jam kerja berhasil disimpan.');
+    } catch (error) {
+      setScheduleMessage(error instanceof Error ? error.message : 'Gagal menyimpan jadwal kerja.');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleReviewAccessRequest = async (requestId: string, status: 'approved' | 'rejected') => {
+    setScheduleMessage('');
+    try {
+      const response = await fetch('/api/attendance/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'review_request', request_id: requestId, status }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal memproses permintaan izin.');
+      setAccessRequests((previous) => previous.filter((request) => request.id !== requestId));
+      setScheduleMessage(status === 'approved' ? 'Permintaan izin disetujui.' : 'Permintaan izin ditolak.');
+    } catch (error) {
+      setScheduleMessage(error instanceof Error ? error.message : 'Gagal memproses permintaan izin.');
+    }
+  };
 
   // 1. Fetch User Profile, Projects, & Team Members on Mount
   useEffect(() => {
@@ -337,6 +426,13 @@ export default function AttendancePage() {
 
     loadUserAndData();
   }, []);
+
+  // Keep the schedule and pending holiday requests current for every open tab.
+  useEffect(() => {
+    loadWorkSchedule();
+    const interval = window.setInterval(loadWorkSchedule, 10000);
+    return () => window.clearInterval(interval);
+  }, [loadWorkSchedule]);
 
   // Fetch all users history for Admin view
   const fetchAllUsersHistory = async () => {
@@ -1254,6 +1350,7 @@ export default function AttendancePage() {
   // Compute active team count
   const onlineCount = teamStatusList.filter((m) => m.isOnline).length;
   const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.role);
+  const currentDayIndex = new Date().getDay();
 
   return (
     <div className="space-y-6 animate-fade-in pb-12 relative">
@@ -1328,6 +1425,182 @@ export default function AttendancePage() {
           </button>
         </div>
       )}
+
+      {/* Weekly Work Schedule: full-width control above the live attendance cards */}
+      <section className="w-full bg-white border border-[#E8E8EC] rounded-2xl p-5 md:p-6 shadow-2xs space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 border-b border-[#E8E8EC] pb-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#EEF2F7] text-[#24324A] flex items-center justify-center flex-shrink-0">
+              <Settings2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-extrabold text-[#24324A]">Hari Kerja & Jam Kerja</h2>
+                {isAdminOrOwner && (
+                  <span className="px-2 py-0.5 rounded-full bg-[#24324A] text-white text-[9px] font-extrabold">Admin dapat mengatur</span>
+                )}
+              </div>
+              <p className="text-[11px] text-[#737680] mt-1">
+                Jadwal ini menjadi dasar presensi, status hari libur, dan penguncian akses workspace.
+              </p>
+            </div>
+          </div>
+
+          {isAdminOrOwner && workSchedule && (
+            <button
+              type="button"
+              onClick={handleSaveSchedule}
+              disabled={scheduleSaving || !scheduleStorageReady}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#24324A] text-white text-xs font-extrabold hover:bg-[#1A2536] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              title="Simpan jadwal ke Supabase"
+            >
+              {scheduleSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan Jadwal
+            </button>
+          )}
+        </div>
+
+        {scheduleLoading && !workSchedule ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+            {Array.from({ length: 7 }).map((_, index) => (
+              <div key={index} className="h-36 rounded-xl bg-[#F7F7F8] border border-[#E8E8EC] animate-pulse" />
+            ))}
+          </div>
+        ) : workSchedule ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+              {workSchedule.days.map((day) => {
+                const isToday = day.day === currentDayIndex;
+                return (
+                  <div
+                    key={day.day}
+                    className={`rounded-xl border p-3 space-y-3 transition-colors ${
+                      isToday
+                        ? 'border-[#7B68EE]/50 bg-[#7B68EE]/5'
+                        : 'border-[#E8E8EC] bg-[#F7F7F8]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[#737680] font-bold">{day.shortLabel}</p>
+                        <p className="text-xs font-extrabold text-[#24324A] mt-0.5">{day.label}</p>
+                      </div>
+                      {isToday && <span className="text-[9px] font-extrabold text-[#7B68EE]">Hari ini</span>}
+                    </div>
+
+                    {isAdminOrOwner ? (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={day.isWorking}
+                          onChange={(event) => updateScheduleDay(day.day, { isWorking: event.target.checked })}
+                        />
+                        <span className="relative w-9 h-5 rounded-full bg-[#D1D5DB] peer-checked:bg-[#4F9D78] transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:bg-white after:rounded-full after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
+                        <span className={`text-[10px] font-extrabold ${day.isWorking ? 'text-[#4F9D78]' : 'text-[#737680]'}`}>
+                          {day.isWorking ? 'Hari kerja' : 'Libur'}
+                        </span>
+                      </label>
+                    ) : (
+                      <span className={`inline-flex px-2 py-1 rounded-lg text-[10px] font-extrabold ${day.isWorking ? 'bg-[#4F9D78]/10 text-[#4F9D78]' : 'bg-[#E8E8EC] text-[#737680]'}`}>
+                        {day.isWorking ? 'Hari kerja' : 'Libur'}
+                      </span>
+                    )}
+
+                    {day.isWorking ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="space-y-1">
+                          <span className="block text-[9px] font-bold text-[#737680]">Mulai</span>
+                          <input
+                            type="time"
+                            value={day.startTime}
+                            onChange={(event) => updateScheduleDay(day.day, { startTime: event.target.value })}
+                            disabled={!isAdminOrOwner}
+                            className="w-full min-w-0 px-2 py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-bold text-[#24324A] disabled:opacity-70"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="block text-[9px] font-bold text-[#737680]">Selesai</span>
+                          <input
+                            type="time"
+                            value={day.endTime}
+                            onChange={(event) => updateScheduleDay(day.day, { endTime: event.target.value })}
+                            disabled={!isAdminOrOwner}
+                            className="w-full min-w-0 px-2 py-1.5 bg-white border border-[#E8E8EC] rounded-lg text-[11px] font-bold text-[#24324A] disabled:opacity-70"
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#737680]">
+                        <Ban className="w-3.5 h-3.5" /> Tidak ada jam kerja
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {!scheduleStorageReady && isAdminOrOwner && (
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#FFF8E7] border border-[#E6A23C]/30 text-[#8C641F]">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p className="text-[11px] font-bold leading-relaxed">
+                  Jadwal belum tersimpan ke Supabase. Jalankan SQL migration yang saya kirimkan, lalu pastikan <code>SUPABASE_SERVICE_ROLE_KEY</code> tersedia di environment server.
+                </p>
+              </div>
+            )}
+
+            {scheduleMessage && (
+              <p className="text-xs font-bold text-[#4F9D78]">{scheduleMessage}</p>
+            )}
+
+            {isAdminOrOwner && accessRequests.length > 0 && (
+              <div className="border-t border-[#E8E8EC] pt-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-[#7B68EE]" />
+                  <h3 className="text-xs font-extrabold text-[#24324A]">Permintaan Izin Masuk Saat Libur</h3>
+                  <span className="px-1.5 py-0.5 rounded-full bg-[#F26B5E] text-white text-[9px] font-extrabold">{accessRequests.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {accessRequests.map((request) => (
+                    <div key={request.id} className="flex flex-col lg:flex-row lg:items-center gap-3 p-3 rounded-xl bg-[#F7F7F8] border border-[#E8E8EC]">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="text-xs font-extrabold text-[#24324A]">{request.displayName}</p>
+                          <span className="text-[10px] text-[#737680]">{request.email}</span>
+                          <span className="text-[10px] font-bold text-[#7B68EE]">{request.requestDate}</span>
+                        </div>
+                        <p className="text-[11px] text-[#737680] mt-1 break-words">{request.reason}</p>
+                      </div>
+                      <div className="flex items-center gap-2 self-end lg:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleReviewAccessRequest(request.id, 'approved')}
+                          className="w-8 h-8 rounded-lg bg-[#4F9D78]/10 text-[#4F9D78] border border-[#4F9D78]/20 flex items-center justify-center hover:bg-[#4F9D78] hover:text-white cursor-pointer"
+                          title="Setujui permintaan izin"
+                          aria-label="Setujui permintaan izin"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReviewAccessRequest(request.id, 'rejected')}
+                          className="w-8 h-8 rounded-lg bg-[#F26B5E]/10 text-[#F26B5E] border border-[#F26B5E]/20 flex items-center justify-center hover:bg-[#F26B5E] hover:text-white cursor-pointer"
+                          title="Tolak permintaan izin"
+                          aria-label="Tolak permintaan izin"
+                        >
+                          <Ban className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-[#737680]">Jadwal kerja belum dapat dimuat.</p>
+        )}
+      </section>
 
       {/* Main Presensi Dashboard Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

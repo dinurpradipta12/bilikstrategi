@@ -7,6 +7,7 @@ import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import FloatingChat from '@/components/chat/FloatingChat';
 import ChatNotificationSound from '@/components/chat/ChatNotificationSound';
+import HolidayAccessBlock, { type HolidayAccessSnapshot } from '@/components/auth/HolidayAccessBlock';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
@@ -22,6 +23,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [pageAccessState, setPageAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
+  const [holidayAccessState, setHolidayAccessState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
+  const [holidayAccess, setHolidayAccess] = useState<HolidayAccessSnapshot | null>(null);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -122,6 +125,72 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [isAuthenticated, pathname, router]);
 
+  useEffect(() => {
+    if (isAuthenticated !== true) {
+      setHolidayAccessState('checking');
+      setHolidayAccess(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadHolidayAccess = async () => {
+      try {
+        const response = await fetch('/api/attendance/schedule', {
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          if (!cancelled) setHolidayAccessState('allowed');
+          return;
+        }
+
+        const data = await response.json().catch(() => ({}));
+        const access = data?.access;
+
+        // Holiday enforcement stays fail-open until the schedule migration and
+        // server service key are both available, preventing accidental lockout.
+        if (
+          cancelled ||
+          data?.storage_ready !== true ||
+          data?.access_control_ready !== true ||
+          access?.allowed !== false
+        ) {
+          if (!cancelled) {
+            setHolidayAccess(null);
+            setHolidayAccessState('allowed');
+          }
+          return;
+        }
+
+        setHolidayAccess({
+          date: String(access.date || ''),
+          nextWorkingLabel: String(access.next_working_label || 'jadwal kerja berikutnya'),
+          requestStatus: ['pending', 'approved', 'rejected'].includes(String(access.request_status))
+            ? access.request_status
+            : 'none',
+          requestReason: access.request?.reason ? String(access.request.reason) : undefined,
+        });
+        setHolidayAccessState('blocked');
+      } catch {
+        // A temporary API or database failure must not lock out the workspace.
+        if (!cancelled) {
+          setHolidayAccess(null);
+          setHolidayAccessState('allowed');
+        }
+      }
+    };
+
+    loadHolidayAccess();
+    const interval = window.setInterval(loadHolidayAccess, 10000);
+    window.addEventListener('focus', loadHolidayAccess);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', loadHolidayAccess);
+    };
+  }, [isAuthenticated]);
+
   if (isAuthenticated === false) {
     return (
       <div className="min-h-screen bg-[#24324A] flex items-center justify-center text-white">
@@ -133,7 +202,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (isAuthenticated !== true || pageAccessState === 'checking') {
+  if (isAuthenticated !== true || pageAccessState === 'checking' || holidayAccessState === 'checking') {
     return (
       <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center text-[#24324A]">
         <div className="text-center space-y-3">
@@ -142,6 +211,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
     );
+  }
+
+  if (holidayAccessState === 'blocked' && holidayAccess) {
+    return <HolidayAccessBlock access={holidayAccess} />;
   }
 
   if (pageAccessState === 'denied') {
