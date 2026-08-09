@@ -24,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [pageAccessState, setPageAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
+  const [chatAccessState, setChatAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
   const [holidayAccessState, setHolidayAccessState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
   const [holidayAccess, setHolidayAccess] = useState<HolidayAccessSnapshot | null>(null);
   const pathname = usePathname();
@@ -49,9 +50,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     checkAuth();
 
-    // 2. Mobile landing focus: if mobile screen and on home root, redirect to /chat
-    if (typeof window !== 'undefined' && window.innerWidth < 768 && (pathname === '/' || pathname === '/dashboard')) {
-      router.push('/chat');
+    // Mobile starts in Presensi. Chat is intentionally desktop-only so the
+    // mobile workspace stays focused on the attendance workflow.
+    if (
+      typeof window !== 'undefined' &&
+      window.innerWidth < 768 &&
+      (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/chat'))
+    ) {
+      router.replace('/attendance');
     }
 
     // 3. Sidebar Collapsed State Listener
@@ -73,17 +79,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (isAuthenticated !== true) {
       setPageAccessState('checking');
+      setChatAccessState('checking');
       return;
     }
 
     const pageKey = pageKeyForPathname(pathname);
-    if (!pageKey) {
-      setPageAccessState('allowed');
-      return;
-    }
 
     let cancelled = false;
     setPageAccessState('checking');
+    setChatAccessState('checking');
 
     fetch('/api/clickup/user', { cache: 'no-store' })
       .then(async (response) => {
@@ -98,6 +102,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         // of truth for members and clients.
         if (!data?.user) {
           setPageAccessState('allowed');
+          setChatAccessState('allowed');
           return;
         }
 
@@ -107,6 +112,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           isSuperuser: data.user.is_superuser,
         });
         const access = normalizePageAccess(data.user.page_access);
+        const chatAllowed = hasFullAccess || access.chat !== false;
+        setChatAccessState(chatAllowed ? 'allowed' : 'denied');
+
+        if (!pageKey) {
+          setPageAccessState('allowed');
+          return;
+        }
+
         const allowed = hasFullAccess || access[pageKey] !== false;
 
         if (allowed) {
@@ -121,7 +134,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       })
       .catch(() => {
-        if (!cancelled) setPageAccessState('allowed');
+        if (!cancelled) {
+          setPageAccessState('allowed');
+          setChatAccessState('allowed');
+        }
       });
 
     return () => {
@@ -206,7 +222,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (isAuthenticated !== true || pageAccessState === 'checking' || holidayAccessState === 'checking') {
+  if (
+    isAuthenticated !== true ||
+    pageAccessState === 'checking' ||
+    chatAccessState === 'checking' ||
+    holidayAccessState === 'checking'
+  ) {
     return (
       <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center text-[#24324A]">
         <div className="text-center space-y-3">
@@ -237,7 +258,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
       {/* Collapsible Sidebar (Desktop) */}
       <div className="hidden md:block">
-        <Sidebar />
+        <Sidebar chatEnabled={chatAccessState === 'allowed'} />
       </div>
 
       {/* Main Container */}
@@ -250,6 +271,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Header
           onOpenCommandMenu={() => setCommandMenuOpen(true)}
           onOpenCreateTask={() => setCreateTaskOpen(true)}
+          chatEnabled={chatAccessState === 'allowed'}
         />
 
         {/* Page Content Area - Responsive Fill */}
@@ -266,6 +288,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         isOpen={commandMenuOpen}
         onClose={() => setCommandMenuOpen(false)}
         onOpenCreateTask={() => setCreateTaskOpen(true)}
+        chatEnabled={chatAccessState === 'allowed'}
       />
 
       {/* Quick Create Task Modal */}
@@ -274,8 +297,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onClose={() => setCreateTaskOpen(false)}
       />
 
-      <FloatingChat />
-      <ChatNotificationSound />
+      {chatAccessState === 'allowed' && <FloatingChat />}
+      {chatAccessState === 'allowed' && <ChatNotificationSound />}
     </div>
   );
 }

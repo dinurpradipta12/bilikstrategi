@@ -20,6 +20,7 @@ import ThemeToggle from '@/components/theme/ThemeToggle';
 interface HeaderProps {
   onOpenCommandMenu: () => void;
   onOpenCreateTask: () => void;
+  chatEnabled: boolean;
 }
 
 type AppWorkspace = {
@@ -28,7 +29,7 @@ type AppWorkspace = {
   slug?: string;
 };
 
-export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderProps) {
+export default function Header({ onOpenCommandMenu, onOpenCreateTask, chatEnabled }: HeaderProps) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
@@ -50,7 +51,8 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   const [activityUnread, setActivityUnread] = useState(0);
   const [chatNotifications, setChatNotifications] = useState<ChatNotification[]>([]);
 
-  const totalNotificationUnread = chatUnread + activityUnread;
+  const visibleChatNotifications = chatEnabled ? chatNotifications : [];
+  const totalNotificationUnread = (chatEnabled ? chatUnread : 0) + activityUnread;
 
   const openChatNotification = (notification: ChatNotification) => {
     localStorage.setItem('bilik_chat_open_channel', notification.channelId);
@@ -307,11 +309,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
                 </Link>
               </div>
               <div className="divide-y divide-[#E8E8EC] max-h-72 overflow-y-auto">
-                {chatNotifications.length === 0 && activityUnread === 0 ? (
+                {visibleChatNotifications.length === 0 && activityUnread === 0 ? (
                   <div className="py-6 text-center text-[#737680]">Belum ada notifikasi.</div>
                 ) : (
                   <>
-                    {chatNotifications.map((notification) => (
+                    {visibleChatNotifications.map((notification) => (
                       <button
                         key={notification.id}
                         type="button"
@@ -350,9 +352,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
                   </>
                 )}
               </div>
-              <div className="mt-2 pt-2 border-t border-[#E8E8EC]">
-                <ChatSoundToggle />
-              </div>
+              {chatEnabled && (
+                <div className="mt-2 pt-2 border-t border-[#E8E8EC]">
+                  <ChatSoundToggle />
+                </div>
+              )}
             </div>
           )}
         </div>

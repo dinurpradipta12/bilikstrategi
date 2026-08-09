@@ -30,7 +30,7 @@ import { useTheme } from '@/lib/theme';
 import darkExpandedLogo from '@/src/lcputihbilik.png';
 import darkCollapsedLogo from '@/src/whitebilik.png';
 
-export default function Sidebar() {
+export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean }) {
   const pathname = usePathname();
   const { isDark } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
@@ -195,7 +195,9 @@ export default function Sidebar() {
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
   const visibleNavItems = navItems.filter(
-    (item) => userProfile.unrestrictedPageAccess || pageAccess[item.key]
+    (item) =>
+      (item.key !== 'chat' || chatEnabled) &&
+      (userProfile.unrestrictedPageAccess || pageAccess[item.key] !== false)
   );
 
   return (

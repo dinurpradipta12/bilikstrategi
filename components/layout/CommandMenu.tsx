@@ -10,9 +10,10 @@ interface CommandMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenCreateTask: () => void;
+  chatEnabled: boolean;
 }
 
-export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: CommandMenuProps) {
+export default function CommandMenu({ isOpen, onClose, onOpenCreateTask, chatEnabled }: CommandMenuProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -100,7 +101,9 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   if (!isOpen || !mounted) return null;
 
   const canSeePage = (pageKey: PageAccessKey) =>
-    hasUnrestrictedPageAccess || pageAccess[pageKey];
+    pageKey === 'chat' && !chatEnabled
+      ? false
+      : hasUnrestrictedPageAccess || pageAccess[pageKey] !== false;
 
   const toSafeString = (value: unknown) => {
     if (typeof value === 'string') return value;
