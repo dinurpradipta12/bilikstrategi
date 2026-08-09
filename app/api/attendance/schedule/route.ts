@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
-import { isSuperuserEmail, normalizeAppRole, type AppRole } from '@/lib/auth/app-role';
+import {
+  isSuperuserEmail,
+  normalizeAppRole,
+  normalizeIdentityEmail,
+  type AppRole,
+} from '@/lib/auth/app-role';
 import { supabaseRest } from '@/lib/supabase/rest-client';
 import {
   isSupabaseAdminConfigured,
@@ -41,7 +46,7 @@ function decodeCookie(value: string | undefined) {
 }
 
 function normalizeEmail(value: unknown) {
-  return String(value || '').trim().toLowerCase();
+  return normalizeIdentityEmail(value);
 }
 
 function noStoreJson(payload: unknown, status = 200) {
@@ -62,7 +67,7 @@ async function resolveIdentity(req: NextRequest): Promise<RequestIdentity> {
   let appRole = normalizeAppRole(decodeCookie(req.cookies.get('clickup_user_role')?.value));
 
   const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (accessToken) {
+  if (accessToken && !email) {
     try {
       const authenticated = await getAuthenticatedUser(accessToken);
       const user = authenticated?.user || {};

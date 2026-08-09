@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
-import { isSuperuserEmail, normalizeAppRole, type AppRole } from '@/lib/auth/app-role';
+import {
+  isSuperuserEmail,
+  normalizeAppRole,
+  normalizeIdentityEmail,
+  type AppRole,
+} from '@/lib/auth/app-role';
 import { supabaseRest } from '@/lib/supabase/rest-client';
 import {
   isSupabaseAdminConfigured,
@@ -27,10 +32,18 @@ function decodeCookie(value: string | undefined) {
 }
 
 function normalizeEmail(value: unknown) {
-  return String(value || '').trim().toLowerCase();
+  return normalizeIdentityEmail(value);
 }
 
 async function getRequestIdentity(req: NextRequest): Promise<RequestIdentity> {
+  // The application session is authoritative. A ClickUp access token can be
+  // for a different member account while the user is managing app roles.
+  const cookieEmail = normalizeEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
+  const cookieName = decodeCookie(req.cookies.get('clickup_user_name')?.value);
+  if (cookieEmail) {
+    return { email: cookieEmail, name: cookieName || cookieEmail.split('@')[0] };
+  }
+
   const accessToken = req.cookies.get('clickup_access_token')?.value;
   if (accessToken) {
     try {
@@ -45,9 +58,7 @@ async function getRequestIdentity(req: NextRequest): Promise<RequestIdentity> {
     }
   }
 
-  const email = normalizeEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
-  const name = decodeCookie(req.cookies.get('clickup_user_name')?.value) || 'Pengguna';
-  return { email, name };
+  return { email: '', name: cookieName || 'Pengguna' };
 }
 
 async function getStoredRole(email: string) {

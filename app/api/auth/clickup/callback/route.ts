@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { isSuperuserEmail, normalizeIdentityEmail } from '@/lib/auth/app-role';
 
 export const runtime = 'edge';
 
@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const queryEmail = searchParams.get('email');
   const queryRole = searchParams.get('role');
   const queryAvatar = searchParams.get('avatar');
+  const normalizedQueryEmail = normalizeIdentityEmail(queryEmail);
 
   if (!code && !queryName) {
     return NextResponse.redirect(new URL('/login?error=no_code', req.url));
@@ -26,9 +27,9 @@ export async function GET(req: NextRequest) {
     // If queryName/email was provided in login request
     if (queryName) {
       response.cookies.set('clickup_user_name', queryName, { path: '/' });
-      if (queryEmail) response.cookies.set('clickup_user_email', queryEmail, { path: '/' });
-      if (queryRole || isSuperuserEmail(queryEmail)) {
-        response.cookies.set('clickup_user_role', isSuperuserEmail(queryEmail) ? 'owner' : queryRole!, { path: '/' });
+      if (normalizedQueryEmail) response.cookies.set('clickup_user_email', normalizedQueryEmail, { path: '/' });
+      if (queryRole || isSuperuserEmail(normalizedQueryEmail)) {
+        response.cookies.set('clickup_user_role', isSuperuserEmail(normalizedQueryEmail) ? 'owner' : queryRole!, { path: '/' });
       }
       if (queryAvatar) response.cookies.set('clickup_user_avatar', queryAvatar, { path: '/' });
       response.cookies.set('clickup_logged_in', 'true', { path: '/' });
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
       response.cookies.set('clickup_logged_in', 'true', { path: '/' });
       if (userData?.user) {
         const username = userData.user.username;
-        const email = userData.user.email;
+        const email = normalizeIdentityEmail(userData.user.email);
         const role = isSuperuserEmail(email) ? 'owner' : userData.user.role === 1 ? 'owner' : userData.user.role === 2 ? 'admin' : 'member';
         const avatar = userData.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`;
 

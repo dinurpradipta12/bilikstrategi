@@ -3,12 +3,34 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'edge';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
-import { appRoleToClickUpRole, isSuperuserEmail, normalizeAppRole } from '@/lib/auth/app-role';
+import {
+  appRoleToClickUpRole,
+  isSuperuserEmail,
+  normalizeAppRole,
+  normalizeIdentityEmail,
+} from '@/lib/auth/app-role';
 import { normalizePageAccess } from '@/lib/auth/page-access';
+
+function decodeCookieValue(value: string | undefined) {
+  if (!value) return '';
+
+  let decoded = value;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+
+  return decoded;
+}
 
 async function withAppRole(payload: any) {
   const baseUser = payload?.user || payload || {};
-  const email = String(baseUser.email || '').trim().toLowerCase();
+  const email = normalizeIdentityEmail(baseUser.email);
   let appRole = normalizeAppRole(baseUser.role);
   let isSuperuser = isSuperuserEmail(email);
   let pageAccess = normalizePageAccess(undefined);
@@ -36,7 +58,7 @@ async function withAppRole(payload: any) {
   return {
     user: {
       ...baseUser,
-      email: baseUser.email || email,
+      email: email || baseUser.email || '',
       role: appRoleToClickUpRole(appRole),
       app_role: appRole,
       is_superuser: isSuperuser,
@@ -53,14 +75,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Check session cookies for authenticated user
-    const cookieUserName = req.cookies.get('clickup_user_name')?.value;
-    const cookieUserEmail = req.cookies.get('clickup_user_email')?.value;
-    const cookieUserRole = req.cookies.get('clickup_user_role')?.value;
-    const cookieUserAvatar = req.cookies.get('clickup_user_avatar')?.value;
+    const cookieUserName = decodeCookieValue(req.cookies.get('clickup_user_name')?.value);
+    const cookieUserEmail = decodeCookieValue(req.cookies.get('clickup_user_email')?.value);
+    const cookieUserRole = decodeCookieValue(req.cookies.get('clickup_user_role')?.value);
+    const cookieUserAvatar = decodeCookieValue(req.cookies.get('clickup_user_avatar')?.value);
 
     if (cookieUserName) {
       const cookieUser = {
-        id: req.cookies.get('clickup_user_id')?.value || '101',
+        id: decodeCookieValue(req.cookies.get('clickup_user_id')?.value) || '101',
         username: cookieUserName,
         email: cookieUserEmail || `${cookieUserName.toLowerCase().replace(/\s+/g, '')}@bilikstrategi.id`,
         role: cookieUserRole === 'owner' ? 1 : cookieUserRole === 'admin' ? 2 : 3,

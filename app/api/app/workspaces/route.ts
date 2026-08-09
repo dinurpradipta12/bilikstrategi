@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { isSuperuserEmail, normalizeIdentityEmail } from '@/lib/auth/app-role';
 
 export const runtime = 'edge';
 
@@ -13,11 +13,29 @@ function slugify(input: string) {
     .slice(0, 60) || `workspace-${Date.now()}`;
 }
 
+function decodeCookieValue(value: string | undefined) {
+  if (!value) return '';
+
+  let decoded = value;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+
+  return decoded;
+}
+
 function getRequestUser(req: NextRequest) {
-  const name = req.cookies.get('clickup_user_name')?.value || 'Pengguna';
-  const email = req.cookies.get('clickup_user_email')?.value || '';
+  const rawName = req.cookies.get('clickup_user_name')?.value || '';
+  const name = decodeCookieValue(rawName) || 'Pengguna';
+  const email = normalizeIdentityEmail(req.cookies.get('clickup_user_email')?.value);
   const avatar =
-    req.cookies.get('clickup_user_avatar')?.value ||
+    decodeCookieValue(req.cookies.get('clickup_user_avatar')?.value) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=24324A&color=fff`;
   const id = req.cookies.get('clickup_user_id')?.value || email || name.toLowerCase().replace(/\s+/g, '-');
 
