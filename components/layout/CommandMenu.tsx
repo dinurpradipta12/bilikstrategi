@@ -20,7 +20,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   const [projects, setProjects] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
-  const [userRole, setUserRole] = useState('member');
+  const [hasUnrestrictedPageAccess, setHasUnrestrictedPageAccess] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -32,7 +32,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
       .then((data) => {
         if (!data?.user) return;
         const role = String(data.user.app_role || '').toLowerCase();
-        setUserRole(data.user.is_superuser === true ? 'owner' : role);
+        setHasUnrestrictedPageAccess(data.user.is_superuser === true || role === 'owner');
         setPageAccess(normalizePageAccess(data.user.page_access));
       })
       .catch(() => {});
@@ -100,7 +100,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   if (!isOpen || !mounted) return null;
 
   const canSeePage = (pageKey: PageAccessKey) =>
-    userRole === 'owner' || userRole === 'admin' || pageAccess[pageKey];
+    hasUnrestrictedPageAccess || pageAccess[pageKey];
 
   const toSafeString = (value: unknown) => {
     if (typeof value === 'string') return value;

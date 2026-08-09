@@ -24,7 +24,7 @@ import {
   FileSpreadsheet,
   ReceiptText,
 } from 'lucide-react';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import { useTheme } from '@/lib/theme';
 import darkExpandedLogo from '@/src/lcputihbilik.png';
@@ -36,8 +36,9 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [userProfile, setUserProfile] = useState({
     name: 'Bilik Strategi',
-    role: 'owner',
+    role: 'member',
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
+    unrestrictedPageAccess: false,
   });
 
   const [chatUnread, setChatUnread] = useState<number>(0);
@@ -121,12 +122,12 @@ export default function Sidebar() {
         name: username,
         role: resolvedRole,
         avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
+        unrestrictedPageAccess: hasUnrestrictedPageAccess({
+          appRole: serverAppRole || resolvedRole,
+          isSuperuser: isSuperOwner,
+        }),
       });
-      setPageAccess(
-        resolvedRole === 'Owner' || resolvedRole === 'Admin'
-          ? normalizePageAccess(undefined)
-          : resolvedPageAccess
-      );
+      setPageAccess(resolvedPageAccess);
     }
 
     loadClickUpProfile();
@@ -194,7 +195,7 @@ export default function Sidebar() {
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
   const visibleNavItems = navItems.filter(
-    (item) => userProfile.role === 'Owner' || userProfile.role === 'Admin' || pageAccess[item.key]
+    (item) => userProfile.unrestrictedPageAccess || pageAccess[item.key]
   );
 
   return (

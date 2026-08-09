@@ -21,6 +21,18 @@ export function normalizeAppRole(value: unknown): AppRole {
   return 'member';
 }
 
+/**
+ * Owner/superuser accounts are unrestricted. Delegated admins still use the
+ * per-user page access map so an admin can be limited to selected modules.
+ */
+export function hasUnrestrictedPageAccess(input: {
+  appRole?: unknown;
+  role?: unknown;
+  isSuperuser?: unknown;
+}) {
+  return input.isSuperuser === true || normalizeAppRole(input.appRole ?? input.role) === 'owner';
+}
+
 export function appRoleToClickUpRole(role: AppRole) {
   return role === 'owner' ? 1 : role === 'admin' ? 2 : 3;
 }

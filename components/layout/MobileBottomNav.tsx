@@ -16,7 +16,7 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
   const [chatUnread, setChatUnread] = useState(0);
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
-  const [userRole, setUserRole] = useState('member');
+  const [hasUnrestrictedPageAccess, setHasUnrestrictedPageAccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +26,7 @@ export default function MobileBottomNav() {
       .then((data) => {
         if (cancelled || !data?.user) return;
         const role = String(data.user.app_role || '').toLowerCase();
-        setUserRole(data.user.is_superuser === true ? 'owner' : role);
+        setHasUnrestrictedPageAccess(data.user.is_superuser === true || role === 'owner');
         setPageAccess(normalizePageAccess(data.user.page_access));
       })
       .catch(() => {});
@@ -116,7 +116,7 @@ export default function MobileBottomNav() {
     },
   ];
   const visibleNavItems = navItems.filter(
-    (item) => userRole === 'owner' || userRole === 'admin' || pageAccess[item.accessKey]
+    (item) => hasUnrestrictedPageAccess || pageAccess[item.accessKey]
   );
 
   return (

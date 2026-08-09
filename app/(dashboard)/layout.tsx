@@ -16,6 +16,7 @@ import {
   normalizePageAccess,
   pageKeyForPathname,
 } from '@/lib/auth/page-access';
+import { hasUnrestrictedPageAccess } from '@/lib/auth/app-role';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -101,7 +102,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
 
         const role = String(data.user.app_role || '').toLowerCase();
-        const hasFullAccess = data.user.is_superuser === true || role === 'owner' || role === 'admin';
+        const hasFullAccess = hasUnrestrictedPageAccess({
+          appRole: role,
+          isSuperuser: data.user.is_superuser,
+        });
         const access = normalizePageAccess(data.user.page_access);
         const allowed = hasFullAccess || access[pageKey] !== false;
 

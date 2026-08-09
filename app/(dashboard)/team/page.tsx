@@ -40,6 +40,7 @@ interface TeamMemberWorkload {
   id: string;
   full_name: string;
   email: string;
+  clickup_email?: string;
   role: string;
   custom_role?: string;
   division?: string;
@@ -353,9 +354,11 @@ export default function TeamWorkloadPage() {
     e.preventDefault();
     if (!editingMember || !isAdminOrOwner || savingMemberInfo) return;
 
-    const targetEmail = formEmail.trim().toLowerCase();
+    // Role and page access must follow the member's ClickUp login identity.
+    // The editable contact email is presentation data and may be different.
+    const targetEmail = (editingMember.clickup_email || formEmail).trim().toLowerCase();
     if (!targetEmail) {
-      setMemberSaveError('Email pengguna wajib diisi agar akses dapat disimpan lintas perangkat.');
+      setMemberSaveError('Email login ClickUp pengguna wajib tersedia agar akses dapat disimpan lintas perangkat.');
       return;
     }
 
@@ -393,7 +396,7 @@ export default function TeamWorkloadPage() {
         custom_role: formRole,
         role: updatedRoleStr,
         division: formDivision,
-        email: targetEmail,
+        email: formEmail.trim().toLowerCase(),
         phone: formPhone,
         capacity: formCapacity,
         is_admin: formIsAdmin,
@@ -419,7 +422,8 @@ export default function TeamWorkloadPage() {
         id: editingMember.id,
         name: editingMember.full_name,
         full_name: editingMember.full_name,
-        email: targetEmail,
+        email: formEmail.trim().toLowerCase(),
+        clickup_email: targetEmail,
         role: updatedRoleStr,
         custom_role: formRole,
         division: formDivision,
@@ -863,6 +867,7 @@ export default function TeamWorkloadPage() {
           id: String(m.id),
           full_name: memberName,
           email: cInfo.email || m.email || persistedRole?.email || '',
+          clickup_email: m.email || persistedRole?.email || cInfo.email || '',
           role: effectiveMemberRole,
           custom_role: cInfo.custom_role || defaultCustomRole,
           division: cInfo.division || 'Agency Team',
@@ -893,6 +898,9 @@ export default function TeamWorkloadPage() {
   }, []);
 
   const isAdminOrOwner = currentUserRole === 'Owner' || currentUserRole === 'Admin';
+  const editingMemberIsSuperuser = Boolean(
+    editingMember && (isSuperuserEmail(editingMember.email) || isSuperuserEmail(editingMember.clickup_email))
+  );
 
   const handleCapacityChange = (memberId: string, memberName: string, newCapacity: number) => {
     if (!isAdminOrOwner) return;
@@ -945,16 +953,7 @@ export default function TeamWorkloadPage() {
               {isSuperuserAccount ? (
                 <strong className="font-bold text-[#24324A]">Owner (Superuser)</strong>
               ) : (
-                <select
-                  value={currentUserRole}
-                  onChange={(e) => setCurrentUserRole(e.target.value as any)}
-                  className="font-bold text-[#24324A] bg-transparent outline-none cursor-pointer text-xs"
-                  title="Ganti Mode Role Pengguna"
-                >
-                  <option value="Owner">Owner (Admin Edit)</option>
-                  <option value="Admin">Admin (Admin Edit)</option>
-                  <option value="Member">Member (Read Only)</option>
-                </select>
+                <strong className="font-bold text-[#24324A]">{currentUserRole}</strong>
               )}
             </div>
           )}
@@ -1892,17 +1891,17 @@ export default function TeamWorkloadPage() {
                 />
               </div>
 
-              {/* Toggle Switch Akses Admin / Full Access (Executive Lead) */}
+              {/* Delegated admin role is separate from the page visibility map. */}
               <div className="p-3.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 font-extrabold text-[#24324A]">
                     <ShieldCheck className={`w-4 h-4 ${formIsAdmin ? 'text-[#4F9D78]' : 'text-[#737680]'}`} />
-                    <span>Berikan Akses Admin / Full Access</span>
+                    <span>Jadikan Sub Admin</span>
                   </div>
                   <p className="text-[10px] text-[#737680] leading-snug">
                     {formIsAdmin
-                      ? '🟢 Pengguna ini memiliki Full Access (Executive Dashboard, Timesheet Edit, & Manajemen Tim).'
-                      : '⚪ Pengguna ini hanya memiliki akses Member biasa (Personal Dashboard privat).'
+                      ? '🟢 Pengguna ini dapat mengelola fitur admin yang halaman aksesnya diizinkan di bawah.'
+                      : '⚪ Pengguna ini menggunakan akses Member dan halaman yang dipilih di bawah.'
                     }
                   </p>
                 </div>
@@ -1930,19 +1929,21 @@ export default function TeamWorkloadPage() {
                     </p>
                   </div>
                   <span className="text-[10px] font-bold text-[#737680] whitespace-nowrap">
-                    {formIsAdmin ? 'Full Access' : Object.values(formPageAccess).filter(Boolean).length + '/' + PAGE_ACCESS_OPTIONS.length}
+                    {editingMemberIsSuperuser
+                      ? 'Full Access'
+                      : Object.values(formPageAccess).filter(Boolean).length + '/' + PAGE_ACCESS_OPTIONS.length}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1">
                   {PAGE_ACCESS_OPTIONS.map((page) => {
-                    const isEnabled = formIsAdmin || formPageAccess[page.key] !== false;
+                    const isEnabled = editingMemberIsSuperuser || formPageAccess[page.key] !== false;
                     return (
                       <label
                         key={page.key}
                         className={[
                           'flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[11px] font-semibold transition-colors',
-                          formIsAdmin
+                          editingMemberIsSuperuser
                             ? 'border-[#E8E8EC] bg-[#F7F7F8] text-[#737680] cursor-not-allowed'
                             : isEnabled
                               ? 'border-[#4F9D78]/30 bg-[#4F9D78]/5 text-[#24324A] cursor-pointer'
@@ -1952,7 +1953,7 @@ export default function TeamWorkloadPage() {
                         <input
                           type="checkbox"
                           checked={isEnabled}
-                          disabled={formIsAdmin}
+                          disabled={editingMemberIsSuperuser}
                           onChange={(event) => {
                             setFormPageAccess((current) => ({
                               ...current,
@@ -1968,9 +1969,13 @@ export default function TeamWorkloadPage() {
                   })}
                 </div>
 
-                {formIsAdmin && (
+                {editingMemberIsSuperuser ? (
                   <p className="text-[10px] text-[#4F9D78] font-semibold">
-                    Admin / Owner selalu mendapatkan semua halaman. Matikan Full Access untuk mengatur akses satu per satu.
+                    Akun superuser utama selalu mendapatkan semua halaman dan tidak dapat dibatasi dari menu ini.
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-[#737680] font-semibold">
+                    Hak Sub Admin dan halaman yang dapat dibuka diatur terpisah. Matikan halaman tertentu untuk menyembunyikannya dari menu dan URL.
                   </p>
                 )}
               </div>
