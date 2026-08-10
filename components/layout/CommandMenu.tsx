@@ -184,6 +184,14 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                   <span>Buka Finance &amp; Budget Owner</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
+                {isOwnerAccount && <button
+                  onClick={() => handleNavigate('/salary-slips')}
+                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
+                >
+                  <FileText className="w-4 h-4 text-[#4F9D78] mr-3" />
+                  <span>Buka Slip Gaji Owner</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
+                </button>}
                 {canSeePage('quotes') && <button
                   onClick={() => handleNavigate('/quotes')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"

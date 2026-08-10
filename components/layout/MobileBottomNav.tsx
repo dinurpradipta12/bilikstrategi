@@ -93,6 +93,15 @@ export default function MobileBottomNav() {
       ownerOnly: true,
     },
     {
+      id: 'salary-slips',
+      accessKey: 'dashboard',
+      label: 'Slip Gaji',
+      href: '/salary-slips',
+      icon: FileText,
+      activeColor: '#4F9D78',
+      ownerOnly: true,
+    },
+    {
       id: 'agreements',
       accessKey: 'agreements',
       label: 'Agreement',

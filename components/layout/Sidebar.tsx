@@ -169,7 +169,7 @@ export default function Sidebar() {
   }, [pathname]);
 
   const navItems: Array<{
-    key: PageAccessKey | 'finance';
+    key: PageAccessKey | 'finance' | 'salary_slips';
     name: string;
     href: string;
     icon: typeof LayoutDashboard;
@@ -188,6 +188,7 @@ export default function Sidebar() {
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
     { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
     { key: 'finance', name: 'Finance & Budget', href: '/finance', icon: Wallet, ownerOnly: true },
+    { key: 'salary_slips', name: 'Slip Gaji', href: '/salary-slips', icon: FileText, ownerOnly: true },
     { key: 'quotes', name: 'Penawaran Harga', href: '/quotes', icon: FileText },
     { key: 'agreements', name: 'Collaboration Agreement', href: '/agreements', icon: FileSignature },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
