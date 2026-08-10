@@ -5,8 +5,6 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
-import FloatingChat from '@/components/chat/FloatingChat';
-import ChatNotificationSound from '@/components/chat/ChatNotificationSound';
 import HolidayAccessBlock, { type HolidayAccessSnapshot } from '@/components/auth/HolidayAccessBlock';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
@@ -24,7 +22,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [pageAccessState, setPageAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
-  const [chatAccessState, setChatAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
   const [holidayAccessState, setHolidayAccessState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
   const [holidayAccess, setHolidayAccess] = useState<HolidayAccessSnapshot | null>(null);
   const pathname = usePathname();
@@ -50,8 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     checkAuth();
 
-    // Mobile starts in Presensi. Chat is intentionally desktop-only so the
-    // mobile workspace stays focused on the attendance workflow.
+    // Mobile starts in Presensi while the chat feature is paused globally.
     if (
       typeof window !== 'undefined' &&
       window.innerWidth < 768 &&
@@ -79,7 +75,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (isAuthenticated !== true) {
       setPageAccessState('checking');
-      setChatAccessState('checking');
       return;
     }
 
@@ -87,7 +82,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     let cancelled = false;
     setPageAccessState('checking');
-    setChatAccessState('checking');
 
     fetch('/api/clickup/user', { cache: 'no-store' })
       .then(async (response) => {
@@ -102,7 +96,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         // of truth for members and clients.
         if (!data?.user) {
           setPageAccessState('allowed');
-          setChatAccessState('allowed');
           return;
         }
 
@@ -112,8 +105,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           isSuperuser: data.user.is_superuser,
         });
         const access = normalizePageAccess(data.user.page_access);
-        const chatAllowed = hasFullAccess || access.chat !== false;
-        setChatAccessState(chatAllowed ? 'allowed' : 'denied');
 
         if (!pageKey) {
           setPageAccessState('allowed');
@@ -136,7 +127,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .catch(() => {
         if (!cancelled) {
           setPageAccessState('allowed');
-          setChatAccessState('allowed');
         }
       });
 
@@ -225,7 +215,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (
     isAuthenticated !== true ||
     pageAccessState === 'checking' ||
-    chatAccessState === 'checking' ||
     holidayAccessState === 'checking'
   ) {
     return (
@@ -258,7 +247,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
       {/* Collapsible Sidebar (Desktop) */}
       <div className="hidden md:block">
-        <Sidebar chatEnabled={chatAccessState === 'allowed'} />
+        <Sidebar />
       </div>
 
       {/* Main Container */}
@@ -271,7 +260,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Header
           onOpenCommandMenu={() => setCommandMenuOpen(true)}
           onOpenCreateTask={() => setCreateTaskOpen(true)}
-          chatEnabled={chatAccessState === 'allowed'}
         />
 
         {/* Page Content Area - Responsive Fill */}
@@ -288,7 +276,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         isOpen={commandMenuOpen}
         onClose={() => setCommandMenuOpen(false)}
         onOpenCreateTask={() => setCreateTaskOpen(true)}
-        chatEnabled={chatAccessState === 'allowed'}
       />
 
       {/* Quick Create Task Modal */}
@@ -297,8 +284,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onClose={() => setCreateTaskOpen(false)}
       />
 
-      {chatAccessState === 'allowed' && <FloatingChat />}
-      {chatAccessState === 'allowed' && <ChatNotificationSound />}
     </div>
   );
 }

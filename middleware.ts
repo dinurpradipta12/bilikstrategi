@@ -22,5 +22,16 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
+  // Cloudflare Pages can intermittently omit the dynamic Edge Function for
+  // runtime-created project ids. Keep the public URL, but serve the static
+  // projects page and let it render the requested detail by query string.
+  const projectDetailMatch = req.nextUrl.pathname.match(/^\/projects\/([^/]+)\/?$/);
+  if (projectDetailMatch) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/projects';
+    url.searchParams.set('projectId', projectDetailMatch[1]);
+    return NextResponse.rewrite(url);
+  }
+
   return NextResponse.next();
 }

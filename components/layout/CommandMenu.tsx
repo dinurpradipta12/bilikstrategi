@@ -3,17 +3,16 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, PlusCircle, CheckSquare, Briefcase, Users, MessageSquare, Settings, ReceiptText, X, ArrowRight } from 'lucide-react';
+import { Search, PlusCircle, CheckSquare, Briefcase, Users, Settings, ReceiptText, X, ArrowRight } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 interface CommandMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenCreateTask: () => void;
-  chatEnabled: boolean;
 }
 
-export default function CommandMenu({ isOpen, onClose, onOpenCreateTask, chatEnabled }: CommandMenuProps) {
+export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: CommandMenuProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [mounted, setMounted] = useState(false);
@@ -100,10 +99,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask, chatEna
 
   if (!isOpen || !mounted) return null;
 
-  const canSeePage = (pageKey: PageAccessKey) =>
-    pageKey === 'chat' && !chatEnabled
-      ? false
-      : hasUnrestrictedPageAccess || pageAccess[pageKey] !== false;
+  const canSeePage = (pageKey: PageAccessKey) => hasUnrestrictedPageAccess || pageAccess[pageKey] !== false;
 
   const toSafeString = (value: unknown) => {
     if (typeof value === 'string') return value;
@@ -167,14 +163,6 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask, chatEna
                 >
                   <CheckSquare className="w-4 h-4 text-[#24324A] mr-3" />
                   <span>Buka My Tasks Saya</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
-                </button>}
-                {canSeePage('chat') && <button
-                  onClick={() => handleNavigate('/chat')}
-                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
-                >
-                  <MessageSquare className="w-4 h-4 text-[#24324A] mr-3" />
-                  <span>Buka Agency Chat</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
                 {canSeePage('invoices') && <button

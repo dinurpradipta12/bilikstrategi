@@ -14,7 +14,6 @@ import {
   Clock,
   Building2,
   FolderArchive,
-  MessageSquare,
   Bell,
   History,
   Settings,
@@ -30,7 +29,7 @@ import { useTheme } from '@/lib/theme';
 import darkExpandedLogo from '@/src/lcputihbilik.png';
 import darkCollapsedLogo from '@/src/whitebilik.png';
 
-export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean }) {
+export default function Sidebar() {
   const pathname = usePathname();
   const { isDark } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
@@ -41,7 +40,6 @@ export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean 
     unrestrictedPageAccess: false,
   });
 
-  const [chatUnread, setChatUnread] = useState<number>(0);
   const [notifUnread, setNotifUnread] = useState<number>(0);
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
 
@@ -137,17 +135,11 @@ export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean 
     window.addEventListener('bilik-role-updated', handleStorage);
 
     // Read real-time unread badge counts (defaults to 0 when no unread messages/notifs exist)
-    const savedChatUnread = Number(localStorage.getItem('bilik_chat_unread_count') || '0');
     const savedNotifUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
 
-    setChatUnread(savedChatUnread);
     setNotifUnread(savedNotifUnread);
 
     const handleUnreadUpdate = (e: any) => {
-      if (e.detail?.type === 'chat' && typeof e.detail?.count === 'number') {
-        setChatUnread(e.detail.count);
-        localStorage.setItem('bilik_chat_unread_count', String(e.detail.count));
-      }
       if (e.detail?.type === 'notification' && typeof e.detail?.count === 'number') {
         setNotifUnread(e.detail.count);
         localStorage.setItem('bilik_notif_unread_count', String(e.detail.count));
@@ -163,7 +155,7 @@ export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean 
     };
   }, []);
 
-  // Keep chat unread counts visible until the user opens the specific channel.
+  // Keep workspace notification counts visible until the user opens them.
   useEffect(() => {
     if (pathname.startsWith('/notifications')) {
       setNotifUnread(0);
@@ -189,14 +181,12 @@ export default function Sidebar({ chatEnabled = true }: { chatEnabled?: boolean 
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
     { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
-    { key: 'chat', name: 'Agency Chat', href: '/chat', icon: MessageSquare, badge: chatUnread > 0 ? chatUnread : undefined },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
   const visibleNavItems = navItems.filter(
     (item) =>
-      (item.key !== 'chat' || chatEnabled) &&
       (userProfile.unrestrictedPageAccess || pageAccess[item.key] !== false)
   );
 

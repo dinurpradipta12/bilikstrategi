@@ -8,37 +8,17 @@ interface SyncUpButtonProps {
   roomTitle?: string;
   variant?: 'header' | 'compact' | 'full';
   className?: string;
-  channelId?: string;
-  onStartCall?: () => void;
 }
 
 export default function SyncUpButton({
   roomTitle = 'General Agency Huddle',
   variant = 'header',
   className = '',
-  channelId,
-  onStartCall,
 }: SyncUpButtonProps) {
   const [isCallOpen, setIsCallOpen] = useState(false);
 
-  const handleStartCall = async () => {
+  const handleStartCall = () => {
     setIsCallOpen(true);
-
-    if (channelId) {
-      try {
-        await fetch('/api/clickup/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            channelId,
-            text: `📞 **SyncUp Voice & Video Call Dimulai!**\nPanggilan Huddle "${roomTitle}" telah aktif di channel ini. Klik **Start SyncUp** untuk bergabung!`,
-          }),
-        });
-        if (onStartCall) onStartCall();
-      } catch (err) {
-        console.warn('[SyncUpButton] Gagal mengirimkan notifikasi call ke channel:', err);
-      }
-    }
   };
 
   return (

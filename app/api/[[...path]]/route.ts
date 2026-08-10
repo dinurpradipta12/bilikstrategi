@@ -6,8 +6,6 @@ import * as attendanceSchedule from '../attendance/schedule/handler';
 import * as clickupCallback from '../auth/clickup/callback/handler';
 import * as clickupLogin from '../auth/clickup/login/handler';
 import * as authLogout from '../auth/logout/handler';
-import * as mediaView from '../chat/media-view/handler';
-import * as clickupChat from '../clickup/chat/handler';
 import * as clickupComments from '../clickup/comments/handler';
 import * as clickupProjects from '../clickup/projects/handler';
 import * as clickupSpaces from '../clickup/spaces/handler';
@@ -20,7 +18,6 @@ import * as supabaseClients from '../supabase/clients/handler';
 import * as supabaseProjectMeta from '../supabase/project-meta/handler';
 import * as supabaseProjects from '../supabase/projects/handler';
 import * as supabaseTasks from '../supabase/tasks/handler';
-import * as typing from '../typing/handler';
 import * as clickupWebhook from '../webhooks/clickup/handler';
 
 export const runtime = 'edge';
@@ -38,8 +35,6 @@ const routes: Record<string, RouteModule> = {
   'auth/clickup/callback': clickupCallback,
   'auth/clickup/login': clickupLogin,
   'auth/logout': authLogout,
-  'chat/media-view': mediaView,
-  'clickup/chat': clickupChat,
   'clickup/comments': clickupComments,
   'clickup/projects': clickupProjects,
   'clickup/spaces': clickupSpaces,
@@ -52,7 +47,6 @@ const routes: Record<string, RouteModule> = {
   'supabase/project-meta': supabaseProjectMeta,
   'supabase/projects': supabaseProjects,
   'supabase/tasks': supabaseTasks,
-  typing,
   'webhooks/clickup': clickupWebhook,
 };
 

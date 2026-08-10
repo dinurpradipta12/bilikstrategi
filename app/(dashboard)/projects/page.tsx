@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Briefcase,
   LayoutList,
@@ -26,6 +27,7 @@ import {
   projectsRepresentSameEntity,
   uniqueProjectsByReference,
 } from '@/lib/projects/dedupe';
+import ProjectDetailClient from '@/components/projects/ProjectDetailClient';
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar';
 
@@ -68,7 +70,7 @@ function normalizeAppProject(value: any): AgencyProject {
   };
 }
 
-export default function ProjectsPage() {
+function ProjectsListPage() {
   const [projects, setProjects] = useState<AgencyProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -775,5 +777,24 @@ export default function ProjectsPage() {
         onCancel={() => setDeleteTargetProject(null)}
       />
     </div>
+  );
+}
+
+function ProjectsRouteContent() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get('projectId');
+
+  if (projectId) {
+    return <ProjectDetailClient id={projectId} />;
+  }
+
+  return <ProjectsListPage />;
+}
+
+export default function ProjectsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[40vh] flex items-center justify-center text-sm text-[#737680]">Memuat project...</div>}>
+      <ProjectsRouteContent />
+    </Suspense>
   );
 }

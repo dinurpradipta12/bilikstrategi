@@ -2,25 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Plus, Bell, ChevronDown, LogOut, Settings, Hash, MessageSquare } from 'lucide-react';
+import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
 
 import SyncUpButton from '@/components/syncup/SyncUpButton';
-import {
-  CHAT_NOTIFICATION_EVENT,
-  getChatUnreadTotal,
-  readChatNotifications,
-  readChatUnreadMap,
-  type ChatNotification,
-  UNREAD_BADGE_EVENT,
-} from '@/lib/chat/notification-store';
-import ChatSoundToggle from '@/components/chat/ChatSoundToggle';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+
+const UNREAD_BADGE_EVENT = 'unread-badge-update';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
   onOpenCreateTask: () => void;
-  chatEnabled: boolean;
 }
 
 type AppWorkspace = {
@@ -29,7 +21,7 @@ type AppWorkspace = {
   slug?: string;
 };
 
-export default function Header({ onOpenCommandMenu, onOpenCreateTask, chatEnabled }: HeaderProps) {
+export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderProps) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
@@ -47,52 +39,23 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask, chatEnable
   });
   // Keep the server render identical to the first browser render. Browser-only
   // unread state is loaded in the effect below after hydration.
-  const [chatUnread, setChatUnread] = useState(0);
   const [activityUnread, setActivityUnread] = useState(0);
-  const [chatNotifications, setChatNotifications] = useState<ChatNotification[]>([]);
-
-  const visibleChatNotifications = chatEnabled ? chatNotifications : [];
-  const totalNotificationUnread = (chatEnabled ? chatUnread : 0) + activityUnread;
-
-  const openChatNotification = (notification: ChatNotification) => {
-    localStorage.setItem('bilik_chat_open_channel', notification.channelId);
-    window.dispatchEvent(new CustomEvent('bilik-open-chat-channel', {
-      detail: { channelId: notification.channelId },
-    }));
-    setNotificationOpen(false);
-  };
+  const totalNotificationUnread = activityUnread;
 
   useEffect(() => {
-    setChatUnread(getChatUnreadTotal(readChatUnreadMap()));
     const storedActivityUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
     setActivityUnread(Number.isFinite(storedActivityUnread) ? storedActivityUnread : 0);
-    setChatNotifications(readChatNotifications());
 
     const handleUnreadUpdate = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      if (detail?.type === 'chat' && typeof detail.count === 'number') {
-        setChatUnread(detail.count);
-      }
       if (detail?.type === 'notification' && typeof detail.count === 'number') {
         setActivityUnread(detail.count);
       }
     };
 
-    const handleChatNotifications = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (Array.isArray(detail?.notifications)) {
-        setChatNotifications(detail.notifications);
-      }
-      if (typeof detail?.count === 'number') {
-        setChatUnread(detail.count);
-      }
-    };
-
     window.addEventListener(UNREAD_BADGE_EVENT, handleUnreadUpdate);
-    window.addEventListener(CHAT_NOTIFICATION_EVENT, handleChatNotifications);
     return () => {
       window.removeEventListener(UNREAD_BADGE_EVENT, handleUnreadUpdate);
-      window.removeEventListener(CHAT_NOTIFICATION_EVENT, handleChatNotifications);
     };
   }, []);
 
@@ -309,54 +272,19 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask, chatEnable
                 </Link>
               </div>
               <div className="divide-y divide-[#E8E8EC] max-h-72 overflow-y-auto">
-                {visibleChatNotifications.length === 0 && activityUnread === 0 ? (
+                {activityUnread === 0 ? (
                   <div className="py-6 text-center text-[#737680]">Belum ada notifikasi.</div>
                 ) : (
-                  <>
-                    {visibleChatNotifications.map((notification) => (
-                      <button
-                        key={notification.id}
-                        type="button"
-                        onClick={() => openChatNotification(notification)}
-                        className="w-full flex items-start gap-2.5 py-3 text-left hover:bg-[#F7F7F8] transition-colors"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={notification.senderAvatar}
-                          alt={notification.senderName}
-                          className="w-8 h-8 rounded-full object-cover border border-[#E8E8EC] flex-shrink-0"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1 text-[11px] font-bold text-[#24324A]">
-                            <MessageSquare className="w-3 h-3 text-[#F26B5E] flex-shrink-0" />
-                            <span className="truncate">{notification.senderName}</span>
-                          </span>
-                          <span className="flex items-center gap-1 mt-0.5 text-[10px] text-[#737680]">
-                            <Hash className="w-2.5 h-2.5 flex-shrink-0" />
-                            <span className="truncate">{notification.channelName}</span>
-                          </span>
-                          <span className="block mt-1 text-[11px] text-[#202124] line-clamp-2">{notification.text}</span>
-                        </span>
-                      </button>
-                    ))}
-                    {activityUnread > 0 && (
-                      <Link
-                        href="/notifications"
-                        onClick={() => setNotificationOpen(false)}
-                        className="flex items-center gap-2 py-3 text-[11px] font-semibold text-[#24324A] hover:text-[#F26B5E]"
-                      >
-                        <Bell className="w-3.5 h-3.5 text-[#F26B5E]" />
-                        {activityUnread} aktivitas task/project belum dibaca
-                      </Link>
-                    )}
-                  </>
+                  <Link
+                    href="/notifications"
+                    onClick={() => setNotificationOpen(false)}
+                    className="flex items-center gap-2 py-3 text-[11px] font-semibold text-[#24324A] hover:text-[#F26B5E]"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-[#F26B5E]" />
+                    {activityUnread} aktivitas task/project belum dibaca
+                  </Link>
                 )}
               </div>
-              {chatEnabled && (
-                <div className="mt-2 pt-2 border-t border-[#E8E8EC]">
-                  <ChatSoundToggle />
-                </div>
-              )}
             </div>
           )}
         </div>

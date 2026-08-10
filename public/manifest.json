@@ -1,8 +1,8 @@
 {
   "name": "Bilik Strategi Workspace",
   "short_name": "Bilik Strategi",
-  "description": "Aplikasi internal agency untuk chat Discord-style, presensi live, task ClickUp, dan project management.",
-  "start_url": "/chat",
+  "description": "Aplikasi internal agency untuk presensi live, task ClickUp, invoice, dan project management.",
+  "start_url": "/attendance",
   "display": "standalone",
   "background_color": "#24324A",
   "theme_color": "#24324A",
