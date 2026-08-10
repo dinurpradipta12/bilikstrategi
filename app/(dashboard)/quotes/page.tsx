@@ -27,6 +27,12 @@ type QuoteItem = {
   unitPrice: number;
 };
 
+type QuoteAdditionalPage = {
+  id: string;
+  title: string;
+  content: string;
+};
+
 type QuoteData = {
   quoteNumber: string;
   title: string;
@@ -48,6 +54,7 @@ type QuoteData = {
   recipientAddress: string;
   recipientEmail: string;
   recipientPhone: string;
+  preTablePages: QuoteAdditionalPage[];
   items: QuoteItem[];
   discountPercent: number;
   taxPercent: number;
@@ -183,6 +190,7 @@ function createDefaultQuote(initialQuoteNumber?: string): QuoteData {
     recipientAddress: 'Alamat penerima',
     recipientEmail: '',
     recipientPhone: '',
+    preTablePages: [],
     items: [
       {
         id: generateId(),
@@ -208,6 +216,15 @@ function normalizeQuoteData(value: unknown, quoteNumber?: string): QuoteData {
   const defaults = createDefaultQuote();
   const source = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
   const rawItems = Array.isArray(source.items) ? source.items : defaults.items;
+  const rawPages = Array.isArray(source.preTablePages) ? source.preTablePages : defaults.preTablePages;
+  const preTablePages = rawPages.map((page, index) => {
+    const row = page && typeof page === 'object' ? (page as Record<string, unknown>) : {};
+    return {
+      id: toText(row.id, `page-${index}-${Date.now()}`),
+      title: toText(row.title, `Halaman ${index + 1}`),
+      content: toText(row.content, ''),
+    };
+  });
   const items = rawItems.map((item, index) => {
     const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
     return {
@@ -241,6 +258,7 @@ function normalizeQuoteData(value: unknown, quoteNumber?: string): QuoteData {
     recipientAddress: toText(source.recipientAddress, defaults.recipientAddress),
     recipientEmail: toText(source.recipientEmail, defaults.recipientEmail),
     recipientPhone: toText(source.recipientPhone, defaults.recipientPhone),
+    preTablePages,
     items: items.length > 0 ? items : defaults.items,
     discountPercent: Math.max(0, toNumber(source.discountPercent, defaults.discountPercent)),
     taxPercent: Math.max(0, toNumber(source.taxPercent, defaults.taxPercent)),
@@ -503,6 +521,34 @@ export default function QuotesPage() {
     }));
   };
 
+  const addAdditionalPage = () => {
+    setDraft((current) => ({
+      ...current,
+      preTablePages: [
+        ...current.preTablePages,
+        {
+          id: generateId(),
+          title: `Halaman ${current.preTablePages.length + 1}`,
+          content: 'Tuliskan informasi tambahan sebelum tabel item dan harga.',
+        },
+      ],
+    }));
+  };
+
+  const updateAdditionalPage = (id: string, field: keyof Omit<QuoteAdditionalPage, 'id'>, value: string) => {
+    setDraft((current) => ({
+      ...current,
+      preTablePages: current.preTablePages.map((page) => (page.id === id ? { ...page, [field]: value } : page)),
+    }));
+  };
+
+  const removeAdditionalPage = (id: string) => {
+    setDraft((current) => ({
+      ...current,
+      preTablePages: current.preTablePages.filter((page) => page.id !== id),
+    }));
+  };
+
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
     field: 'logoUrl' | 'backgroundImageUrl',
@@ -614,22 +660,28 @@ export default function QuotesPage() {
 
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-      const canvas = await html2canvas(element, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: draft.backgroundColor || '#FFFFFF',
-        logging: false,
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        windowWidth: element.scrollWidth,
-      });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
-      const imageWidth = canvas.width * ratio;
-      const imageHeight = canvas.height * ratio;
-      pdf.addImage(canvas.toDataURL('image/png', 1), 'PNG', (pageWidth - imageWidth) / 2, 0, imageWidth, imageHeight, undefined, 'FAST');
+      const pageElements = Array.from(element.querySelectorAll<HTMLElement>('.quote-print-page'));
+      const exportTargets = pageElements.length > 0 ? pageElements : [element];
+
+      for (const [index, pageElement] of exportTargets.entries()) {
+        const canvas = await html2canvas(pageElement, {
+          scale: 3,
+          useCORS: true,
+          backgroundColor: draft.backgroundColor || '#FFFFFF',
+          logging: false,
+          width: pageElement.scrollWidth,
+          height: pageElement.scrollHeight,
+          windowWidth: pageElement.scrollWidth,
+        });
+        const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+        const imageWidth = canvas.width * ratio;
+        const imageHeight = canvas.height * ratio;
+        if (index > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/png', 1), 'PNG', (pageWidth - imageWidth) / 2, 0, imageWidth, imageHeight, undefined, 'FAST');
+      }
       pdf.save(`${draft.quoteNumber || 'penawaran-harga'}.pdf`);
       setMessage({ type: 'success', text: 'PDF penawaran HD berhasil dibuat.' });
     } catch (error: any) {
@@ -655,6 +707,33 @@ export default function QuotesPage() {
     color: draft.textColor,
     fontFamily: draft.fontFamily,
   };
+
+  const renderPageHeader = () => (
+    <div className="flex items-start justify-between gap-8 border-b-2 pb-8" style={{ borderColor: draft.accentColor }}>
+      <div className="flex min-w-0 items-start gap-2">
+        {draft.logoUrl ? <div className="flex h-16 w-20 shrink-0 items-center justify-start"><img src={draft.logoUrl} alt="Logo" className="max-h-full max-w-full rounded object-contain object-left" /></div> : <div className="flex h-16 w-20 shrink-0 items-center justify-start text-xs font-bold uppercase tracking-widest opacity-30">Logo</div>}
+        <div className="min-w-0"><h3 className="text-xl font-extrabold">{draft.issuerName || 'Nama Bisnis'}</h3><p className="mt-2 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.issuerAddress}</p><p className="text-[11px] opacity-70">{draft.issuerEmail}{draft.issuerPhone ? ` | ${draft.issuerPhone}` : ''}</p></div>
+      </div>
+      <div className="shrink-0 text-right"><h1 className="text-3xl font-black tracking-tight" style={{ color: draft.accentColor }}>{draft.title || 'PENAWARAN HARGA'}</h1><p className="mt-2 font-mono text-[11px] font-bold">{draft.quoteNumber}</p><p className="mt-1 text-[11px] opacity-70">Tanggal: {formatDate(draft.issueDate)}</p><p className="text-[11px] opacity-70">Berlaku sampai: {formatDate(draft.validUntil)}</p></div>
+    </div>
+  );
+
+  const renderRecipientSummary = () => (
+    <div className="mt-9 grid grid-cols-2 gap-8">
+      <div><p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Ditujukan kepada</p><p className="mt-2 text-base font-extrabold">{draft.recipientCompany || 'Nama Perusahaan'}</p><p className="mt-1 text-[12px] font-semibold">{draft.recipientName}</p><p className="mt-1 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.recipientAddress}</p><p className="text-[11px] opacity-70">{draft.recipientEmail}{draft.recipientPhone ? ` | ${draft.recipientPhone}` : ''}</p></div>
+      <div className="text-right"><p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Nilai Penawaran</p><p className="mt-2 text-2xl font-black" style={{ color: draft.accentColor }}>{formatCurrency(totals.total, draft.currency)}</p><p className="mt-2 text-[11px] opacity-60">Estimasi berdasarkan item di bawah</p></div>
+    </div>
+  );
+
+  const renderPricingDetails = () => (
+    <>
+      <div className="mt-10"><table className="w-full border-collapse text-left"><thead><tr style={{ backgroundColor: `${draft.accentColor}18` }}><th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider">Deskripsi</th><th className="w-20 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Qty</th><th className="w-32 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Harga</th><th className="w-36 px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Jumlah</th></tr></thead><tbody>{draft.items.map((item) => <tr key={item.id} className="border-b" style={{ borderColor: `${draft.textColor}22` }}><td className="px-4 py-4 text-[12px]">{item.description}</td><td className="px-3 py-4 text-right text-[12px]">{item.quantity}</td><td className="px-3 py-4 text-right text-[12px]">{formatCurrency(item.unitPrice, draft.currency)}</td><td className="px-4 py-4 text-right text-[12px] font-bold">{formatCurrency(item.quantity * item.unitPrice, draft.currency)}</td></tr>)}</tbody></table></div>
+      <div className="mt-6 flex justify-end"><div className="w-72 space-y-2 text-[11px]"><div className="flex justify-between"><span className="opacity-70">Subtotal</span><span>{formatCurrency(totals.subtotal, draft.currency)}</span></div>{totals.discount > 0 && <div className="flex justify-between"><span className="opacity-70">Diskon ({draft.discountPercent}%)</span><span>- {formatCurrency(totals.discount, draft.currency)}</span></div>}{totals.tax > 0 && <div className="flex justify-between"><span className="opacity-70">Pajak ({draft.taxPercent}%)</span><span>{formatCurrency(totals.tax, draft.currency)}</span></div>}<div className="flex justify-between border-t-2 pt-3 text-base font-black" style={{ borderColor: draft.accentColor }}><span>Total Penawaran</span><span style={{ color: draft.accentColor }}>{formatCurrency(totals.total, draft.currency)}</span></div></div></div>
+      <div className="mt-8 grid grid-cols-2 gap-10 border-t pt-8" style={{ borderColor: `${draft.textColor}22` }}><div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>{draft.paymentTitle}</p><p className="mt-3 text-[11px] font-bold">{draft.bankName}</p><p className="text-[11px] opacity-70">{draft.accountName}</p><p className="font-mono text-[11px] opacity-70">{draft.accountNumber}</p><p className="mt-3 whitespace-pre-line text-[10px] leading-4 opacity-60">{draft.paymentInstructions}</p></div><div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Keterangan</p><p className="mt-3 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.notes}</p></div></div>
+      <div className="mt-8 border-t pt-6" style={{ borderColor: `${draft.textColor}22` }}><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Syarat & Ketentuan</p><p className="mt-3 whitespace-pre-line text-[10px] leading-4 opacity-65">{draft.terms}</p></div>
+      <p className="mt-auto pt-8 text-center text-[9px] opacity-50">{draft.footerText}</p>
+    </>
+  );
 
   return (
     <div className="quote-page space-y-5 animate-fade-in">
@@ -734,6 +813,32 @@ export default function QuotesPage() {
             </div>
 
             <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3 border-b border-[#E8E8EC] pb-2">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Halaman Tambahan Sebelum Tabel</div>
+                  <p className="mt-1 text-[10px] text-[#737680]">Tambahkan profil, ruang lingkup, atau informasi lain. Setiap halaman akan muncul sebelum halaman item dan harga.</p>
+                </div>
+                <button type="button" onClick={addAdditionalPage} className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah</button>
+              </div>
+              {draft.preTablePages.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-[#CBD3DE] px-3 py-3 text-[11px] text-[#737680]">Belum ada halaman tambahan.</div>
+              ) : (
+                <div className="space-y-2">
+                  {draft.preTablePages.map((page, index) => (
+                    <div key={page.id} className="space-y-2 rounded-lg bg-[#F7F7F8] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#737680]">Halaman {index + 1}</span>
+                        <button type="button" onClick={() => removeAdditionalPage(page.id)} title="Hapus halaman tambahan" className="rounded-lg p-1.5 text-[#D95858] hover:bg-[#FFF0ED]"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <input className={inputClass} value={page.title} onChange={(event) => updateAdditionalPage(page.id, 'title', event.target.value)} placeholder="Judul halaman" aria-label={`Judul halaman ${index + 1}`} />
+                      <textarea className={`${inputClass} min-h-28 resize-y`} value={page.content} onChange={(event) => updateAdditionalPage(page.id, 'content', event.target.value)} placeholder="Isi halaman tambahan" aria-label={`Isi halaman ${index + 1}`} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
               <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><Palette className="h-4 w-4 text-[#F26B5E]" /> Tampilan</div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><InputLabel htmlFor="quote-font">Font</InputLabel><div className="relative"><select id="quote-font" className={`${inputClass} appearance-none pr-8`} value={draft.fontFamily} onChange={(event) => updateField('fontFamily', event.target.value)}>{FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-[#737680]" /></div></div>
@@ -784,26 +889,46 @@ export default function QuotesPage() {
         <section className="min-w-0 rounded-xl border border-[#E8E8EC] bg-[#EEF2F7] p-3 shadow-sm">
           <div className="mb-3 flex items-center justify-between px-1"><div><h2 className="text-sm font-extrabold text-[#24324A]">Preview A4</h2><p className="text-[11px] text-[#737680]">Ukuran siap cetak 210 x 297 mm.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#4F9D78]"><Check className="mr-1 inline h-3 w-3" /> Live preview</span></div>
           <div className="overflow-x-auto rounded-lg border border-[#D7DEE8] bg-[#DDE4ED] p-3">
-            <div ref={previewRef} className="quote-print-target mx-auto min-h-[1123px] w-[794px] overflow-hidden bg-white shadow-xl" style={previewStyle}>
-              <div className="flex min-h-[1123px] flex-col p-[64px]" style={{ color: draft.textColor }}>
-                <div className="flex items-start justify-between gap-8 border-b-2 pb-8" style={{ borderColor: draft.accentColor }}>
-                  <div className="flex min-w-0 items-start gap-2">
-                    {draft.logoUrl ? <div className="flex h-16 w-20 shrink-0 items-center justify-start"><img src={draft.logoUrl} alt="Logo" className="max-h-full max-w-full rounded object-contain object-left" /></div> : <div className="flex h-16 w-20 shrink-0 items-center justify-start text-xs font-bold uppercase tracking-widest opacity-30">Logo</div>}
-                    <div className="min-w-0"><h3 className="text-xl font-extrabold">{draft.issuerName || 'Nama Bisnis'}</h3><p className="mt-2 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.issuerAddress}</p><p className="text-[11px] opacity-70">{draft.issuerEmail}{draft.issuerPhone ? ` | ${draft.issuerPhone}` : ''}</p></div>
-                  </div>
-                  <div className="shrink-0 text-right"><h1 className="text-3xl font-black tracking-tight" style={{ color: draft.accentColor }}>{draft.title || 'PENAWARAN HARGA'}</h1><p className="mt-2 font-mono text-[11px] font-bold">{draft.quoteNumber}</p><p className="mt-1 text-[11px] opacity-70">Tanggal: {formatDate(draft.issueDate)}</p><p className="text-[11px] opacity-70">Berlaku sampai: {formatDate(draft.validUntil)}</p></div>
+            <div ref={previewRef} className="quote-print-target flex flex-col items-center gap-4">
+              {draft.preTablePages.length === 0 ? (
+                <div className="quote-print-page flex min-h-[1123px] w-[794px] flex-col p-[64px] shadow-xl" style={previewStyle}>
+                  {renderPageHeader()}
+                  {renderRecipientSummary()}
+                  {renderPricingDetails()}
                 </div>
+              ) : (
+                <>
+                  <div className="quote-print-page flex min-h-[1123px] w-[794px] flex-col p-[64px] shadow-xl" style={previewStyle}>
+                    {renderPageHeader()}
+                    {renderRecipientSummary()}
+                    <div className="mt-auto rounded-xl border p-6" style={{ borderColor: `${draft.accentColor}44`, backgroundColor: `${draft.accentColor}0D` }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Informasi Penawaran</p>
+                      <p className="mt-3 text-sm font-semibold">Dokumen ini berisi informasi tambahan dan rincian harga untuk kebutuhan {draft.recipientCompany || 'penerima'}.</p>
+                      <p className="mt-2 text-[11px] leading-5 opacity-70">Lihat halaman berikutnya untuk detail tambahan sebelum masuk ke tabel item dan harga.</p>
+                    </div>
+                    <p className="pt-8 text-center text-[9px] opacity-50">{draft.footerText}</p>
+                  </div>
 
-                <div className="mt-9 grid grid-cols-2 gap-8"><div><p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Ditujukan kepada</p><p className="mt-2 text-base font-extrabold">{draft.recipientCompany || 'Nama Perusahaan'}</p><p className="mt-1 text-[12px] font-semibold">{draft.recipientName}</p><p className="mt-1 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.recipientAddress}</p><p className="text-[11px] opacity-70">{draft.recipientEmail}{draft.recipientPhone ? ` | ${draft.recipientPhone}` : ''}</p></div><div className="text-right"><p className="text-[10px] font-bold uppercase tracking-widest opacity-60">Nilai Penawaran</p><p className="mt-2 text-2xl font-black" style={{ color: draft.accentColor }}>{formatCurrency(totals.total, draft.currency)}</p><p className="mt-2 text-[11px] opacity-60">Estimasi berdasarkan item di bawah</p></div></div>
+                  {draft.preTablePages.map((page, index) => (
+                    <div key={page.id} className="quote-print-page flex min-h-[1123px] w-[794px] flex-col p-[64px] shadow-xl" style={previewStyle}>
+                      <div className="flex items-start justify-between border-b-2 pb-6" style={{ borderColor: draft.accentColor }}>
+                        <div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Informasi Tambahan</p><h2 className="mt-2 text-2xl font-black">{page.title || `Halaman ${index + 1}`}</h2></div>
+                        <div className="text-right text-[10px] opacity-60"><p>{draft.quoteNumber}</p><p className="mt-1">Halaman {index + 2}</p></div>
+                      </div>
+                      <div className="mt-12 whitespace-pre-line text-[13px] leading-7">{page.content || 'Belum ada isi halaman.'}</div>
+                      <p className="mt-auto border-t pt-6 text-center text-[9px] opacity-50" style={{ borderColor: `${draft.textColor}22` }}>{draft.footerText}</p>
+                    </div>
+                  ))}
 
-                <div className="mt-10"><table className="w-full border-collapse text-left"><thead><tr style={{ backgroundColor: `${draft.accentColor}18` }}><th className="px-4 py-3 text-[10px] font-bold uppercase tracking-wider">Deskripsi</th><th className="w-20 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Qty</th><th className="w-32 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Harga</th><th className="w-36 px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider">Jumlah</th></tr></thead><tbody>{draft.items.map((item) => <tr key={item.id} className="border-b" style={{ borderColor: `${draft.textColor}22` }}><td className="px-4 py-4 text-[12px]">{item.description}</td><td className="px-3 py-4 text-right text-[12px]">{item.quantity}</td><td className="px-3 py-4 text-right text-[12px]">{formatCurrency(item.unitPrice, draft.currency)}</td><td className="px-4 py-4 text-right text-[12px] font-bold">{formatCurrency(item.quantity * item.unitPrice, draft.currency)}</td></tr>)}</tbody></table></div>
-
-                <div className="mt-6 flex justify-end"><div className="w-72 space-y-2 text-[11px]"><div className="flex justify-between"><span className="opacity-70">Subtotal</span><span>{formatCurrency(totals.subtotal, draft.currency)}</span></div>{totals.discount > 0 && <div className="flex justify-between"><span className="opacity-70">Diskon ({draft.discountPercent}%)</span><span>- {formatCurrency(totals.discount, draft.currency)}</span></div>}{totals.tax > 0 && <div className="flex justify-between"><span className="opacity-70">Pajak ({draft.taxPercent}%)</span><span>{formatCurrency(totals.tax, draft.currency)}</span></div>}<div className="flex justify-between border-t-2 pt-3 text-base font-black" style={{ borderColor: draft.accentColor }}><span>Total Penawaran</span><span style={{ color: draft.accentColor }}>{formatCurrency(totals.total, draft.currency)}</span></div></div></div>
-
-                <div className="mt-8 grid grid-cols-2 gap-10 border-t pt-8" style={{ borderColor: `${draft.textColor}22` }}><div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>{draft.paymentTitle}</p><p className="mt-3 text-[11px] font-bold">{draft.bankName}</p><p className="text-[11px] opacity-70">{draft.accountName}</p><p className="font-mono text-[11px] opacity-70">{draft.accountNumber}</p><p className="mt-3 whitespace-pre-line text-[10px] leading-4 opacity-60">{draft.paymentInstructions}</p></div><div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Keterangan</p><p className="mt-3 whitespace-pre-line text-[11px] leading-5 opacity-70">{draft.notes}</p></div></div>
-                <div className="mt-8 border-t pt-6" style={{ borderColor: `${draft.textColor}22` }}><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Syarat & Ketentuan</p><p className="mt-3 whitespace-pre-line text-[10px] leading-4 opacity-65">{draft.terms}</p></div>
-                <p className="mt-auto pt-8 text-center text-[9px] opacity-50">{draft.footerText}</p>
-              </div>
+                  <div className="quote-print-page flex min-h-[1123px] w-[794px] flex-col p-[64px] shadow-xl" style={previewStyle}>
+                    <div className="mb-9 flex items-end justify-between border-b-2 pb-5" style={{ borderColor: draft.accentColor }}>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: draft.accentColor }}>Rincian Penawaran</p><h2 className="mt-2 text-xl font-black">Item & Harga</h2></div>
+                      <div className="text-right text-[10px] opacity-60"><p>{draft.quoteNumber}</p><p className="mt-1">{formatDate(draft.issueDate)}</p></div>
+                    </div>
+                    {renderPricingDetails()}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -813,7 +938,9 @@ export default function QuotesPage() {
         @media print {
           body * { visibility: hidden !important; }
           .quote-print-target, .quote-print-target * { visibility: visible !important; }
-          .quote-print-target { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; min-height: 297mm !important; box-shadow: none !important; }
+          .quote-print-target { position: absolute !important; left: 0 !important; top: 0 !important; width: 210mm !important; gap: 0 !important; }
+          .quote-print-page { width: 210mm !important; min-height: 297mm !important; height: 297mm !important; margin: 0 !important; box-shadow: none !important; break-after: page !important; page-break-after: always !important; }
+          .quote-print-page:last-child { break-after: auto !important; page-break-after: auto !important; }
         }
       `}</style>
     </div>
