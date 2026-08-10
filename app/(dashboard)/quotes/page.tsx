@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { EditorAccordion } from '@/components/ui/EditorAccordion';
 
 type QuoteItem = {
   id: string;
@@ -795,8 +796,7 @@ export default function QuotesPage() {
           </div>
 
           <div className="space-y-6 p-5">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Identitas Penawaran</div>
+            <EditorAccordion title="Identitas Penawaran" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />} defaultOpen>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <InputLabel htmlFor="quote-number">Nomor Penawaran</InputLabel>
@@ -810,16 +810,14 @@ export default function QuotesPage() {
                   <div className="relative"><select id="quote-currency" className={`${inputClass} appearance-none pr-8`} value={draft.currency} onChange={(event) => updateField('currency', event.target.value)}>{CURRENCY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-[#737680]" /></div>
                 </div>
               </div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-3 border-b border-[#E8E8EC] pb-2">
-                <div>
-                  <div className="flex items-center gap-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Halaman Tambahan Sebelum Tabel</div>
-                  <p className="mt-1 text-[10px] text-[#737680]">Tambahkan profil, ruang lingkup, atau informasi lain. Setiap halaman akan muncul sebelum halaman item dan harga.</p>
-                </div>
-                <button type="button" onClick={addAdditionalPage} className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah</button>
-              </div>
+            <EditorAccordion
+              title="Halaman Tambahan Sebelum Tabel"
+              icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}
+              action={<button type="button" onClick={addAdditionalPage} className="inline-flex shrink-0 items-center gap-1 rounded-md py-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah</button>}
+            >
+              <p className="text-[10px] text-[#737680]">Tambahkan profil, ruang lingkup, atau informasi lain. Setiap halaman akan muncul sebelum halaman item dan harga.</p>
               {draft.preTablePages.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-[#CBD3DE] px-3 py-3 text-[11px] text-[#737680]">Belum ada halaman tambahan.</div>
               ) : (
@@ -836,19 +834,17 @@ export default function QuotesPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><Palette className="h-4 w-4 text-[#F26B5E]" /> Tampilan</div>
+            <EditorAccordion title="Tampilan" icon={<Palette className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><InputLabel htmlFor="quote-font">Font</InputLabel><div className="relative"><select id="quote-font" className={`${inputClass} appearance-none pr-8`} value={draft.fontFamily} onChange={(event) => updateField('fontFamily', event.target.value)}>{FONT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-[#737680]" /></div></div>
                 <div className="grid grid-cols-3 gap-2"><div><InputLabel htmlFor="quote-bg">Background</InputLabel><input id="quote-bg" type="color" className="h-[42px] w-full cursor-pointer rounded-lg border border-[#DDE1E7] bg-white p-1" value={draft.backgroundColor} onChange={(event) => updateField('backgroundColor', event.target.value)} /></div><div><InputLabel htmlFor="quote-accent">Aksen</InputLabel><input id="quote-accent" type="color" className="h-[42px] w-full cursor-pointer rounded-lg border border-[#DDE1E7] bg-white p-1" value={draft.accentColor} onChange={(event) => updateField('accentColor', event.target.value)} /></div><div><InputLabel htmlFor="quote-text-color">Teks</InputLabel><input id="quote-text-color" type="color" className="h-[42px] w-full cursor-pointer rounded-lg border border-[#DDE1E7] bg-white p-1" value={draft.textColor} onChange={(event) => updateField('textColor', event.target.value)} /></div></div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2"><label className="flex cursor-pointer items-center justify-between rounded-lg border border-dashed border-[#CBD3DE] px-3 py-2.5 text-xs text-[#40536F] hover:border-[#24324A]"><span className="flex items-center gap-2"><ImagePlus className="h-4 w-4" /> Background image</span>{uploading === 'background' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}<input type="file" accept="image/*" className="hidden" onChange={(event) => handleImageUpload(event, 'backgroundImageUrl')} /></label>{draft.backgroundImageUrl && <button type="button" onClick={() => updateField('backgroundImageUrl', '')} className="rounded-lg border border-[#F3B7B0] px-3 py-2 text-xs font-bold text-[#B5473D] hover:bg-[#FFF0ED]">Hapus background image</button>}</div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><ImagePlus className="h-4 w-4 text-[#F26B5E]" /> Branding & Pihak</div>
+            <EditorAccordion title="Branding & Pihak" icon={<ImagePlus className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#CBD3DE] p-3">
                 {draft.logoUrl ? <img src={draft.logoUrl} alt="Logo penawaran" className="h-12 w-20 rounded object-contain" /> : <div className="flex h-12 w-20 items-center justify-center rounded bg-[#F7F7F8] text-[#737680]"><ImagePlus className="h-5 w-5" /></div>}
                 <div className="min-w-0 flex-1"><p className="text-xs font-bold text-[#24324A]">Logo penawaran</p><p className="mt-0.5 text-[10px] text-[#737680]">PNG transparan tetap dipertahankan.</p></div>
@@ -866,23 +862,26 @@ export default function QuotesPage() {
                 <div><InputLabel htmlFor="quote-recipient-email">Email Penerima</InputLabel><input id="quote-recipient-email" type="email" className={inputClass} value={draft.recipientEmail} onChange={(event) => updateField('recipientEmail', event.target.value)} /></div>
                 <div className="sm:col-span-2"><InputLabel htmlFor="quote-recipient-phone">Telepon Penerima</InputLabel><input id="quote-recipient-phone" className={inputClass} value={draft.recipientPhone} onChange={(event) => updateField('recipientPhone', event.target.value)} /></div>
               </div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-2"><div className="flex items-center gap-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Item & Harga</div><button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button></div>
+            <EditorAccordion
+              title="Item & Harga"
+              icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}
+              defaultOpen
+              action={<button type="button" onClick={addItem} className="inline-flex shrink-0 items-center gap-1 rounded-md py-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button>}
+            >
               <div className="space-y-2">{draft.items.map((item) => <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_70px_110px_32px] items-end gap-2 rounded-lg bg-[#F7F7F8] p-2"><div><InputLabel>Deskripsi</InputLabel><input className={inputClass} value={item.description} onChange={(event) => updateItem(item.id, 'description', event.target.value)} /></div><div><InputLabel>Qty</InputLabel><input type="number" min="0" step="0.01" className={inputClass} value={item.quantity} onChange={(event) => updateItem(item.id, 'quantity', toNumber(event.target.value))} /></div><div><InputLabel>Harga</InputLabel><input type="number" min="0" step="1000" className={inputClass} value={item.unitPrice} onChange={(event) => updateItem(item.id, 'unitPrice', toNumber(event.target.value))} /></div><button type="button" onClick={() => removeItem(item.id)} title="Hapus item" className="mb-0.5 rounded-lg p-2 text-[#D95858] hover:bg-[#FFF0ED]"><Trash2 className="h-4 w-4" /></button></div>)}</div>
               <div className="grid gap-3 sm:grid-cols-2"><div><InputLabel htmlFor="quote-discount">Diskon (%)</InputLabel><input id="quote-discount" type="number" min="0" className={inputClass} value={draft.discountPercent} onChange={(event) => updateField('discountPercent', toNumber(event.target.value))} /></div><div><InputLabel htmlFor="quote-tax">Pajak (%)</InputLabel><input id="quote-tax" type="number" min="0" className={inputClass} value={draft.taxPercent} onChange={(event) => updateField('taxPercent', toNumber(event.target.value))} /></div></div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><CalendarDays className="h-4 w-4 text-[#F26B5E]" /> Ketentuan & Pembayaran</div>
+            <EditorAccordion title="Ketentuan & Pembayaran" icon={<CalendarDays className="h-4 w-4 text-[#F26B5E]" />}>
               <div><InputLabel htmlFor="quote-notes">Keterangan Penawaran</InputLabel><textarea id="quote-notes" className={`${inputClass} min-h-20 resize-y`} value={draft.notes} onChange={(event) => updateField('notes', event.target.value)} /></div>
               <div><InputLabel htmlFor="quote-terms">Syarat & Ketentuan</InputLabel><textarea id="quote-terms" className={`${inputClass} min-h-24 resize-y`} value={draft.terms} onChange={(event) => updateField('terms', event.target.value)} /></div>
               <div><InputLabel htmlFor="quote-payment-title">Judul Pembayaran</InputLabel><input id="quote-payment-title" className={inputClass} value={draft.paymentTitle} onChange={(event) => updateField('paymentTitle', event.target.value)} /></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><InputLabel htmlFor="quote-bank-name">Nama Bank</InputLabel><input id="quote-bank-name" className={inputClass} value={draft.bankName} onChange={(event) => updateField('bankName', event.target.value)} /></div><div><InputLabel htmlFor="quote-account-name">Nama Rekening</InputLabel><input id="quote-account-name" className={inputClass} value={draft.accountName} onChange={(event) => updateField('accountName', event.target.value)} /></div><div className="sm:col-span-2"><InputLabel htmlFor="quote-account-number">Nomor Rekening</InputLabel><input id="quote-account-number" className={inputClass} value={draft.accountNumber} onChange={(event) => updateField('accountNumber', event.target.value)} /></div></div>
               <div><InputLabel htmlFor="quote-payment-instructions">Instruksi Pembayaran</InputLabel><textarea id="quote-payment-instructions" className={`${inputClass} min-h-20 resize-y`} value={draft.paymentInstructions} onChange={(event) => updateField('paymentInstructions', event.target.value)} /></div>
               <div><InputLabel htmlFor="quote-footer">Footer</InputLabel><input id="quote-footer" className={inputClass} value={draft.footerText} onChange={(event) => updateField('footerText', event.target.value)} /></div>
-            </div>
+            </EditorAccordion>
           </div>
         </section>
 

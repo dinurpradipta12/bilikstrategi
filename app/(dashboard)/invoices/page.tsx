@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import { EditorAccordion } from '@/components/ui/EditorAccordion';
 
 type InvoiceItem = {
   id: string;
@@ -746,8 +747,7 @@ export default function InvoicesPage() {
           </div>
 
           <div className="max-h-[calc(100vh-220px)] space-y-6 overflow-y-auto p-5 pb-12">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Identitas Invoice</div>
+            <EditorAccordion title="Identitas Invoice" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />} defaultOpen>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <InputLabel htmlFor="invoice-number">Nomor Invoice</InputLabel>
@@ -778,10 +778,9 @@ export default function InvoicesPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><Palette className="h-4 w-4 text-[#F26B5E]" /> Tampilan</div>
+            <EditorAccordion title="Tampilan" icon={<Palette className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <InputLabel htmlFor="invoice-font">Font</InputLabel>
@@ -806,10 +805,9 @@ export default function InvoicesPage() {
                 </label>
                 {draft.backgroundImageUrl && <button type="button" onClick={() => updateField('backgroundImageUrl', '')} className="rounded-lg border border-[#F3B7B0] px-3 py-2 text-xs font-bold text-[#B5473D] hover:bg-[#FFF0ED]">Hapus background image</button>}
               </div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><ImagePlus className="h-4 w-4 text-[#F26B5E]" /> Branding & Pihak</div>
+            <EditorAccordion title="Branding & Pihak" icon={<ImagePlus className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#CBD3DE] p-3">
                 {draft.logoUrl ? <img src={draft.logoUrl} alt="Logo invoice" className="h-12 w-20 rounded object-contain" /> : <div className="flex h-12 w-20 items-center justify-center rounded bg-[#F7F7F8] text-[#737680]"><ImagePlus className="h-5 w-5" /></div>}
                 <div className="flex-1"><p className="text-xs font-bold text-[#24324A]">Logo invoice</p><p className="mt-0.5 text-[10px] text-[#737680]">Gambar diperkecil otomatis agar aman disimpan.</p></div>
@@ -825,10 +823,14 @@ export default function InvoicesPage() {
                 <div><InputLabel htmlFor="client-email">Email Klien</InputLabel><input id="client-email" type="email" className={inputClass} value={draft.clientEmail} onChange={(event) => updateField('clientEmail', event.target.value)} /></div>
                 <div className="sm:col-span-2"><InputLabel htmlFor="issuer-phone">Telepon Bisnis</InputLabel><input id="issuer-phone" className={inputClass} value={draft.issuerPhone} onChange={(event) => updateField('issuerPhone', event.target.value)} /></div>
               </div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-2"><div className="flex items-center gap-2 text-xs font-extrabold text-[#24324A]"><FileText className="h-4 w-4 text-[#F26B5E]" /> Item & Harga</div><button type="button" onClick={addItem} className="inline-flex items-center gap-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button></div>
+            <EditorAccordion
+              title="Item & Harga"
+              icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}
+              defaultOpen
+              action={<button type="button" onClick={addItem} className="inline-flex shrink-0 items-center gap-1 rounded-md py-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button>}
+            >
               <div className="space-y-2">
                 {draft.items.map((item) => (
                   <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_70px_110px_32px] items-end gap-2 rounded-lg bg-[#F7F7F8] p-2">
@@ -840,16 +842,15 @@ export default function InvoicesPage() {
                 ))}
               </div>
               <div className="grid gap-3 sm:grid-cols-2"><div><InputLabel htmlFor="discount-percent">Diskon (%)</InputLabel><input id="discount-percent" type="number" min="0" className={inputClass} value={draft.discountPercent} onChange={(event) => updateField('discountPercent', toNumber(event.target.value))} /></div><div><InputLabel htmlFor="tax-percent">Pajak (%)</InputLabel><input id="tax-percent" type="number" min="0" className={inputClass} value={draft.taxPercent} onChange={(event) => updateField('taxPercent', toNumber(event.target.value))} /></div></div>
-            </div>
+            </EditorAccordion>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-b border-[#E8E8EC] pb-2 text-xs font-extrabold text-[#24324A]"><CalendarDays className="h-4 w-4 text-[#F26B5E]" /> Pembayaran & Catatan</div>
+            <EditorAccordion title="Pembayaran & Catatan" icon={<CalendarDays className="h-4 w-4 text-[#F26B5E]" />}>
               <div><InputLabel htmlFor="payment-title">Judul Pembayaran</InputLabel><input id="payment-title" className={inputClass} value={draft.paymentTitle} onChange={(event) => updateField('paymentTitle', event.target.value)} /></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><InputLabel htmlFor="bank-name">Nama Bank</InputLabel><input id="bank-name" className={inputClass} value={draft.bankName} onChange={(event) => updateField('bankName', event.target.value)} /></div><div><InputLabel htmlFor="account-name">Nama Rekening</InputLabel><input id="account-name" className={inputClass} value={draft.accountName} onChange={(event) => updateField('accountName', event.target.value)} /></div><div className="sm:col-span-2"><InputLabel htmlFor="account-number">Nomor Rekening</InputLabel><input id="account-number" className={inputClass} value={draft.accountNumber} onChange={(event) => updateField('accountNumber', event.target.value)} /></div></div>
               <div><InputLabel htmlFor="payment-instructions">Instruksi Pembayaran</InputLabel><textarea id="payment-instructions" className={`${inputClass} min-h-20 resize-y`} value={draft.paymentInstructions} onChange={(event) => updateField('paymentInstructions', event.target.value)} /></div>
               <div><InputLabel htmlFor="invoice-notes">Catatan Invoice</InputLabel><textarea id="invoice-notes" className={`${inputClass} min-h-20 resize-y`} value={draft.notes} onChange={(event) => updateField('notes', event.target.value)} /></div>
               <div><InputLabel htmlFor="invoice-footer">Footer</InputLabel><input id="invoice-footer" className={inputClass} value={draft.footerText} onChange={(event) => updateField('footerText', event.target.value)} /></div>
-            </div>
+            </EditorAccordion>
           </div>
         </section>
 
