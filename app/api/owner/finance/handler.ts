@@ -115,15 +115,19 @@ export async function GET(req: NextRequest) {
     const selectedMonth = monthKey(new URL(req.url).searchParams.get('month'));
     const workspace = encodeURIComponent(WORKSPACE_ID);
     const month = encodeURIComponent(selectedMonth);
+    const selectedYear = selectedMonth.slice(0, 4);
+    const nextYear = String(Number(selectedYear) + 1);
+    const yearStart = encodeURIComponent(`${selectedYear}-01-01`);
+    const nextYearStart = encodeURIComponent(`${nextYear}-01-01`);
 
     const [settings, entries, salaries, salaryPayments, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
       readRows(`app_owner_finance_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&select=*`),
       readRows(`app_owner_finance_entries?workspace_id=eq.${workspace}&order=entry_date.desc,created_at.desc&limit=500&select=*`),
       readRows(`app_owner_salary_settings?workspace_id=eq.${workspace}&order=display_name.asc&select=*`),
-      readOptionalRows(`app_owner_salary_payments?workspace_id=eq.${workspace}&month_key=eq.${month}&order=paid_date.desc&select=*`),
+      readOptionalRows(`app_owner_salary_payments?workspace_id=eq.${workspace}&month_key=gte.${yearStart}&month_key=lt.${nextYearStart}&order=month_key.desc,paid_date.desc&select=*`),
       readOptionalRows('clients?select=*'),
       readOptionalRows('projects?select=*'),
-      readOptionalRows('task_cache?select=*&limit=1000'),
+      readOptionalRows('task_cache?select=*&limit=5000'),
       readOptionalRows(`app_invoices?workspace_id=eq.${workspace}&limit=500&select=*`),
       readOptionalRows(`app_quotes?workspace_id=eq.${workspace}&limit=500&select=*`),
       readOptionalRows('attendance_logs?select=*&limit=5000'),

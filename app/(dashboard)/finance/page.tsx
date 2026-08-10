@@ -87,6 +87,31 @@ type FinancePayload = {
   warnings?: string[];
 };
 
+type SalaryMonthRecap = {
+  key: string;
+  label: string;
+  income: number;
+  hours: number;
+  completedTasks: number;
+  relatedTasks: number;
+  handledProjects: number;
+  kpi: number;
+  paid: boolean;
+};
+
+type SalaryRecapRow = {
+  member: TeamMember;
+  email: string;
+  name: string;
+  months: SalaryMonthRecap[];
+  totalIncome: number;
+  totalHours: number;
+  totalCompletedTasks: number;
+  totalHandledProjects: number;
+  averageKpi: number;
+  paidMonths: number;
+};
+
 function currentMonth() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -169,6 +194,81 @@ function memberName(member: TeamMember) {
   return toText(member.username, member.email?.split('@')[0] || 'Team Member');
 }
 
+function monthFromValue(value: unknown) {
+  const candidate = toText(value);
+  const match = candidate.match(/^(\d{4}-\d{2})/);
+  return match?.[1] || '';
+}
+
+function yearMonths(year: string) {
+  return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, '0')}`);
+}
+
+function monthLabel(monthKey: string) {
+  try {
+    return new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(`${monthKey}-01T00:00:00`));
+  } catch {
+    return monthKey.slice(5);
+  }
+}
+
+function taskRaw(task: any) {
+  return task?.raw_data || task?.raw || {};
+}
+
+function taskValues(task: any, keys: string[]) {
+  const raw = taskRaw(task);
+  return keys
+    .flatMap((key) => [task?.[key], raw?.[key]])
+    .filter((value) => value !== undefined && value !== null && value !== '');
+}
+
+function taskAssignedTo(task: any, member: TeamMember, name: string, email: string) {
+  const raw = taskRaw(task);
+  const names = [
+    ...(Array.isArray(task?.assignee_names) ? task.assignee_names : []),
+    ...(Array.isArray(raw?.assignee_names) ? raw.assignee_names : []),
+    ...(Array.isArray(raw?.assignees) ? raw.assignees : []),
+  ].map((value: any) => toText(value?.username || value?.email || value?.name || value).toLowerCase());
+  const ids = [
+    ...(Array.isArray(task?.assignee_ids) ? task.assignee_ids : []),
+    ...(Array.isArray(raw?.assignee_ids) ? raw.assignee_ids : []),
+    ...(Array.isArray(raw?.assignees) ? raw.assignees.map((value: any) => value?.id) : []),
+  ].map((value: unknown) => toText(value));
+  return ids.includes(toText(member.id)) || names.some((value) => value === name.toLowerCase() || value === email || value.includes(name.toLowerCase()));
+}
+
+function taskIntersectsMonth(task: any, key: string) {
+  const starts = taskValues(task, ['start_date', 'startDate', 'date_created', 'created_at']).map(monthFromValue).filter(Boolean);
+  const ends = taskValues(task, ['due_date', 'dueDate', 'date_done', 'completed_at', 'updated_at', 'clickup_updated_at']).map(monthFromValue).filter(Boolean);
+  const start = starts[0] || '';
+  const end = ends[0] || start;
+  if (start && end && start <= key && end >= key) return true;
+  return [...starts, ...ends].includes(key);
+}
+
+function taskCompletedInMonth(task: any, key: string) {
+  const completed = taskValues(task, ['completed_at', 'date_completed', 'date_done', 'completedAt', 'dateDone']).map(monthFromValue).find(Boolean);
+  return (completed || monthFromValue(task?.updated_at) || monthFromValue(task?.clickup_updated_at) || monthFromValue(taskRaw(task)?.updated_at) || monthFromValue(taskRaw(task)?.clickup_updated_at) || monthFromValue(task?.due_date)) === key;
+}
+
+function taskProjectKey(task: any) {
+  const raw = taskRaw(task);
+  return toText(
+    task?.project_id || raw?.project_id || raw?.list?.id || raw?.folder?.id || raw?.space?.id ||
+      task?.project_name || raw?.project_name || raw?.list?.name || raw?.folder?.name || raw?.space?.name || task?.id || task?.clickup_task_id || task?.task_name || raw?.task_name || 'unassigned'
+  ).toLowerCase();
+}
+
+function attendanceBelongsTo(log: any, name: string, email: string) {
+  const value = toText(log?.user_name || log?.full_name || log?.email).toLowerCase();
+  return value === email || value === name.toLowerCase() || value.includes(name.toLowerCase());
+}
+
+function attendanceHours(log: any) {
+  return toNumber(log?.regular_hours ?? log?.hours_worked ?? log?.total_hours) + toNumber(log?.overtime_hours);
+}
+
 function emptyEntry(): FinanceEntry {
   return {
     id: '',
@@ -192,6 +292,8 @@ export default function OwnerFinancePage() {
   const [entryForm, setEntryForm] = useState<FinanceEntry>(emptyEntry);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [paymentDraft, setPaymentDraft] = useState<SalaryPayment | null>(null);
+  const [activeTab, setActiveTab] = useState<'finance' | 'salary-recap'>('finance');
+  const [selectedSalaryRecap, setSelectedSalaryRecap] = useState<SalaryRecapRow | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -441,6 +543,63 @@ export default function OwnerFinancePage() {
     });
   }, [data?.operational, data?.salaries, data?.salaryPayments, salaryDrafts, teamMembers, month]);
 
+  const salaryRecapRows = useMemo<SalaryRecapRow[]>(() => {
+    const operational = data?.operational;
+    if (!operational) return [];
+
+    const year = month.slice(0, 4);
+    const months = yearMonths(year);
+    const salaryByEmail = new Map((data?.salaries || []).map((salary) => [toText(salary.user_email).toLowerCase(), salary]));
+    const payments = data?.salaryPayments || [];
+
+    return payrollRows.map((payrollRow) => {
+      const { member, email, name } = payrollRow;
+      const config = salaryDrafts[email] || salaryByEmail.get(email) || payrollRow.config;
+      const projectKeys = new Set<string>();
+      const monthRows = months.map((key) => {
+        const memberTasks = operational.tasks.filter((task) => taskAssignedTo(task, member, name, email) && taskIntersectsMonth(task, key));
+        const completedTasks = memberTasks.filter((task) => isCompletedTask(task) && taskCompletedInMonth(task, key)).length;
+        memberTasks.forEach((task) => projectKeys.add(taskProjectKey(task)));
+
+        const logs = operational.attendanceLogs.filter((log) => monthFromValue(log?.date || log?.attendance_date || log?.created_at) === key && attendanceBelongsTo(log, name, email));
+        const attendance = logs.reduce((sum, log) => sum + attendanceHours(log), 0);
+        const taskHours = memberTasks.reduce((sum, task) => sum + toNumber(task?.time_tracked_hours ?? taskRaw(task)?.time_tracked_hours), 0);
+        const hours = attendance || taskHours;
+        const capacity = Math.max(1, toNumber(config.monthly_capacity_hours, 160));
+        const overtime = Math.max(0, hours - capacity);
+        const estimate = Math.max(0, toNumber(config.minimum_salary)) + overtime * Math.max(0, toNumber(config.hourly_rate));
+        const payment = payments.find((item) => toText(item.user_email).toLowerCase() === email && monthFromValue(item.month_key) === key && item.status === 'paid');
+        const relatedTasks = memberTasks.length;
+
+        return {
+          key,
+          label: monthLabel(key),
+          income: payment ? toNumber(payment.amount) : estimate,
+          hours,
+          completedTasks,
+          relatedTasks,
+          handledProjects: new Set(memberTasks.map(taskProjectKey)).size,
+          kpi: relatedTasks > 0 ? Math.round((completedTasks / relatedTasks) * 100) : 0,
+          paid: Boolean(payment),
+        };
+      });
+
+      const kpiMonths = monthRows.filter((row) => row.relatedTasks > 0);
+      return {
+        member,
+        email,
+        name,
+        months: monthRows,
+        totalIncome: monthRows.reduce((sum, row) => sum + row.income, 0),
+        totalHours: monthRows.reduce((sum, row) => sum + row.hours, 0),
+        totalCompletedTasks: monthRows.reduce((sum, row) => sum + row.completedTasks, 0),
+        totalHandledProjects: projectKeys.size,
+        averageKpi: kpiMonths.length ? Math.round(kpiMonths.reduce((sum, row) => sum + row.kpi, 0) / kpiMonths.length) : 0,
+        paidMonths: monthRows.filter((row) => row.paid).length,
+      };
+    });
+  }, [data?.operational, data?.salaryPayments, data?.salaries, month, payrollRows, salaryDrafts]);
+
   const targetProgress = settings.monthly_revenue_target > 0
     ? Math.min(100, (metrics.recognizedRevenue / settings.monthly_revenue_target) * 100)
     : 0;
@@ -564,6 +723,13 @@ export default function OwnerFinancePage() {
           <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#E8E8EC] bg-white dark:border-[#303742] dark:bg-[#20242C]"><Loader2 className="h-7 w-7 animate-spin text-[#F26B5E]" /></div>
         ) : (
           <>
+            <div className="inline-flex rounded-xl border border-[#E8E8EC] bg-white p-1 shadow-sm dark:border-[#303742] dark:bg-[#20242C]" role="tablist" aria-label="Tampilan finance">
+              <button type="button" role="tab" aria-selected={activeTab === 'finance'} onClick={() => setActiveTab('finance')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'finance' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Finance & Payroll</button>
+              <button type="button" role="tab" aria-selected={activeTab === 'salary-recap'} onClick={() => setActiveTab('salary-recap')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'salary-recap' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Rekap Gaji 12 Bulan</button>
+            </div>
+
+            {activeTab === 'finance' ? (
+              <>
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard icon={CircleDollarSign} label="Pendapatan tercatat" value={formatCompactCurrency(metrics.recognizedRevenue, settings.currency)} detail={`Ledger ${formatCompactCurrency(metrics.ledgerRevenue, settings.currency)} + invoice paid`} accent="green" />
               <MetricCard icon={Target} label="Target bulanan" value={`${Math.round(targetProgress)}%`} detail={`${formatCompactCurrency(metrics.recognizedRevenue, settings.currency)} dari ${formatCompactCurrency(settings.monthly_revenue_target, settings.currency)}`} accent="coral" progress={targetProgress} />
@@ -642,11 +808,121 @@ export default function OwnerFinancePage() {
                 </form>
               </Modal>
             )}
+              </>
+            ) : (
+              <SalaryRecapTab
+                rows={salaryRecapRows}
+                year={month.slice(0, 4)}
+                currency={settings.currency}
+                selectedRow={selectedSalaryRecap}
+                onSelect={setSelectedSalaryRecap}
+                onClose={() => setSelectedSalaryRecap(null)}
+              />
+            )}
           </>
         )}
       </div>
     </main>
   );
+}
+
+function SalaryRecapTab({
+  rows,
+  year,
+  currency,
+  selectedRow,
+  onSelect,
+  onClose,
+}: {
+  rows: SalaryRecapRow[];
+  year: string;
+  currency: string;
+  selectedRow: SalaryRecapRow | null;
+  onSelect: (row: SalaryRecapRow) => void;
+  onClose: () => void;
+}) {
+  const totalIncome = rows.reduce((sum, row) => sum + row.totalIncome, 0);
+  const totalHours = rows.reduce((sum, row) => sum + row.totalHours, 0);
+  const totalCompleted = rows.reduce((sum, row) => sum + row.totalCompletedTasks, 0);
+  const totalProjects = rows.reduce((sum, row) => sum + row.totalHandledProjects, 0);
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div>
+            <h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">Rekap gaji per anggota</h2>
+            <p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Ringkasan pendapatan dan performa setiap anggota selama Januari - Desember {year}.</p>
+          </div>
+          <TrendingUp className="h-5 w-5 shrink-0 text-[#F26B5E]" />
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <BusinessStat label="Total pendapatan" value={formatCompactCurrency(totalIncome, currency)} detail="Pembayaran tersimpan atau estimasi" />
+          <BusinessStat label="Total jam kerja" value={`${totalHours.toFixed(1)} jam`} detail="Presensi dan time tracked" />
+          <BusinessStat label="Task selesai" value={totalCompleted} detail="Task yang terbaca selesai" />
+          <BusinessStat label="Project ditangani" value={totalProjects} detail="Akumulasi project per anggota" />
+        </div>
+        <p className="mt-4 text-[11px] leading-5 text-[#737680] dark:text-[#98A2B3]">KPI dihitung dari task selesai dibagi task terkait pada bulan tersebut. Bulan tanpa pembayaran tersimpan menampilkan estimasi dari gaji minimum dan lembur, sehingga tidak dianggap sudah dibayar.</p>
+      </section>
+
+      {rows.length === 0 ? (
+        <section className="rounded-2xl border border-dashed border-[#E8E8EC] bg-white px-5 py-14 text-center text-sm text-[#737680] dark:border-[#303742] dark:bg-[#20242C] dark:text-[#98A2B3]">Belum ada anggota yang dapat direkap.</section>
+      ) : (
+        <section className="grid gap-4 xl:grid-cols-2">
+          {rows.map((row) => (
+            <button key={row.email} type="button" onClick={() => onSelect(row)} className="rounded-2xl border border-[#E8E8EC] bg-white p-5 text-left shadow-sm transition hover:border-[#F26B5E]/60 hover:shadow-md dark:border-[#303742] dark:bg-[#20242C] dark:hover:border-[#F26B5E]/70">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <img src={row.member.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=24324A&color=fff`} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+                  <div className="min-w-0"><h3 className="truncate text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">{row.name}</h3><p className="truncate text-[11px] text-[#737680] dark:text-[#98A2B3]">{row.email}</p></div>
+                </div>
+                <span className="shrink-0 rounded-lg bg-[#EEF8F3] px-2 py-1 text-[10px] font-extrabold text-[#4F9D78] dark:bg-[#1E392C] dark:text-[#62B58D]">{row.averageKpi}% KPI</span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <BusinessStat label="Pendapatan" value={formatCompactCurrency(row.totalIncome, currency)} />
+                <BusinessStat label="Jam kerja" value={`${row.totalHours.toFixed(1)} jam`} />
+                <BusinessStat label="Task selesai" value={row.totalCompletedTasks} />
+                <BusinessStat label="Project" value={row.totalHandledProjects} />
+              </div>
+              <div className="mt-4"><SalaryChart label="Pendapatan per bulan" months={row.months} getValue={(item) => item.income} formatValue={(value) => formatCurrency(value, currency)} color="bg-[#F26B5E]" compact /></div>
+              <div className="mt-3 flex items-center justify-between text-[11px] text-[#737680] dark:text-[#98A2B3]"><span>{row.paidMonths}/12 bulan sudah dibayar</span><span className="font-bold text-[#F26B5E]">Klik untuk detail</span></div>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {selectedRow && <SalaryRecapDetail row={selectedRow} year={year} currency={currency} onClose={onClose} />}
+    </div>
+  );
+}
+
+function SalaryRecapDetail({ row, year, currency, onClose }: { row: SalaryRecapRow; year: string; currency: string; onClose: () => void }) {
+  return (
+    <Modal title={`Detail rekap gaji - ${row.name} (${year})`} onClose={onClose} wide>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <BusinessStat label="Pendapatan" value={formatCompactCurrency(row.totalIncome, currency)} />
+        <BusinessStat label="Jam kerja" value={`${row.totalHours.toFixed(1)} jam`} />
+        <BusinessStat label="Task selesai" value={row.totalCompletedTasks} />
+        <BusinessStat label="Project" value={row.totalHandledProjects} />
+        <BusinessStat label="KPI rata-rata" value={`${row.averageKpi}%`} />
+      </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <SalaryChart label="Pendapatan per bulan" months={row.months} getValue={(item) => item.income} formatValue={(value) => formatCurrency(value, currency)} color="bg-[#F26B5E]" />
+        <SalaryChart label="Jam kerja per bulan" months={row.months} getValue={(item) => item.hours} formatValue={(value) => `${value.toFixed(1)} jam`} color="bg-[#4F9D78]" />
+        <SalaryChart label="Task selesai per bulan" months={row.months} getValue={(item) => item.completedTasks} formatValue={(value) => `${value} task`} color="bg-[#3B82F6]" />
+        <SalaryChart label="Project ditangani per bulan" months={row.months} getValue={(item) => item.handledProjects} formatValue={(value) => `${value} project`} color="bg-[#E6A23C]" />
+        <div className="lg:col-span-2"><SalaryChart label="KPI completion per bulan" months={row.months} getValue={(item) => item.kpi} formatValue={(value) => `${value}%`} color="bg-[#7B68EE]" maxValue={100} /></div>
+      </div>
+      <div className="mt-5 overflow-x-auto rounded-xl border border-[#E8E8EC] dark:border-[#303742]">
+        <table className="w-full min-w-[720px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-4 py-3 font-bold">Bulan</th><th className="px-4 py-3 text-right font-bold">Pendapatan</th><th className="px-4 py-3 text-right font-bold">Jam</th><th className="px-4 py-3 text-right font-bold">Task selesai / terkait</th><th className="px-4 py-3 text-right font-bold">Project</th><th className="px-4 py-3 text-right font-bold">KPI</th><th className="px-4 py-3 text-right font-bold">Status</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{row.months.map((item) => <tr key={item.key} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-4 py-3 font-semibold">{item.label} {year}</td><td className="px-4 py-3 text-right font-bold">{formatCurrency(item.income, currency)}</td><td className="px-4 py-3 text-right">{item.hours.toFixed(1)}</td><td className="px-4 py-3 text-right">{item.completedTasks} / {item.relatedTasks}</td><td className="px-4 py-3 text-right">{item.handledProjects}</td><td className="px-4 py-3 text-right font-bold">{item.kpi}%</td><td className="px-4 py-3 text-right"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${item.paid ? 'bg-[#EEF8F3] text-[#4F9D78] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>{item.paid ? 'Dibayar' : 'Estimasi'}</span></td></tr>)}</tbody></table>
+      </div>
+    </Modal>
+  );
+}
+
+function SalaryChart({ label, months, getValue, formatValue, color, maxValue, compact = false }: { label: string; months: SalaryMonthRecap[]; getValue: (month: SalaryMonthRecap) => number; formatValue: (value: number) => string; color: string; maxValue?: number; compact?: boolean }) {
+  const max = maxValue || Math.max(1, ...months.map((month) => getValue(month)));
+  return <div className="rounded-xl border border-[#E8E8EC] bg-[#F7F7F8] p-4 dark:border-[#303742] dark:bg-[#282D36]"><div className="flex items-center justify-between gap-3"><h3 className="text-xs font-bold text-[#24324A] dark:text-[#F4F6FA]">{label}</h3><span className="text-[10px] text-[#737680] dark:text-[#98A2B3]">12 bulan</span></div><div className={`mt-3 flex items-end gap-1 ${compact ? 'h-16' : 'h-28'}`}>{months.map((month) => { const value = Math.max(0, getValue(month)); const height = value > 0 ? Math.max(8, (value / max) * 100) : 3; return <div key={month.key} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1"><div className="relative flex h-full w-full items-end justify-center"><div className={`w-full max-w-4 rounded-t-md ${color} opacity-80 transition group-hover:opacity-100`} style={{ height: `${height}%` }} title={`${month.label}: ${formatValue(value)}`} /></div><span className="text-[9px] text-[#737680] dark:text-[#98A2B3]">{month.label}</span></div>; })}</div></div>;
 }
 
 function MetricCard({ icon: Icon, label, value, detail, accent, progress }: { icon: typeof Wallet; label: string; value: string; detail: string; accent: 'green' | 'coral' | 'blue' | 'amber'; progress?: number }) {
@@ -658,9 +934,9 @@ function BusinessStat({ label, value, detail }: { label: string; value: string |
   return <div className="rounded-xl border border-[#E8E8EC] bg-[#F7F7F8] p-4 dark:border-[#303742] dark:bg-[#282D36]"><p className="text-[11px] font-bold uppercase tracking-wide text-[#737680] dark:text-[#98A2B3]">{label}</p><p className="mt-2 text-xl font-bold text-[#24324A] dark:text-[#F4F6FA]">{value}</p>{detail && <p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">{detail}</p>}</div>;
 }
 
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+function Modal({ title, children, onClose, wide = false }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#24324A]/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
-    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#E8E8EC] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#20242C]">
+    <div className={`max-h-[90vh] w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-y-auto rounded-2xl border border-[#E8E8EC] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#20242C]`}>
       <div className="flex items-center justify-between border-b border-[#E8E8EC] px-5 py-4 dark:border-[#303742]"><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{title}</h2><button type="button" onClick={onClose} title="Tutup" className="rounded-lg p-2 text-[#737680] hover:bg-[#F7F7F8] dark:hover:bg-[#282D36]"><X className="h-5 w-5" /></button></div>
       <div className="p-5">{children}</div>
     </div>
