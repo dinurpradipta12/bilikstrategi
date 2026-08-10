@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Keep Tailwind dark utilities tied to the app toggle, not the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     --bg-main: #F7F7F8;
