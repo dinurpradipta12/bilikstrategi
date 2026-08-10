@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Briefcase,
+  CheckCircle2,
   CircleDollarSign,
   Loader2,
   Pencil,
@@ -18,6 +19,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  X,
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 
@@ -48,6 +50,20 @@ type SalarySetting = {
   hourly_rate: number;
 };
 
+type SalaryPayment = {
+  id?: string;
+  month_key: string;
+  user_email: string;
+  amount: number;
+  paid_date: string;
+  payment_method: string;
+  bank_name: string;
+  account_number: string;
+  reference_number: string;
+  notes: string;
+  status: 'paid' | 'cancelled';
+};
+
 type TeamMember = {
   id?: string;
   username?: string;
@@ -59,6 +75,7 @@ type FinancePayload = {
   settings: FinanceSettings;
   entries: FinanceEntry[];
   salaries: SalarySetting[];
+  salaryPayments: SalaryPayment[];
   operational: {
     clients: any[];
     projects: any[];
@@ -78,6 +95,18 @@ function currentMonth() {
 function today() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatDate(value: unknown) {
+  const dateValue = toText(value).slice(0, 10);
+  if (!dateValue) return '-';
+  try {
+    return new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(
+      new Date(`${dateValue}T00:00:00`)
+    );
+  } catch {
+    return dateValue;
+  }
 }
 
 function toNumber(value: unknown, fallback = 0) {
@@ -161,6 +190,8 @@ export default function OwnerFinancePage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [salaryDrafts, setSalaryDrafts] = useState<Record<string, SalarySetting>>({});
   const [entryForm, setEntryForm] = useState<FinanceEntry>(emptyEntry);
+  const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
+  const [paymentDraft, setPaymentDraft] = useState<SalaryPayment | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -210,6 +241,7 @@ export default function OwnerFinancePage() {
         },
         entries: Array.isArray(payload.entries) ? payload.entries : [],
         salaries,
+        salaryPayments: Array.isArray(payload.salaryPayments) ? payload.salaryPayments : [],
         operational: {
           clients: Array.isArray(payload.operational?.clients) ? payload.operational.clients : [],
           projects: Array.isArray(payload.operational?.projects) ? payload.operational.projects : [],
@@ -275,8 +307,10 @@ export default function OwnerFinancePage() {
       if (!response.ok) throw new Error(payload.error || 'Data gagal disimpan.');
       setNotice(successMessage);
       await loadFinance(month);
+      return true;
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Data gagal disimpan.');
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -344,6 +378,11 @@ export default function OwnerFinancePage() {
     const operational = data?.operational;
     if (!operational) return [];
     const byEmail = new Map((data?.salaries || []).map((salary) => [toText(salary.user_email).toLowerCase(), salary]));
+    const paymentsByEmail = new Map(
+      (data?.salaryPayments || [])
+        .filter((payment) => toText(payment.month_key).slice(0, 7) === month && payment.status === 'paid')
+        .map((payment) => [toText(payment.user_email).toLowerCase(), payment])
+    );
     const members = [...teamMembers];
     const existingEmails = new Set(members.map(memberEmail));
     (data?.salaries || []).forEach((salary) => {
@@ -397,9 +436,10 @@ export default function OwnerFinancePage() {
         capacity,
         loadIndex,
         estimatedSalary,
+        payment: paymentsByEmail.get(email),
       };
     });
-  }, [data?.operational, data?.salaries, salaryDrafts, teamMembers, month]);
+  }, [data?.operational, data?.salaries, data?.salaryPayments, salaryDrafts, teamMembers, month]);
 
   const targetProgress = settings.monthly_revenue_target > 0
     ? Math.min(100, (metrics.recognizedRevenue / settings.monthly_revenue_target) * 100)
@@ -408,7 +448,7 @@ export default function OwnerFinancePage() {
 
   const updateSettings = (field: keyof FinanceSettings, value: string) => {
     setData((current) => ({
-      ...(current || { entries: [], salaries: [], operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [] } }),
+      ...(current || { entries: [], salaries: [], salaryPayments: [], operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [] } }),
       settings: { ...(current?.settings || settings), [field]: field === 'currency' || field === 'month_key' ? value : toNumber(value) },
     } as FinancePayload));
   };
@@ -424,13 +464,19 @@ export default function OwnerFinancePage() {
     }, 'Target dan budget bulan ini tersimpan.');
   };
 
-  const submitEntry = (event: FormEvent) => {
+  const submitEntry = async (event: FormEvent) => {
     event.preventDefault();
-    postFinance({ action: 'save_entry', ...entryForm }, entryForm.id ? 'Transaksi diperbarui.' : 'Transaksi ditambahkan.');
-    setEntryForm(emptyEntry());
+    const saved = await postFinance({ action: 'save_entry', ...entryForm }, entryForm.id ? 'Transaksi diperbarui.' : 'Transaksi ditambahkan.');
+    if (saved) {
+      setEntryForm(emptyEntry());
+      setIsEntryModalOpen(false);
+    }
   };
 
-  const editEntry = (entry: FinanceEntry) => setEntryForm({ ...entry });
+  const editEntry = (entry: FinanceEntry) => {
+    setEntryForm({ ...entry });
+    setIsEntryModalOpen(true);
+  };
 
   const deleteEntry = (id: string) => {
     if (!window.confirm('Hapus transaksi finance ini?')) return;
@@ -450,6 +496,33 @@ export default function OwnerFinancePage() {
       ...drafts,
       [email]: { ...current, [field]: field === 'display_name' || field === 'user_email' ? value : toNumber(value) },
     }));
+  };
+
+  const openPaymentModal = (row: (typeof payrollRows)[number]) => {
+    setPaymentDraft({
+      id: row.payment?.id,
+      month_key: `${month}-01`,
+      user_email: row.email,
+      amount: row.payment?.amount ?? row.estimatedSalary,
+      paid_date: row.payment?.paid_date || today(),
+      payment_method: row.payment?.payment_method || 'Bank transfer',
+      bank_name: row.payment?.bank_name || '',
+      account_number: row.payment?.account_number || '',
+      reference_number: row.payment?.reference_number || '',
+      notes: row.payment?.notes || '',
+      status: row.payment?.status || 'paid',
+    });
+  };
+
+  const submitPayment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!paymentDraft) return;
+    const row = payrollRows.find((item) => item.email === paymentDraft.user_email);
+    const saved = await postFinance(
+      { action: 'save_salary_payment', month, ...paymentDraft },
+      `Pembayaran gaji ${row?.name || paymentDraft.user_email} tersimpan.`
+    );
+    if (saved) setPaymentDraft(null);
   };
 
   if (access === 'checking') {
@@ -520,24 +593,55 @@ export default function OwnerFinancePage() {
             </section>
 
             <section className="rounded-2xl border border-[#E8E8EC] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-              <div className="border-b border-[#E8E8EC] p-5 dark:border-[#303742]"><div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">Ledger pendapatan & biaya</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Catat deal customer, biaya operasional, dan transaksi lain yang perlu masuk ke budgeting.</p></div><ReceiptText className="h-5 w-5 text-[#F26B5E]" /></div></div>
-              <form onSubmit={submitEntry} className="grid gap-3 border-b border-[#E8E8EC] p-5 dark:border-[#303742] sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Jenis"><select value={entryForm.entry_type} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_type: event.target.value as FinanceEntry['entry_type'] }))}><option value="revenue">Pendapatan</option><option value="expense">Biaya</option></select></Field>
-                <Field label="Status"><select value={entryForm.status} onChange={(event) => setEntryForm((entry) => ({ ...entry, status: event.target.value as FinanceEntry['status'] }))}><option value="deal">Deal</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></Field>
-                <Field label="Customer"><input value={entryForm.customer_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, customer_name: event.target.value }))} placeholder="Nama customer" /></Field>
-                <Field label="Project"><input value={entryForm.project_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, project_name: event.target.value }))} placeholder="Nama project" /></Field>
-                <Field label="Kategori"><input value={entryForm.category} onChange={(event) => setEntryForm((entry) => ({ ...entry, category: event.target.value }))} placeholder="Project deal / software" /></Field>
-                <Field label="Nominal"><input type="number" min="0" value={entryForm.amount} onChange={(event) => setEntryForm((entry) => ({ ...entry, amount: toNumber(event.target.value) }))} /></Field>
-                <Field label="Tanggal"><input type="date" value={entryForm.entry_date} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_date: event.target.value }))} /></Field>
-                <div className="flex items-end gap-2"><Field label="Catatan" className="min-w-0 flex-1"><input value={entryForm.notes} onChange={(event) => setEntryForm((entry) => ({ ...entry, notes: event.target.value }))} placeholder="Opsional" /></Field><button type="submit" disabled={isSaving} title={entryForm.id ? 'Simpan perubahan' : 'Tambah transaksi'} className="mb-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F26B5E] text-white hover:opacity-90 disabled:opacity-50">{entryForm.id ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</button></div>
-              </form>
-              <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-5 py-3 font-bold">Tanggal</th><th className="px-5 py-3 font-bold">Jenis</th><th className="px-5 py-3 font-bold">Customer / Project</th><th className="px-5 py-3 font-bold">Status</th><th className="px-5 py-3 text-right font-bold">Nominal</th><th className="px-5 py-3 text-right font-bold">Aksi</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{monthEntries.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center text-[#737680] dark:text-[#98A2B3]">Belum ada transaksi pada periode ini.</td></tr> : monthEntries.map((entry) => <tr key={entry.id} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-5 py-3">{entry.entry_date}</td><td className="px-5 py-3"><span className={`inline-flex items-center gap-1 font-bold ${entry.entry_type === 'revenue' ? 'text-[#4F9D78]' : 'text-[#D95858]'}`}>{entry.entry_type === 'revenue' ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}{entry.entry_type === 'revenue' ? 'Pendapatan' : 'Biaya'}</span></td><td className="px-5 py-3"><div className="font-semibold">{entry.customer_name || '-'}</div><div className="text-[#737680] dark:text-[#98A2B3]">{entry.project_name || entry.category || '-'}</div></td><td className="px-5 py-3"><span className="rounded-full bg-[#EEF2F7] px-2 py-1 font-bold text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">{entry.status}</span></td><td className={`px-5 py-3 text-right font-bold ${entry.entry_type === 'revenue' ? 'text-[#4F9D78]' : 'text-[#D95858]'}`}>{entry.entry_type === 'revenue' ? '+' : '-'}{formatCurrency(entry.amount, settings.currency)}</td><td className="px-5 py-3 text-right"><button type="button" onClick={() => editEntry(entry)} title="Edit transaksi" className="mr-1 rounded-lg p-2 text-[#737680] hover:bg-[#EEF2F7] hover:text-[#24324A] dark:hover:bg-[#2A3340] dark:hover:text-white"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => deleteEntry(entry.id)} title="Hapus transaksi" className="rounded-lg p-2 text-[#D95858] hover:bg-[#FFF0ED] dark:hover:bg-[#3B272B]"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>
+              <div className="border-b border-[#E8E8EC] p-5 dark:border-[#303742]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">Ledger pendapatan & biaya</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Catat deal customer, biaya operasional, dan transaksi lain yang perlu masuk ke budgeting.</p></div>
+                  <div className="flex items-center gap-2"><ReceiptText className="h-5 w-5 text-[#F26B5E]" /><button type="button" onClick={() => { setEntryForm(emptyEntry()); setIsEntryModalOpen(true); }} className="inline-flex items-center gap-1.5 rounded-xl bg-[#F26B5E] px-3 py-2 text-xs font-extrabold text-white hover:opacity-90"><Plus className="h-4 w-4" /> Tambah transaksi</button></div>
+                </div>
+              </div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-5 py-3 font-bold">Tanggal</th><th className="px-5 py-3 font-bold">Jenis</th><th className="px-5 py-3 font-bold">Customer / Project</th><th className="px-5 py-3 font-bold">Status</th><th className="px-5 py-3 text-right font-bold">Nominal</th><th className="px-5 py-3 text-right font-bold">Aksi</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{monthEntries.length === 0 ? <tr><td colSpan={6} className="px-5 py-10 text-center text-[#737680] dark:text-[#98A2B3]">Belum ada transaksi pada periode ini.</td></tr> : monthEntries.map((entry) => <tr key={entry.id} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-5 py-3">{formatDate(entry.entry_date)}</td><td className="px-5 py-3"><span className={`inline-flex items-center gap-1 font-bold ${entry.entry_type === 'revenue' ? 'text-[#4F9D78]' : 'text-[#D95858]'}`}>{entry.entry_type === 'revenue' ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}{entry.entry_type === 'revenue' ? 'Pendapatan' : 'Biaya'}</span></td><td className="px-5 py-3"><div className="font-semibold">{entry.customer_name || '-'}</div><div className="text-[#737680] dark:text-[#98A2B3]">{entry.project_name || entry.category || '-'}</div></td><td className="px-5 py-3"><span className="rounded-full bg-[#EEF2F7] px-2 py-1 font-bold text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">{entry.status}</span></td><td className={`px-5 py-3 text-right font-bold ${entry.entry_type === 'revenue' ? 'text-[#4F9D78]' : 'text-[#D95858]'}`}>{entry.entry_type === 'revenue' ? '+' : '-'}{formatCurrency(entry.amount, settings.currency)}</td><td className="px-5 py-3 text-right"><button type="button" onClick={() => editEntry(entry)} title="Edit transaksi" className="mr-1 rounded-lg p-2 text-[#737680] hover:bg-[#EEF2F7] hover:text-[#24324A] dark:hover:bg-[#2A3340] dark:hover:text-white"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => deleteEntry(entry.id)} title="Hapus transaksi" className="rounded-lg p-2 text-[#D95858] hover:bg-[#FFF0ED] dark:hover:bg-[#3B272B]"><Trash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>
             </section>
 
             <section className="rounded-2xl border border-[#E8E8EC] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
               <div className="border-b border-[#E8E8EC] p-5 dark:border-[#303742]"><div className="flex items-start justify-between gap-3"><div><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">Payroll & beban kerja</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Atur gaji minimum, kapasitas bulanan, dan rate lembur. Load index memakai task terbuka serta jam presensi yang tersedia.</p></div><Users className="h-5 w-5 text-[#7B68EE]" /></div></div>
-              <div className="overflow-x-auto"><table className="w-full min-w-[1060px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-5 py-3 font-bold">Anggota</th><th className="px-5 py-3 font-bold">Task aktif</th><th className="px-5 py-3 font-bold">Jam / kapasitas</th><th className="px-5 py-3 font-bold">Load index</th><th className="px-5 py-3 font-bold">Gaji minimum</th><th className="px-5 py-3 font-bold">Rate lembur</th><th className="px-5 py-3 font-bold">Estimasi bulan ini</th><th className="px-5 py-3 text-right font-bold">Aksi</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{payrollRows.length === 0 ? <tr><td colSpan={8} className="px-5 py-10 text-center text-[#737680] dark:text-[#98A2B3]">Belum ada anggota atau data payroll.</td></tr> : payrollRows.map((row) => { const draft = salaryDrafts[row.email] || row.config; return <tr key={row.email} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-5 py-3"><div className="flex items-center gap-2"><img src={row.member.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=24324A&color=fff`} alt="" className="h-8 w-8 rounded-full object-cover" /><div><div className="font-bold">{row.name}</div><div className="text-[#737680] dark:text-[#98A2B3]">{row.email}</div></div></div></td><td className="px-5 py-3 font-semibold">{row.openTasks}</td><td className="px-5 py-3">{row.trackedHours.toFixed(1)} / {row.capacity.toFixed(0)} jam</td><td className="px-5 py-3"><span className={`font-bold ${row.loadIndex > 1 ? 'text-[#D95858]' : row.loadIndex >= 0.75 ? 'text-[#E6A23C]' : 'text-[#4F9D78]'}`}>{Math.round(row.loadIndex * 100)}%</span></td><td className="px-5 py-3"><input type="number" min="0" value={draft.minimum_salary} onChange={(event) => updateSalaryDraft(row.email, 'minimum_salary', event.target.value)} className="w-32 rounded-lg border border-[#E8E8EC] bg-white px-2.5 py-2 text-xs dark:border-[#303742] dark:bg-[#171A20] dark:text-[#F4F6FA]" /></td><td className="px-5 py-3"><input type="number" min="0" value={draft.hourly_rate} onChange={(event) => updateSalaryDraft(row.email, 'hourly_rate', event.target.value)} className="w-28 rounded-lg border border-[#E8E8EC] bg-white px-2.5 py-2 text-xs dark:border-[#303742] dark:bg-[#171A20] dark:text-[#F4F6FA]" /></td><td className="px-5 py-3 font-bold text-[#4F9D78]">{formatCurrency(row.estimatedSalary, settings.currency)}</td><td className="px-5 py-3 text-right"><button type="button" onClick={() => postFinance({ action: 'save_salary', ...draft, display_name: row.name, user_email: row.email }, `Pengaturan gaji ${row.name} tersimpan.`)} disabled={isSaving} title="Simpan pengaturan gaji" className="inline-flex items-center gap-1.5 rounded-lg bg-[#24324A] px-3 py-2 text-[11px] font-bold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-3.5 w-3.5" /> Simpan</button></td></tr>; })}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[1260px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-5 py-3 font-bold">Anggota</th><th className="px-5 py-3 font-bold">Task aktif</th><th className="px-5 py-3 font-bold">Jam / kapasitas</th><th className="px-5 py-3 font-bold">Load index</th><th className="px-5 py-3 font-bold">Gaji minimum</th><th className="px-5 py-3 font-bold">Rate lembur</th><th className="px-5 py-3 font-bold">Estimasi bulan ini</th><th className="px-5 py-3 font-bold">Status pembayaran</th><th className="px-5 py-3 text-right font-bold">Aksi</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{payrollRows.length === 0 ? <tr><td colSpan={9} className="px-5 py-10 text-center text-[#737680] dark:text-[#98A2B3]">Belum ada anggota atau data payroll.</td></tr> : payrollRows.map((row) => { const draft = salaryDrafts[row.email] || row.config; return <tr key={row.email} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-5 py-3"><div className="flex items-center gap-2"><img src={row.member.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=24324A&color=fff`} alt="" className="h-8 w-8 rounded-full object-cover" /><div><div className="font-bold">{row.name}</div><div className="text-[#737680] dark:text-[#98A2B3]">{row.email}</div></div></div></td><td className="px-5 py-3 font-semibold">{row.openTasks}</td><td className="px-5 py-3">{row.trackedHours.toFixed(1)} / {row.capacity.toFixed(0)} jam</td><td className="px-5 py-3"><span className={`font-bold ${row.loadIndex > 1 ? 'text-[#D95858]' : row.loadIndex >= 0.75 ? 'text-[#E6A23C]' : 'text-[#4F9D78]'}`}>{Math.round(row.loadIndex * 100)}%</span></td><td className="px-5 py-3"><input type="number" min="0" value={draft.minimum_salary} onChange={(event) => updateSalaryDraft(row.email, 'minimum_salary', event.target.value)} className="w-32 rounded-lg border border-[#E8E8EC] bg-white px-2.5 py-2 text-xs dark:border-[#303742] dark:bg-[#171A20] dark:text-[#F4F6FA]" /></td><td className="px-5 py-3"><input type="number" min="0" value={draft.hourly_rate} onChange={(event) => updateSalaryDraft(row.email, 'hourly_rate', event.target.value)} className="w-28 rounded-lg border border-[#E8E8EC] bg-white px-2.5 py-2 text-xs dark:border-[#303742] dark:bg-[#171A20] dark:text-[#F4F6FA]" /></td><td className="px-5 py-3 font-bold text-[#4F9D78]">{formatCurrency(row.estimatedSalary, settings.currency)}</td><td className="px-5 py-3"><button type="button" onClick={() => openPaymentModal(row)} disabled={isSaving} className="min-w-[210px] text-left disabled:opacity-50">{row.payment ? <><span className="flex items-center gap-1.5 font-bold text-[#4F9D78]"><CheckCircle2 className="h-4 w-4" /> Gaji bulan ini sudah dibayarkan</span><span className="mt-1 block text-[11px] text-[#737680] dark:text-[#98A2B3]">{formatCurrency(row.payment.amount, settings.currency)} · {formatDate(row.payment.paid_date)}</span></> : <><span className="flex items-center gap-1.5 font-bold text-[#E6A23C]"><Wallet className="h-4 w-4" /> Belum dibayarkan</span><span className="mt-1 block text-[11px] text-[#737680] dark:text-[#98A2B3]">Klik untuk input pembayaran</span></>}</button></td><td className="px-5 py-3 text-right"><button type="button" onClick={() => postFinance({ action: 'save_salary', ...draft, display_name: row.name, user_email: row.email }, `Pengaturan gaji ${row.name} tersimpan.`)} disabled={isSaving} title="Simpan pengaturan gaji" className="inline-flex items-center gap-1.5 rounded-lg bg-[#24324A] px-3 py-2 text-[11px] font-bold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-3.5 w-3.5" /> Simpan</button></td></tr>; })}</tbody></table></div>
             </section>
+
+            {isEntryModalOpen && (
+              <Modal title={entryForm.id ? 'Edit transaksi finance' : 'Tambah transaksi finance'} onClose={() => { setIsEntryModalOpen(false); setEntryForm(emptyEntry()); }}>
+                <form onSubmit={submitEntry} className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Jenis"><select value={entryForm.entry_type} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_type: event.target.value as FinanceEntry['entry_type'] }))}><option value="revenue">Pendapatan</option><option value="expense">Biaya</option></select></Field>
+                    <Field label="Status"><select value={entryForm.status} onChange={(event) => setEntryForm((entry) => ({ ...entry, status: event.target.value as FinanceEntry['status'] }))}><option value="deal">Deal</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></Field>
+                    <Field label="Customer"><input value={entryForm.customer_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, customer_name: event.target.value }))} placeholder="Nama customer" /></Field>
+                    <Field label="Project"><input value={entryForm.project_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, project_name: event.target.value }))} placeholder="Nama project" /></Field>
+                    <Field label="Kategori"><input value={entryForm.category} onChange={(event) => setEntryForm((entry) => ({ ...entry, category: event.target.value }))} placeholder="Project deal / software" /></Field>
+                    <Field label="Nominal"><input type="number" min="0" value={entryForm.amount} onChange={(event) => setEntryForm((entry) => ({ ...entry, amount: toNumber(event.target.value) }))} /></Field>
+                    <Field label="Tanggal"><input type="date" value={entryForm.entry_date} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_date: event.target.value }))} /></Field>
+                  </div>
+                  <Field label="Catatan"><textarea rows={3} value={entryForm.notes} onChange={(event) => setEntryForm((entry) => ({ ...entry, notes: event.target.value }))} placeholder="Opsional" /></Field>
+                  <div className="flex justify-end gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742]"><button type="button" onClick={() => { setIsEntryModalOpen(false); setEntryForm(emptyEntry()); }} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-4 w-4" /> {entryForm.id ? 'Simpan perubahan' : 'Simpan transaksi'}</button></div>
+                </form>
+              </Modal>
+            )}
+
+            {paymentDraft && (
+              <Modal title={`Pembayaran gaji - ${payrollRows.find((row) => row.email === paymentDraft.user_email)?.name || paymentDraft.user_email}`} onClose={() => setPaymentDraft(null)}>
+                <form onSubmit={submitPayment} className="space-y-4">
+                  <div className="rounded-xl bg-[#F7F7F8] px-4 py-3 text-xs text-[#737680] dark:bg-[#282D36] dark:text-[#C7D0DD]">Periode pembayaran: <strong className="text-[#24324A] dark:text-[#F4F6FA]">{formatDate(paymentDraft.month_key)}</strong>. Data ini hanya dapat diubah oleh Owner.</div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Jumlah dibayar"><input type="number" min="0" value={paymentDraft.amount} onChange={(event) => setPaymentDraft((current) => current ? { ...current, amount: toNumber(event.target.value) } : current)} /></Field>
+                    <Field label="Tanggal pembayaran"><input type="date" value={paymentDraft.paid_date} onChange={(event) => setPaymentDraft((current) => current ? { ...current, paid_date: event.target.value } : current)} /></Field>
+                    <Field label="Metode pembayaran"><select value={paymentDraft.payment_method} onChange={(event) => setPaymentDraft((current) => current ? { ...current, payment_method: event.target.value } : current)}><option>Bank transfer</option><option>Cash</option><option>E-wallet</option><option>Lainnya</option></select></Field>
+                    <Field label="Nama bank / platform"><input value={paymentDraft.bank_name} onChange={(event) => setPaymentDraft((current) => current ? { ...current, bank_name: event.target.value } : current)} placeholder="Contoh: BCA" /></Field>
+                    <Field label="Nomor rekening / tujuan"><input value={paymentDraft.account_number} onChange={(event) => setPaymentDraft((current) => current ? { ...current, account_number: event.target.value } : current)} placeholder="Opsional" /></Field>
+                    <Field label="Nomor referensi"><input value={paymentDraft.reference_number} onChange={(event) => setPaymentDraft((current) => current ? { ...current, reference_number: event.target.value } : current)} placeholder="Opsional" /></Field>
+                  </div>
+                  <Field label="Catatan pembayaran"><textarea rows={3} value={paymentDraft.notes} onChange={(event) => setPaymentDraft((current) => current ? { ...current, notes: event.target.value } : current)} placeholder="Catatan atau keterangan transfer" /></Field>
+                  <div className="flex justify-end gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742]"><button type="button" onClick={() => setPaymentDraft(null)} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-[#4F9D78] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:opacity-50"><CheckCircle2 className="h-4 w-4" /> Tandai sudah dibayar</button></div>
+                </form>
+              </Modal>
+            )}
           </>
         )}
       </div>
@@ -552,6 +656,15 @@ function MetricCard({ icon: Icon, label, value, detail, accent, progress }: { ic
 
 function BusinessStat({ label, value, detail }: { label: string; value: string | number; detail?: string }) {
   return <div className="rounded-xl border border-[#E8E8EC] bg-[#F7F7F8] p-4 dark:border-[#303742] dark:bg-[#282D36]"><p className="text-[11px] font-bold uppercase tracking-wide text-[#737680] dark:text-[#98A2B3]">{label}</p><p className="mt-2 text-xl font-bold text-[#24324A] dark:text-[#F4F6FA]">{value}</p>{detail && <p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">{detail}</p>}</div>;
+}
+
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#24324A]/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#E8E8EC] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#20242C]">
+      <div className="flex items-center justify-between border-b border-[#E8E8EC] px-5 py-4 dark:border-[#303742]"><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{title}</h2><button type="button" onClick={onClose} title="Tutup" className="rounded-lg p-2 text-[#737680] hover:bg-[#F7F7F8] dark:hover:bg-[#282D36]"><X className="h-5 w-5" /></button></div>
+      <div className="p-5">{children}</div>
+    </div>
+  </div>;
 }
 
 function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {

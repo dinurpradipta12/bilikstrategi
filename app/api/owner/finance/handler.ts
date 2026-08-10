@@ -116,10 +116,11 @@ export async function GET(req: NextRequest) {
     const workspace = encodeURIComponent(WORKSPACE_ID);
     const month = encodeURIComponent(selectedMonth);
 
-    const [settings, entries, salaries, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
+    const [settings, entries, salaries, salaryPayments, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
       readRows(`app_owner_finance_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&select=*`),
       readRows(`app_owner_finance_entries?workspace_id=eq.${workspace}&order=entry_date.desc,created_at.desc&limit=500&select=*`),
       readRows(`app_owner_salary_settings?workspace_id=eq.${workspace}&order=display_name.asc&select=*`),
+      readOptionalRows(`app_owner_salary_payments?workspace_id=eq.${workspace}&month_key=eq.${month}&order=paid_date.desc&select=*`),
       readOptionalRows('clients?select=*'),
       readOptionalRows('projects?select=*'),
       readOptionalRows('task_cache?select=*&limit=1000'),
@@ -129,7 +130,7 @@ export async function GET(req: NextRequest) {
       readOptionalRows('active_sessions?select=*&limit=500'),
     ]);
 
-    const optional = [clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions];
+    const optional = [salaryPayments, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions];
     const warnings = optional
       .filter((result): result is { rows: any[]; warning: string } => !Array.isArray(result))
       .map((result) => result.warning)
@@ -148,6 +149,7 @@ export async function GET(req: NextRequest) {
         },
         entries,
         salaries,
+        salaryPayments: Array.isArray(salaryPayments) ? salaryPayments : salaryPayments.rows,
         operational: {
           clients: Array.isArray(clients) ? clients : clients.rows,
           projects: Array.isArray(projects) ? projects : projects.rows,
@@ -239,6 +241,29 @@ export async function POST(req: NextRequest) {
       };
       const saved = await writeRow('app_owner_salary_settings?on_conflict=workspace_id,user_email', payload);
       return NextResponse.json({ success: true, salary: Array.isArray(saved) ? saved[0] : saved });
+    }
+
+    if (action === 'save_salary_payment') {
+      const email = normalizeIdentityEmail(body.user_email);
+      if (!email) return NextResponse.json({ error: 'Email user wajib diisi.' }, { status: 400 });
+      const payload = {
+        ...(text(body.id) ? { id: text(body.id) } : { id: crypto.randomUUID() }),
+        workspace_id: WORKSPACE_ID,
+        month_key: monthKey(text(body.month)),
+        user_email: email,
+        amount: Math.max(0, number(body.amount)),
+        paid_date: dateOnly(body.paid_date),
+        payment_method: text(body.payment_method, 'Bank transfer').slice(0, 80),
+        bank_name: text(body.bank_name).slice(0, 120),
+        account_number: text(body.account_number).slice(0, 80),
+        reference_number: text(body.reference_number).slice(0, 120),
+        notes: text(body.notes).slice(0, 1000),
+        status: 'paid',
+        created_by_email: owner.identity.email,
+        updated_at: now,
+      };
+      const saved = await writeRow('app_owner_salary_payments?on_conflict=workspace_id,month_key,user_email', payload);
+      return NextResponse.json({ success: true, payment: Array.isArray(saved) ? saved[0] : saved });
     }
 
     return NextResponse.json({ error: 'Aksi finance tidak dikenali.' }, { status: 400 });
