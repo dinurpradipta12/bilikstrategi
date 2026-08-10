@@ -23,6 +23,7 @@ import {
   FileSpreadsheet,
   ReceiptText,
   FileText,
+  FileSignature,
 } from 'lucide-react';
 import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -183,6 +184,7 @@ export default function Sidebar() {
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
     { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
     { key: 'quotes', name: 'Penawaran Harga', href: '/quotes', icon: FileText },
+    { key: 'agreements', name: 'Collaboration Agreement', href: '/agreements', icon: FileSignature },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
