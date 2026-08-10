@@ -199,6 +199,33 @@ export default function Sidebar() {
     if (item.ownerOnly) return userProfile.ownerAccount;
     return userProfile.unrestrictedPageAccess || pageAccess[item.key as PageAccessKey] !== false;
   });
+  const commonNavItems = visibleNavItems.filter((item) => !item.ownerOnly);
+  const ownerNavItems = visibleNavItems.filter((item) => item.ownerOnly);
+  const renderNavItem = (item: typeof visibleNavItems[number]) => {
+    const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+    const Icon = item.icon;
+
+    return (
+      <Link
+        key={item.name}
+        href={item.href}
+        className={`flex items-center border-l-2 border-transparent px-3 py-2.5 text-xs font-medium transition-colors ${
+          isActive
+            ? 'border-[#F26B5E] text-[#24324A] font-semibold'
+            : 'text-[#737680] hover:text-[#202124]'
+        } ${collapsed ? 'justify-center' : ''}`}
+        title={collapsed ? item.name : undefined}
+      >
+        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#F26B5E]' : ''} ${collapsed ? '' : 'mr-3'}`} />
+        {!collapsed && <span className="truncate">{item.name}</span>}
+        {!collapsed && item.badge && (
+          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold text-white bg-[#F26B5E] rounded-full">
+            {item.badge}
+          </span>
+        )}
+      </Link>
+    );
+  };
 
   return (
     <aside
@@ -237,31 +264,23 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-        {visibleNavItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center border-l-2 border-transparent px-3 py-2.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? 'border-[#F26B5E] text-[#24324A] font-semibold'
-                  : 'text-[#737680] hover:text-[#202124]'
-              } ${collapsed ? 'justify-center' : ''}`}
-              title={collapsed ? item.name : undefined}
-            >
-              <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#F26B5E]' : ''} ${collapsed ? '' : 'mr-3'}`} />
-              {!collapsed && <span className="truncate">{item.name}</span>}
-              {!collapsed && item.badge && (
-                <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold text-white bg-[#F26B5E] rounded-full">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto p-2">
+        <div className="space-y-1">
+          {commonNavItems.map(renderNavItem)}
+        </div>
+        {ownerNavItems.length > 0 && (
+          <div className="mt-3 border-t border-[#E8E8EC] pt-3">
+            {!collapsed && (
+              <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680]">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#F26B5E]" />
+                Khusus Owner
+              </div>
+            )}
+            <div className="space-y-1">
+              {ownerNavItems.map(renderNavItem)}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Footer Profile Box */}
