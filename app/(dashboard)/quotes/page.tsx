@@ -796,7 +796,7 @@ export default function QuotesPage() {
           </div>
 
           <div className="space-y-6 p-5">
-            <EditorAccordion title="Identitas Penawaran" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />} defaultOpen>
+            <EditorAccordion title="Identitas Penawaran" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <InputLabel htmlFor="quote-number">Nomor Penawaran</InputLabel>
@@ -867,7 +867,6 @@ export default function QuotesPage() {
             <EditorAccordion
               title="Item & Harga"
               icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}
-              defaultOpen
               action={<button type="button" onClick={addItem} className="inline-flex shrink-0 items-center gap-1 rounded-md py-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button>}
             >
               <div className="space-y-2">{draft.items.map((item) => <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_70px_110px_32px] items-end gap-2 rounded-lg bg-[#F7F7F8] p-2"><div><InputLabel>Deskripsi</InputLabel><input className={inputClass} value={item.description} onChange={(event) => updateItem(item.id, 'description', event.target.value)} /></div><div><InputLabel>Qty</InputLabel><input type="number" min="0" step="0.01" className={inputClass} value={item.quantity} onChange={(event) => updateItem(item.id, 'quantity', toNumber(event.target.value))} /></div><div><InputLabel>Harga</InputLabel><input type="number" min="0" step="1000" className={inputClass} value={item.unitPrice} onChange={(event) => updateItem(item.id, 'unitPrice', toNumber(event.target.value))} /></div><button type="button" onClick={() => removeItem(item.id)} title="Hapus item" className="mb-0.5 rounded-lg p-2 text-[#D95858] hover:bg-[#FFF0ED]"><Trash2 className="h-4 w-4" /></button></div>)}</div>

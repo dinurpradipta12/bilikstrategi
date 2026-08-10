@@ -747,7 +747,7 @@ export default function InvoicesPage() {
           </div>
 
           <div className="max-h-[calc(100vh-220px)] space-y-6 overflow-y-auto p-5 pb-12">
-            <EditorAccordion title="Identitas Invoice" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />} defaultOpen>
+            <EditorAccordion title="Identitas Invoice" icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <InputLabel htmlFor="invoice-number">Nomor Invoice</InputLabel>
@@ -828,7 +828,6 @@ export default function InvoicesPage() {
             <EditorAccordion
               title="Item & Harga"
               icon={<FileText className="h-4 w-4 text-[#F26B5E]" />}
-              defaultOpen
               action={<button type="button" onClick={addItem} className="inline-flex shrink-0 items-center gap-1 rounded-md py-1 text-[11px] font-bold text-[#F26B5E] hover:text-[#B5473D]"><Plus className="h-3.5 w-3.5" /> Tambah item</button>}
             >
               <div className="space-y-2">
