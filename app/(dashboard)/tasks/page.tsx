@@ -243,6 +243,7 @@ export default function TasksPage() {
                 ...clickupData.task,
                 id: savedTask.id,
                 clickup_task_id: clickupData.task.clickup_task_id || clickupData.task.id,
+                notification_silent: true,
               }),
             });
             await fetchTasks();

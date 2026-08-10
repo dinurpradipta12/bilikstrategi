@@ -299,7 +299,7 @@ function ProjectsListPage() {
         await fetch('/api/supabase/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update', id: newId, clickup_list_id: normalizedClickUpListId }),
+          body: JSON.stringify({ action: 'update', id: newId, clickup_list_id: normalizedClickUpListId, notification_silent: true }),
         });
       })
       .catch(() => {});

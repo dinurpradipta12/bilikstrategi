@@ -336,6 +336,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                 id: projectId,
                 description: newMeta.description,
                 status: newMeta.status,
+                notification_silent: true,
               }),
             }).catch(() => {})
           )

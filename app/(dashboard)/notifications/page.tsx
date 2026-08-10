@@ -1,114 +1,92 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Bell, AlertTriangle, Inbox } from 'lucide-react';
-import { AgencyNotification } from '@/lib/mock/data';
+import React from 'react';
+import Link from 'next/link';
+import { AlertTriangle, Bell, CheckCircle2, Inbox, ListChecks, FolderKanban } from 'lucide-react';
+import { useNotifications } from '@/components/notifications/NotificationProvider';
+
+function notificationIcon(type: string) {
+  if (type.includes('deleted')) return <AlertTriangle className="w-4 h-4 text-[#D95858]" />;
+  if (type.includes('assigned')) return <ListChecks className="w-4 h-4 text-[#7B68EE]" />;
+  if (type.includes('project')) return <FolderKanban className="w-4 h-4 text-[#4F9D78]" />;
+  return <Bell className="w-4 h-4 text-[#F26B5E]" />;
+}
+
+function formatNotificationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Baru saja';
+  return date.toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<AgencyNotification[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function loadNotifications() {
-      try {
-        // Fetch real task status or overdue items from the app task cache.
-        const res = await fetch('/api/supabase/tasks', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          const tasks = data.tasks || [];
-          const notifs: AgencyNotification[] = [];
-
-          // Generate real notifications based on app tasks.
-          tasks.forEach((t: any) => {
-            if (t.due_date && new Date(t.due_date).getTime() < Date.now() && t.status !== 'completed') {
-              notifs.push({
-                id: 'notif-' + t.id,
-                user_id: 'user-1',
-                type: 'task_overdue',
-                title: 'Task Overdue',
-                message: `Task "${t.task_name || t.name}" pada project ${t.project_name || 'Bilik Strategi'} telah melewati batas waktu deadline.`,
-                entity_type: 'task',
-                entity_id: t.id,
-                is_read: false,
-                created_at: new Date().toISOString(),
-              });
-            }
-          });
-
-          setNotifications(notifs);
-          
-          // Update real-time unread badge count
-          const unreadCount = notifs.filter((n) => !n.is_read).length;
-          localStorage.setItem('bilik_notif_unread_count', String(unreadCount));
-          window.dispatchEvent(new CustomEvent('unread-badge-update', { detail: { type: 'notification', count: unreadCount } }));
-        }
-      } catch (err) {
-        console.warn('[Notifications] Error fetching tasks', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadNotifications();
-  }, []);
-
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    localStorage.setItem('bilik_notif_unread_count', '0');
-    window.dispatchEvent(new CustomEvent('unread-badge-update', { detail: { type: 'notification', count: 0 } }));
-  };
+  const { notifications, unreadCount, loading, markRead, markAllRead, refresh } = useNotifications();
 
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Notification Center</h1>
-          <p className="text-xs text-[#737680] mt-1">Pemberitahuan aktivitas task real-time, mention komentar, dan deadline project.</p>
+          <p className="text-xs text-[#737680] mt-1">Pemberitahuan assignment dan aktivitas task/project tersimpan di database.</p>
         </div>
-        {notifications.length > 0 && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={markAllRead}
+            onClick={() => void refresh()}
             className="px-3.5 py-2 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs font-extrabold text-[#24324A] hover:bg-[#EEF2F7] transition-all cursor-pointer shadow-2xs"
           >
-            Tandai Semua Dibaca
+            Refresh
           </button>
-        )}
+          {unreadCount > 0 && (
+            <button
+              onClick={() => void markAllRead()}
+              className="px-3.5 py-2 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs font-extrabold text-[#24324A] hover:bg-[#EEF2F7] transition-all cursor-pointer shadow-2xs"
+            >
+              Tandai Semua Dibaca
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="p-12 text-center bg-white border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
           <div className="w-6 h-6 border-2 border-[#7B68EE] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-[#737680] font-semibold">Memuat notifikasi ClickUp terbaru...</p>
+          <p className="text-xs text-[#737680] font-semibold">Memuat notifikasi...</p>
         </div>
       ) : notifications.length === 0 ? (
         <div className="p-12 text-center bg-white border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
           <div className="w-12 h-12 rounded-2xl bg-[#EEF2F7] text-[#737680] flex items-center justify-center mx-auto">
             <Inbox className="w-6 h-6" />
           </div>
-          <h3 className="text-sm font-bold text-[#24324A]">Belum Ada Notifikasi Baru</h3>
-          <p className="text-xs text-[#737680] max-w-sm mx-auto">
-            Semua aktivitas project dan deadline task ClickUp Anda saat ini sudah diperbarui dan tidak ada notifikasi yang tertunda.
-          </p>
+          <h3 className="text-sm font-bold text-[#24324A]">Belum Ada Notifikasi</h3>
+          <p className="text-xs text-[#737680] max-w-sm mx-auto">Assignment dan perubahan task/project baru akan muncul di sini untuk akun penerima.</p>
         </div>
       ) : (
         <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs divide-y divide-[#E8E8EC] overflow-hidden">
-          {notifications.map((n) => (
-            <div
-              key={n.id}
-              className={`p-4 flex items-start gap-4 transition-colors ${n.is_read ? 'bg-[#FFFFFF]' : 'bg-[#FFF0ED]/40'}`}
+          {notifications.map((notification) => (
+            <Link
+              key={notification.id}
+              href={notification.entity_url || '/notifications'}
+              onClick={() => {
+                if (!notification.is_read) void markRead(notification.id);
+              }}
+              className={`p-4 flex items-start gap-4 transition-colors hover:bg-[#F7F7F8] ${notification.is_read ? 'bg-[#FFFFFF]' : 'bg-[#FFF0ED]/40'}`}
             >
-              <div className="p-2.5 rounded-xl bg-[#EEF2F7] text-[#24324A] mt-0.5 flex-shrink-0">
-                {n.type === 'task_overdue' ? <AlertTriangle className="w-4 h-4 text-[#D95858]" /> : <Bell className="w-4 h-4 text-[#F26B5E]" />}
-              </div>
-
+              <div className="p-2.5 rounded-xl bg-[#EEF2F7] mt-0.5 flex-shrink-0">{notificationIcon(notification.type)}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-bold text-[#202124]">{n.title}</h3>
-                  <span className="text-[10px] text-[#737680] font-mono">Real-time Sync</span>
+                  <h3 className="text-xs font-bold text-[#202124] truncate">{notification.title}</h3>
+                  <span className="text-[10px] text-[#737680] font-mono whitespace-nowrap">{formatNotificationDate(notification.created_at)}</span>
                 </div>
-                <p className="text-xs text-[#737680] mt-0.5 leading-relaxed">{n.message}</p>
+                <p className="text-xs text-[#737680] mt-0.5 leading-relaxed">{notification.message}</p>
+                {!notification.is_read && (
+                  <span className="inline-flex items-center gap-1 mt-2 text-[10px] font-bold text-[#F26B5E]"><CheckCircle2 className="w-3 h-3" /> Belum dibaca</span>
+                )}
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

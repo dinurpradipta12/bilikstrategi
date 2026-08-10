@@ -203,7 +203,11 @@ export default function TaskDetailDrawer({
   const activeTask = localTask || task;
 
   const saveTaskToApp = async (updatedTask: AgencyTask, extra: Record<string, any> = {}) => {
-    const payload = { ...updatedTask, ...extra, taskId: updatedTask.id };
+    const assigneeIds = Array.isArray(updatedTask.assignee_ids) ? updatedTask.assignee_ids.map(String) : [];
+    const assigneeEmails = assigneeIds
+      .map((assigneeId, index) => members.find((member) => member.id === assigneeId)?.email || updatedTask.assignee_emails?.[index])
+      .filter(Boolean);
+    const payload = { ...updatedTask, ...extra, assignee_emails: assigneeEmails, taskId: updatedTask.id };
     const res = await fetch('/api/supabase/tasks', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -237,6 +241,7 @@ export default function TaskDetailDrawer({
         assignee_ids: selectedMember ? [selectedMember.id] : activeTask.assignee_ids,
         assignee_names: selectedMember ? [selectedMember.name] : activeTask.assignee_names,
         assignee_avatars: selectedMember ? [selectedMember.avatar] : activeTask.assignee_avatars,
+        assignee_emails: selectedMember?.email ? [selectedMember.email] : activeTask.assignee_emails,
         clickup_updated_at: new Date().toISOString(),
       };
 
@@ -258,6 +263,7 @@ export default function TaskDetailDrawer({
           priority: taskPriority,
           due_date: taskDueDate,
           assignees: taskAssigneeId ? [taskAssigneeId] : undefined,
+          notification_silent: true,
         }),
       }).catch(() => {});
 
@@ -387,6 +393,7 @@ export default function TaskDetailDrawer({
     const currentNames = activeTask.assignee_names || [];
     const currentIds = activeTask.assignee_ids || [];
     const currentAvatars = activeTask.assignee_avatars || [];
+    const currentEmails = activeTask.assignee_emails || [];
 
     if (!currentIds.includes(memberId)) {
       const updatedTask = {
@@ -394,6 +401,7 @@ export default function TaskDetailDrawer({
         assignee_ids: [...currentIds, selectedMember.id],
         assignee_names: [...currentNames, selectedMember.name],
         assignee_avatars: [...currentAvatars, selectedMember.avatar],
+        assignee_emails: [...currentEmails, selectedMember.email],
       };
       setLocalTask(updatedTask);
       if (onTaskUpdated) onTaskUpdated(updatedTask);
@@ -405,6 +413,7 @@ export default function TaskDetailDrawer({
         body: JSON.stringify({
           taskId: activeTask.clickup_task_id || activeTask.id,
           assignees: updatedTask.assignee_ids,
+          notification_silent: true,
         }),
       }).catch(() => {});
     }
@@ -414,16 +423,19 @@ export default function TaskDetailDrawer({
     const currentNames = [...(activeTask.assignee_names || [])];
     const currentIds = [...(activeTask.assignee_ids || [])];
     const currentAvatars = [...(activeTask.assignee_avatars || [])];
+    const currentEmails = [...(activeTask.assignee_emails || [])];
 
     currentNames.splice(index, 1);
     currentIds.splice(index, 1);
     currentAvatars.splice(index, 1);
+    currentEmails.splice(index, 1);
 
     const updatedTask = {
       ...activeTask,
       assignee_ids: currentIds,
       assignee_names: currentNames,
       assignee_avatars: currentAvatars,
+      assignee_emails: currentEmails,
     };
     setLocalTask(updatedTask);
     if (onTaskUpdated) onTaskUpdated(updatedTask);
@@ -435,6 +447,7 @@ export default function TaskDetailDrawer({
       body: JSON.stringify({
         taskId: activeTask.clickup_task_id || activeTask.id,
         assignees: currentIds,
+        notification_silent: true,
       }),
     }).catch(() => {});
   };

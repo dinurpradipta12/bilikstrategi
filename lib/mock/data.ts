@@ -68,6 +68,7 @@ export interface AgencyTask {
   assignee_ids: string[];
   assignee_names: string[];
   assignee_avatars: string[];
+  assignee_emails?: string[];
   start_date: string;
   due_date: string;
   tags: string[];

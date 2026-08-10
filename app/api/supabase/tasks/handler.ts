@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
+import { publishTaskCreated, publishTaskDeleted, publishTaskUpdated } from '@/lib/notifications/server';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,7 @@ function rowToTask(row: any) {
     assignee_ids: Array.isArray(row.assignee_ids) ? row.assignee_ids.map(String) : raw.assignee_ids || [],
     assignee_names: raw.assignee_names || [],
     assignee_avatars: raw.assignee_avatars || [],
+    assignee_emails: raw.assignee_emails || [],
     start_date: raw.start_date || row.start_date || new Date().toISOString(),
     due_date: dueDate,
     tags: raw.tags || [],
@@ -77,6 +79,7 @@ function taskToRow(input: any, existing?: any) {
     assignee_ids: input.assignee_ids || input.assignees || existingRaw.assignee_ids || existing?.assignee_ids || [],
     assignee_names: input.assignee_names || existingRaw.assignee_names || [],
     assignee_avatars: input.assignee_avatars || existingRaw.assignee_avatars || [],
+    assignee_emails: input.assignee_emails || existingRaw.assignee_emails || [],
     due_date: input.due_date || existingRaw.due_date || existing?.due_date || now,
     start_date: input.start_date || existingRaw.start_date || existing?.start_date || now,
     clickup_updated_at: now,
@@ -207,7 +210,14 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, task: rowToTask(data) }, { headers: { 'Cache-Control': 'no-store' } });
+    const task = rowToTask(data);
+    if (!body.notification_silent) {
+      await publishTaskCreated(req, task).catch((publishError) => {
+        console.warn('[Tasks API] Notification publish failed:', publishError);
+      });
+    }
+
+    return NextResponse.json({ success: true, task }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
     const row = taskToRow(body);
     fallbackTasks.unshift(row);
@@ -222,6 +232,7 @@ export async function PUT(req: NextRequest) {
     if (!taskId) return NextResponse.json({ error: 'taskId wajib diisi' }, { status: 400 });
 
     const existing = await findExisting(taskId);
+    const previousTask = existing ? rowToTask(existing) : undefined;
     const row = taskToRow({ ...body, id: body.id || existing?.raw_data?.id || taskId }, existing);
 
     // When a temporary app task receives its real ClickUp id, update the
@@ -235,7 +246,13 @@ export async function PUT(req: NextRequest) {
         .single();
 
       if (!rekeyed.error && rekeyed.data) {
-        return NextResponse.json({ success: true, task: rowToTask(rekeyed.data) }, { headers: { 'Cache-Control': 'no-store' } });
+        const task = rowToTask(rekeyed.data);
+        if (!body.notification_silent) {
+          await publishTaskUpdated(req, task, previousTask).catch((publishError) => {
+            console.warn('[Tasks API] Notification publish failed:', publishError);
+          });
+        }
+        return NextResponse.json({ success: true, task }, { headers: { 'Cache-Control': 'no-store' } });
       }
     }
 
@@ -247,7 +264,14 @@ export async function PUT(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, task: rowToTask(data) }, { headers: { 'Cache-Control': 'no-store' } });
+    const task = rowToTask(data);
+    if (!body.notification_silent) {
+      await publishTaskUpdated(req, task, previousTask).catch((publishError) => {
+        console.warn('[Tasks API] Notification publish failed:', publishError);
+      });
+    }
+
+    return NextResponse.json({ success: true, task }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Gagal update task aplikasi' }, { status: 500 });
   }
@@ -260,8 +284,15 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const existing = await findExisting(taskId);
+    const existingTask = existing ? rowToTask(existing) : { id: taskId, clickup_task_id: taskId, task_name: 'Task' };
     if (existing?.clickup_task_id) {
-      await supabase.from('task_cache').delete().eq('clickup_task_id', existing.clickup_task_id);
+      const { error } = await supabase.from('task_cache').delete().eq('clickup_task_id', existing.clickup_task_id);
+      if (error) throw error;
+    }
+    if (searchParams.get('notification_silent') !== 'true') {
+      await publishTaskDeleted(req, existingTask).catch((publishError) => {
+        console.warn('[Tasks API] Notification publish failed:', publishError);
+      });
     }
     return NextResponse.json({ success: true, taskId }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {

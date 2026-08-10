@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
+import { getNotificationActor, publishProjectEvent } from '@/lib/notifications/server';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,12 @@ export const revalidate = 0;
 
 // Shared in-memory fallback store across all requests
 const globalProjectsStore: any[] = [];
+
+async function publishProjectNotification(req: NextRequest, input: Parameters<typeof publishProjectEvent>[1]) {
+  await publishProjectEvent(req, input).catch((error) => {
+    console.warn('[Projects API] Notification publish failed:', error);
+  });
+}
 
 export async function GET() {
   try {
@@ -30,15 +37,27 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, id, ...projectData } = body;
+    const { action, id, notification_silent: notificationSilent, actor_name: _actorName, ...projectData } = body;
+    const actorName = getNotificationActor(req).name;
 
     if (action === 'delete') {
       const targetId = id || body.project_id;
+      const existingProject = globalProjectsStore.find((p) => p.id === targetId);
       const index = globalProjectsStore.findIndex((p) => p.id === targetId);
       if (index !== -1) globalProjectsStore.splice(index, 1);
 
       try {
-        await supabase.from('projects').delete().eq('id', targetId);
+        const { error } = await supabase.from('projects').delete().eq('id', targetId);
+        if (!error && !notificationSilent) {
+          await publishProjectNotification(req, {
+            type: 'project_deleted',
+            title: 'Project dihapus',
+            message: `${actorName} menghapus project "${existingProject?.name || body.name || 'Project'}".`,
+            projectId: String(targetId),
+            projectName: String(existingProject?.name || body.name || 'Project'),
+            token: new Date().toISOString(),
+          });
+        }
       } catch (err) {
         console.warn('[Projects API] Supabase delete error', err);
       }
@@ -48,17 +67,35 @@ export async function POST(req: NextRequest) {
 
     if (action === 'update') {
       const index = globalProjectsStore.findIndex((p) => p.id === id);
+      const updatedAt = new Date().toISOString();
+      const updatedProject = {
+        ...(index !== -1 ? globalProjectsStore[index] : {}),
+        ...projectData,
+        id,
+        updated_at: updatedAt,
+      };
       if (index !== -1) {
-        globalProjectsStore[index] = { ...globalProjectsStore[index], ...projectData };
+        globalProjectsStore[index] = updatedProject;
       }
 
       try {
-        await supabase.from('projects').update(projectData).eq('id', id);
+        const { error } = await supabase.from('projects').update({ ...projectData, updated_at: updatedAt }).eq('id', id);
+        if (!error && !notificationSilent) {
+          await publishProjectNotification(req, {
+            type: 'project_updated',
+            title: 'Project diperbarui',
+            message: `${actorName} memperbarui project "${updatedProject.name || 'Project'}".`,
+            projectId: String(id),
+            projectName: String(updatedProject.name || 'Project'),
+            token: updatedAt,
+            payload: { status: updatedProject.status || null },
+          });
+        }
       } catch (err) {
         console.warn('[Projects API] Supabase update error', err);
       }
 
-      return NextResponse.json({ success: true, project: projectData });
+      return NextResponse.json({ success: true, project: updatedProject });
     }
 
     // Insert / Upsert new project
@@ -86,7 +123,18 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await supabase.from('projects').upsert([newProject]);
+      const { error } = await supabase.from('projects').upsert([newProject]);
+      if (!error && !notificationSilent) {
+        await publishProjectNotification(req, {
+          type: 'project_created',
+          title: 'Project baru dibuat',
+          message: `${actorName} membuat project "${newProject.name}".`,
+          projectId: String(newProject.id),
+          projectName: String(newProject.name),
+          token: String(newProject.created_at),
+          payload: { status: newProject.status },
+        });
+      }
     } catch (err) {
       console.warn('[Projects API] Supabase insert error', err);
     }

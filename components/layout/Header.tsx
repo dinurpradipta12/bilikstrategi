@@ -7,8 +7,7 @@ import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react'
 import SyncUpButton from '@/components/syncup/SyncUpButton';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import ThemeToggle from '@/components/theme/ThemeToggle';
-
-const UNREAD_BADGE_EVENT = 'unread-badge-update';
+import { useNotifications } from '@/components/notifications/NotificationProvider';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -22,6 +21,7 @@ type AppWorkspace = {
 };
 
 export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderProps) {
+  const { notifications, unreadCount, markRead } = useNotifications();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
@@ -37,28 +37,6 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
     role: 'owner',
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
   });
-  // Keep the server render identical to the first browser render. Browser-only
-  // unread state is loaded in the effect below after hydration.
-  const [activityUnread, setActivityUnread] = useState(0);
-  const totalNotificationUnread = activityUnread;
-
-  useEffect(() => {
-    const storedActivityUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
-    setActivityUnread(Number.isFinite(storedActivityUnread) ? storedActivityUnread : 0);
-
-    const handleUnreadUpdate = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.type === 'notification' && typeof detail.count === 'number') {
-        setActivityUnread(detail.count);
-      }
-    };
-
-    window.addEventListener(UNREAD_BADGE_EVENT, handleUnreadUpdate);
-    return () => {
-      window.removeEventListener(UNREAD_BADGE_EVENT, handleUnreadUpdate);
-    };
-  }, []);
-
   const loadWorkspaces = async () => {
     try {
       const res = await fetch('/api/app/workspaces', { cache: 'no-store' });
@@ -255,9 +233,9 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
             title="Notifikasi"
           >
             <Bell className="w-4 h-4" />
-            {totalNotificationUnread > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center bg-[#F26B5E] text-white text-[9px] font-extrabold rounded-full ring-2 ring-white">
-                {totalNotificationUnread > 99 ? '99+' : totalNotificationUnread}
+                {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
           </button>
@@ -272,17 +250,28 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
                 </Link>
               </div>
               <div className="divide-y divide-[#E8E8EC] max-h-72 overflow-y-auto">
-                {activityUnread === 0 ? (
+                {notifications.length === 0 ? (
                   <div className="py-6 text-center text-[#737680]">Belum ada notifikasi.</div>
                 ) : (
-                  <Link
-                    href="/notifications"
-                    onClick={() => setNotificationOpen(false)}
-                    className="flex items-center gap-2 py-3 text-[11px] font-semibold text-[#24324A] hover:text-[#F26B5E]"
-                  >
-                    <Bell className="w-3.5 h-3.5 text-[#F26B5E]" />
-                    {activityUnread} aktivitas task/project belum dibaca
-                  </Link>
+                  notifications.slice(0, 5).map((notification) => (
+                    <Link
+                      key={notification.id}
+                      href={notification.entity_url || '/notifications'}
+                      onClick={() => {
+                        void markRead(notification.id);
+                        setNotificationOpen(false);
+                      }}
+                      className={`flex items-start gap-2 py-3 text-[11px] hover:bg-[#F7F7F8] px-1 rounded-lg ${
+                        notification.is_read ? 'text-[#737680]' : 'text-[#24324A] font-semibold'
+                      }`}
+                    >
+                      <Bell className="w-3.5 h-3.5 text-[#F26B5E] mt-0.5 flex-shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block truncate">{notification.title}</span>
+                        <span className="block truncate font-normal text-[#737680]">{notification.message}</span>
+                      </span>
+                    </Link>
+                  ))
                 )}
               </div>
             </div>

@@ -207,6 +207,7 @@ export default function CreateTaskModal({
         assignee_ids: selectedMember ? [selectedMember.id] : [],
         assignee_names: selectedMember ? [selectedMember.name] : [],
         assignee_avatars: selectedMember ? [selectedMember.avatar] : [],
+        assignee_emails: selectedMember?.email ? [selectedMember.email] : [],
         start_date: now,
         due_date: new Date(data.due_date).toISOString(),
         tags: data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
@@ -255,6 +256,7 @@ export default function CreateTaskModal({
               priority: data.priority,
               assignees: data.assignee_id ? [data.assignee_id] : undefined,
               due_date: data.due_date,
+              notification_silent: true,
             }),
           });
           if (!clickupRes.ok) return;
@@ -272,6 +274,7 @@ export default function CreateTaskModal({
               clickup_task_id: resData.task.clickup_task_id || resData.task.id,
               project_id: data.project_id,
               project_name: selectedProject?.name || savedTask.project_name,
+              notification_silent: true,
             }),
           });
 

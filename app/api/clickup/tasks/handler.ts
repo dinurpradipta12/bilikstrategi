@@ -45,6 +45,7 @@ function mapClickUpTaskToAgencyTask(cuTask: any) {
     assignee_ids,
     assignee_names,
     assignee_avatars,
+    assignee_emails: assignees.map((a: any) => a.email).filter(Boolean),
     start_date,
     due_date,
     tags: (cuTask.tags || []).map((t: any) => t.name || String(t)),

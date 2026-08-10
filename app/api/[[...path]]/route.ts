@@ -21,6 +21,7 @@ import * as supabaseTasks from '../supabase/tasks/handler';
 import * as clickupWebhook from '../webhooks/clickup/handler';
 import * as ownerFinance from '../owner/finance/handler';
 import * as ownerSalarySlips from '../owner/salary-slips/handler';
+import * as notifications from '../notifications/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ const routes: Record<string, RouteModule> = {
   'webhooks/clickup': clickupWebhook,
   'owner/finance': ownerFinance,
   'owner/salary-slips': ownerSalarySlips,
+  notifications,
 };
 
 function normalizePath(pathname: string) {

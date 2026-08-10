@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest as supabase } from '@/lib/supabase/rest-client';
+import { publishProjectAssignments, publishProjectEvent } from '@/lib/notifications/server';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,27 @@ export async function POST(req: NextRequest) {
     }
 
     const projectMeta = meta as ProjectMetaPayload;
+    const updatedAt = new Date().toISOString();
+    const notificationSilent = body.notification_silent === true;
+    let previousMemberEmails: string[] = [];
+
+    if (!notificationSilent) {
+      try {
+        const previous = await supabase
+          .from('project_meta')
+          .select('meta')
+          .eq('project_id', projectId)
+          .maybeSingle();
+        const previousMembers = previous.data?.meta?.teamMembers;
+        previousMemberEmails = Array.isArray(previousMembers)
+          ? previousMembers
+              .map((member: any) => String(member?.email || '').trim().toLowerCase())
+              .filter(Boolean)
+          : [];
+      } catch {
+        // Treat an unreadable previous snapshot as a first assignment save.
+      }
+    }
 
     globalProjectMetaStore.set(projectId, projectMeta);
 
@@ -78,7 +100,7 @@ export async function POST(req: NextRequest) {
           {
             project_id: projectId,
             meta: projectMeta,
-            updated_at: new Date().toISOString(),
+            updated_at: updatedAt,
           },
           { onConflict: 'project_id' }
         );
@@ -90,6 +112,36 @@ export async function POST(req: NextRequest) {
           projectId,
           meta: projectMeta,
           warning: error.message,
+        });
+      }
+
+      if (!notificationSilent) {
+        const projectName = String(projectMeta.name || projectMeta.title || projectId);
+        const memberEmails = Array.isArray(projectMeta.teamMembers)
+          ? projectMeta.teamMembers
+              .map((member: any) => member?.email)
+              .filter((email): email is string => typeof email === 'string' && email.trim().length > 0)
+          : [];
+        const newlyAssignedEmails = memberEmails.filter((email) => !previousMemberEmails.includes(email.toLowerCase()));
+        await publishProjectEvent(req, {
+          type: 'project_meta_updated',
+          title: 'Detail project diperbarui',
+          message: `Detail dan informasi project "${projectName}" diperbarui.`,
+          projectId,
+          projectName,
+          token: updatedAt,
+          excludeRecipientEmails: newlyAssignedEmails,
+          payload: { fields: Object.keys(projectMeta) },
+        }).catch((publishError) => {
+          console.warn('[Project Meta API] Notification publish failed:', publishError);
+        });
+
+        await publishProjectAssignments(req, {
+          projectId,
+          projectName,
+          recipientEmails: newlyAssignedEmails,
+        }).catch((publishError) => {
+          console.warn('[Project Meta API] Project assignment notification failed:', publishError);
         });
       }
     } catch (error: unknown) {
