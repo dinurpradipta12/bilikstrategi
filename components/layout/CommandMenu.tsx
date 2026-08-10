@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, PlusCircle, CheckSquare, Briefcase, Users, Settings, ReceiptText, X, ArrowRight } from 'lucide-react';
+import { Search, PlusCircle, CheckSquare, Briefcase, FileText, Users, Settings, ReceiptText, X, ArrowRight } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 interface CommandMenuProps {
@@ -171,6 +171,14 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 >
                   <ReceiptText className="w-4 h-4 text-[#F26B5E] mr-3" />
                   <span>Buka Invoice Studio</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
+                </button>}
+                {canSeePage('quotes') && <button
+                  onClick={() => handleNavigate('/quotes')}
+                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
+                >
+                  <FileText className="w-4 h-4 text-[#E6A23C] mr-3" />
+                  <span>Buka Penawaran Harga</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
                 {canSeePage('team') && <button

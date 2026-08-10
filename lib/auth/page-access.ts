@@ -10,6 +10,7 @@ export type PageAccessKey =
   | 'assets'
   | 'content_plan'
   | 'invoices'
+  | 'quotes'
   | 'notifications'
   | 'activity_logs'
   | 'settings'
@@ -33,6 +34,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'assets', label: 'Asset Management', href: '/assets' },
   { key: 'content_plan', label: 'Content Plan & Sheets', href: '/content-plan' },
   { key: 'invoices', label: 'Invoices', href: '/invoices' },
+  { key: 'quotes', label: 'Penawaran Harga', href: '/quotes' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
   { key: 'settings', label: 'Settings', href: '/settings' },
@@ -51,6 +53,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   assets: true,
   content_plan: true,
   invoices: true,
+  quotes: true,
   notifications: true,
   activity_logs: true,
   settings: true,

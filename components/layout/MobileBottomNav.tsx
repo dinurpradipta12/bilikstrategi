@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock, CheckSquare, FolderKanban, ReceiptText } from 'lucide-react';
+import { Clock, CheckSquare, FileText, FolderKanban, ReceiptText } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -69,6 +69,14 @@ export default function MobileBottomNav() {
       href: '/invoices',
       icon: ReceiptText,
       activeColor: '#F26B5E',
+    },
+    {
+      id: 'quotes',
+      accessKey: 'quotes',
+      label: 'Penawaran',
+      href: '/quotes',
+      icon: FileText,
+      activeColor: '#E6A23C',
     },
   ];
   const visibleNavItems = navItems.filter(
