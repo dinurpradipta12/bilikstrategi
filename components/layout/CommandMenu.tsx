@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, PlusCircle, CheckSquare, Briefcase, FileText, FileSignature, Users, Settings, ReceiptText, X, ArrowRight } from 'lucide-react';
+import { Search, PlusCircle, CheckSquare, Briefcase, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight } from 'lucide-react';
+import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
 interface CommandMenuProps {
@@ -21,6 +22,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   const [clients, setClients] = useState<any[]>([]);
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
   const [hasUnrestrictedPageAccess, setHasUnrestrictedPageAccess] = useState(false);
+  const [isOwnerAccount, setIsOwnerAccount] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -33,6 +35,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
         if (!data?.user) return;
         const role = String(data.user.app_role || '').toLowerCase();
         setHasUnrestrictedPageAccess(data.user.is_superuser === true || role === 'owner');
+        setIsOwnerAccount(isSuperuserEmail(data.user.email));
         setPageAccess(normalizePageAccess(data.user.page_access));
       })
       .catch(() => {});
@@ -171,6 +174,14 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 >
                   <ReceiptText className="w-4 h-4 text-[#F26B5E] mr-3" />
                   <span>Buka Invoice Studio</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
+                </button>}
+                {isOwnerAccount && <button
+                  onClick={() => handleNavigate('/finance')}
+                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
+                >
+                  <Wallet className="w-4 h-4 text-[#4F9D78] mr-3" />
+                  <span>Buka Finance &amp; Budget Owner</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
                 {canSeePage('quotes') && <button

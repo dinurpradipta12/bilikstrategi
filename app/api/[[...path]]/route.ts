@@ -19,6 +19,7 @@ import * as supabaseProjectMeta from '../supabase/project-meta/handler';
 import * as supabaseProjects from '../supabase/projects/handler';
 import * as supabaseTasks from '../supabase/tasks/handler';
 import * as clickupWebhook from '../webhooks/clickup/handler';
+import * as ownerFinance from '../owner/finance/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,7 @@ const routes: Record<string, RouteModule> = {
   'supabase/projects': supabaseProjects,
   'supabase/tasks': supabaseTasks,
   'webhooks/clickup': clickupWebhook,
+  'owner/finance': ownerFinance,
 };
 
 function normalizePath(pathname: string) {

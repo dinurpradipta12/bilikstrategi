@@ -24,6 +24,7 @@ import {
   ReceiptText,
   FileText,
   FileSignature,
+  Wallet,
 } from 'lucide-react';
 import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -40,6 +41,7 @@ export default function Sidebar() {
     role: 'member',
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
     unrestrictedPageAccess: false,
+    ownerAccount: false,
   });
 
   const [notifUnread, setNotifUnread] = useState<number>(0);
@@ -126,6 +128,7 @@ export default function Sidebar() {
           appRole: serverAppRole || resolvedRole,
           isSuperuser: isSuperOwner,
         }),
+        ownerAccount: isSuperuserEmail(email),
       });
       setPageAccess(resolvedPageAccess);
     }
@@ -166,11 +169,12 @@ export default function Sidebar() {
   }, [pathname]);
 
   const navItems: Array<{
-    key: PageAccessKey;
+    key: PageAccessKey | 'finance';
     name: string;
     href: string;
     icon: typeof LayoutDashboard;
     badge?: number;
+    ownerOnly?: boolean;
   }> = [
     { key: 'dashboard', name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'projects', name: 'Projects', href: '/projects', icon: Briefcase },
@@ -183,16 +187,17 @@ export default function Sidebar() {
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
     { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
+    { key: 'finance', name: 'Finance & Budget', href: '/finance', icon: Wallet, ownerOnly: true },
     { key: 'quotes', name: 'Penawaran Harga', href: '/quotes', icon: FileText },
     { key: 'agreements', name: 'Collaboration Agreement', href: '/agreements', icon: FileSignature },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
-  const visibleNavItems = navItems.filter(
-    (item) =>
-      (userProfile.unrestrictedPageAccess || pageAccess[item.key] !== false)
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.ownerOnly) return userProfile.ownerAccount;
+    return userProfile.unrestrictedPageAccess || pageAccess[item.key as PageAccessKey] !== false;
+  });
 
   return (
     <aside
