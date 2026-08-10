@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Briefcase,
   LayoutList,
@@ -40,6 +40,10 @@ function projectText(value: unknown, fallback = '') {
 function projectNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function projectDetailHref(projectId: string) {
+  return `/projects?projectId=${encodeURIComponent(projectId)}`;
 }
 
 function normalizeAppProject(value: any): AgencyProject {
@@ -505,7 +509,7 @@ function ProjectsListPage() {
                 {filteredProjects.map((project) => (
                   <tr key={project.id} className="hover:bg-[#F7F7F8] transition-colors group">
                     <td className="py-3.5 px-4 font-semibold text-[#24324A]">
-                      <a href={`/projects/${project.id}`} className="hover:text-[#F26B5E] flex items-center gap-1.5 cursor-pointer">
+                      <a href={projectDetailHref(project.id)} className="hover:text-[#F26B5E] flex items-center gap-1.5 cursor-pointer">
                         {project.name}
                         <ChevronRight className="w-3.5 h-3.5 text-[#737680] opacity-0 group-hover:opacity-100 transition-opacity" />
                       </a>
@@ -578,7 +582,7 @@ function ProjectsListPage() {
                   {projectsInStatus.map((p) => (
                     <a
                       key={p.id}
-                      href={`/projects/${p.id}`}
+                      href={projectDetailHref(p.id)}
                       className="block p-4 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl hover:border-[#24324A] transition-all shadow-2xs group cursor-pointer"
                     >
                       <span className="text-[10px] font-bold text-[#F26B5E] uppercase tracking-wider block">{p.client_name || 'Bilik Strategi Workspace'}</span>
@@ -781,8 +785,10 @@ function ProjectsListPage() {
 }
 
 function ProjectsRouteContent() {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const projectId = searchParams.get('projectId');
+  const pathProjectId = pathname.match(/^\/projects\/([^/]+)\/?$/)?.[1] || '';
+  const projectId = searchParams.get('projectId') || (pathProjectId ? decodeURIComponent(pathProjectId) : '');
 
   if (projectId) {
     return <ProjectDetailClient id={projectId} />;

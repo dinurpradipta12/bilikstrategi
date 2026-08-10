@@ -384,7 +384,7 @@ export default function TimelinePage() {
                   return (
                     <a
                       key={`project-${project.id}`}
-                      href={`/projects/${project.id}`}
+                      href={`/projects?projectId=${encodeURIComponent(project.id)}`}
                       className="calendar-event calendar-project-event group grid grid-cols-7 gap-2"
                       title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
                     >
@@ -541,7 +541,7 @@ export default function TimelinePage() {
                     return (
                       <a
                         key={`project-${project.id}`}
-                        href={`/projects/${project.id}`}
+                        href={`/projects?projectId=${encodeURIComponent(project.id)}`}
                         className="calendar-event calendar-project-event grid grid-cols-7 gap-1"
                         title={`${project.name}: ${formatCalendarDate(project.start_date)} s/d ${formatCalendarDate(project.due_date)}`}
                       >

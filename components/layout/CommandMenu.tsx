@@ -219,7 +219,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                   {filteredProjects.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => handleNavigate(`/projects/${p.id}`)}
+                      onClick={() => handleNavigate(`/projects?projectId=${encodeURIComponent(p.id)}`)}
                       className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] text-left"
                     >
                       <Briefcase className="w-4 h-4 text-[#24324A] mr-3 flex-shrink-0" />
