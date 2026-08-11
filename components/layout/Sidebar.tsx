@@ -27,6 +27,7 @@ import {
   Wallet,
   Target,
   BadgeCheck,
+  ChartNoAxesCombined,
 } from 'lucide-react';
 import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -44,6 +45,7 @@ export default function Sidebar() {
     avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
     unrestrictedPageAccess: false,
     ownerAccount: false,
+    managerAccount: false,
   });
 
   const [notifUnread, setNotifUnread] = useState<number>(0);
@@ -131,6 +133,7 @@ export default function Sidebar() {
           isSuperuser: isSuperOwner,
         }),
         ownerAccount: isSuperuserEmail(email),
+        managerAccount: isSuperOwner || ['owner', 'admin'].includes(serverAppRole) || ['owner', 'admin'].includes(String(resolvedRole).toLowerCase()),
       });
       setPageAccess(resolvedPageAccess);
     }
@@ -177,6 +180,7 @@ export default function Sidebar() {
     icon: typeof LayoutDashboard;
     badge?: number;
     ownerOnly?: boolean;
+    managerOnly?: boolean;
   }> = [
     { key: 'dashboard', name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'projects', name: 'Projects', href: '/projects', icon: Briefcase },
@@ -186,6 +190,7 @@ export default function Sidebar() {
     { key: 'team', name: 'Team Workload', href: '/team', icon: Users },
     { key: 'performance', name: 'KPI & Daily Activity', href: '/performance', icon: Target },
     { key: 'approvals', name: 'Approval Center', href: '/approvals', icon: BadgeCheck },
+    { key: 'profitability', name: 'Project Profitability', href: '/profitability', icon: ChartNoAxesCombined, managerOnly: true },
     { key: 'attendance', name: 'Presensi Live', href: '/attendance', icon: Clock },
     { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
@@ -201,9 +206,11 @@ export default function Sidebar() {
   ];
   const visibleNavItems = navItems.filter((item) => {
     if (item.ownerOnly) return userProfile.ownerAccount;
+    if (item.managerOnly) return userProfile.managerAccount;
     return userProfile.unrestrictedPageAccess || pageAccess[item.key as PageAccessKey] !== false;
   });
-  const commonNavItems = visibleNavItems.filter((item) => !item.ownerOnly);
+  const commonNavItems = visibleNavItems.filter((item) => !item.ownerOnly && !item.managerOnly);
+  const managerNavItems = visibleNavItems.filter((item) => item.managerOnly && !item.ownerOnly);
   const ownerNavItems = visibleNavItems.filter((item) => item.ownerOnly);
   const renderNavItem = (item: typeof visibleNavItems[number]) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -272,6 +279,19 @@ export default function Sidebar() {
         <div className="space-y-1">
           {commonNavItems.map(renderNavItem)}
         </div>
+        {managerNavItems.length > 0 && (
+          <div className="mt-3 border-t border-[#E8E8EC] pt-3">
+            {!collapsed && (
+              <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680]">
+                <ShieldCheck className="h-3.5 w-3.5 text-[#7B68EE]" />
+                Owner / Admin
+              </div>
+            )}
+            <div className="space-y-1">
+              {managerNavItems.map(renderNavItem)}
+            </div>
+          </div>
+        )}
         {ownerNavItems.length > 0 && (
           <div className="mt-3 border-t border-[#E8E8EC] pt-3">
             {!collapsed && (

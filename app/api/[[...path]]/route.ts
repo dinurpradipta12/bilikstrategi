@@ -24,6 +24,7 @@ import * as ownerSalarySlips from '../owner/salary-slips/handler';
 import * as notifications from '../notifications/handler';
 import * as performance from '../performance/handler';
 import * as approvals from '../approvals/handler';
+import * as ownerProfitability from '../owner/profitability/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,7 @@ const routes: Record<string, RouteModule> = {
   notifications,
   performance,
   approvals,
+  'owner/profitability': ownerProfitability,
 };
 
 function normalizePath(pathname: string) {

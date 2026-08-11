@@ -14,6 +14,7 @@ export type PageAccessKey =
   | 'agreements'
   | 'performance'
   | 'approvals'
+  | 'profitability'
   | 'notifications'
   | 'activity_logs'
   | 'settings'
@@ -41,6 +42,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'agreements', label: 'Collaboration Agreement', href: '/agreements' },
   { key: 'performance', label: 'KPI & Daily Activity', href: '/performance' },
   { key: 'approvals', label: 'Approval Center', href: '/approvals' },
+  { key: 'profitability', label: 'Project Profitability', href: '/profitability' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
   { key: 'settings', label: 'Settings', href: '/settings' },
@@ -63,6 +65,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   agreements: true,
   performance: true,
   approvals: true,
+  profitability: false,
   notifications: true,
   activity_logs: true,
   settings: true,
