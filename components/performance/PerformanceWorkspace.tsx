@@ -44,6 +44,17 @@ const panelClass = 'rounded-2xl border border-[#E5E7EB] bg-white shadow-sm dark:
 const inputClass = 'w-full rounded-xl border border-[#DDE1E7] bg-white px-3 py-2.5 text-sm text-[#24324A] outline-none transition focus:border-[#F26B5E] focus:ring-2 focus:ring-[#F26B5E]/10 dark:border-[#3A424F] dark:bg-[#11151B] dark:text-[#F4F6FA]';
 const labelClass = 'mb-1.5 block text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#737680] dark:text-[#98A2B3]';
 
+const PROFILE_THEMES = [
+  { gradient: 'linear-gradient(135deg, #FFD9D4 0%, #FFB8AE 100%)', avatar: 'FFD9D4' },
+  { gradient: 'linear-gradient(135deg, #DDF6E8 0%, #AEE7C8 100%)', avatar: 'DDF6E8' },
+  { gradient: 'linear-gradient(135deg, #DFEAFF 0%, #B8D1FF 100%)', avatar: 'DFEAFF' },
+  { gradient: 'linear-gradient(135deg, #F2E2FF 0%, #D8BDF2 100%)', avatar: 'F2E2FF' },
+  { gradient: 'linear-gradient(135deg, #FFF1C9 0%, #FFD98C 100%)', avatar: 'FFF1C9' },
+  { gradient: 'linear-gradient(135deg, #DDF5F5 0%, #AADFE2 100%)', avatar: 'DDF5F5' },
+  { gradient: 'linear-gradient(135deg, #FFE2EF 0%, #F5B8D3 100%)', avatar: 'FFE2EF' },
+  { gradient: 'linear-gradient(135deg, #E8E3FF 0%, #C8BDF8 100%)', avatar: 'E8E3FF' },
+] as const;
+
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -68,8 +79,18 @@ function average(values: number[]) {
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function profileTheme(profile: PerformanceProfile) {
+  const key = `${profile.user_email}|${profile.display_name}`;
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0;
+  }
+  return PROFILE_THEMES[Math.abs(hash) % PROFILE_THEMES.length];
+}
+
 function avatarFor(profile: PerformanceProfile) {
-  return profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.display_name)}&background=24324A&color=fff`;
+  const theme = profileTheme(profile);
+  return profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.display_name)}&background=${theme.avatar}&color=24324A`;
 }
 
 function itemApplies(item: PerformanceItem, profile: PerformanceProfile) {
@@ -800,6 +821,7 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
     ? average(dailyItems.map((item) => latestUpdate(dateUpdates, profile.user_email, item.id, date)?.progress || 0))
     : average(dateUpdates.map((update) => update.progress));
   const review = latestReview(data.reviews, profile.user_email);
+  const theme = profileTheme(profile);
 
   const submitCustom = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -828,21 +850,20 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
   return (
     <>
       <section className={`${panelClass} mb-5 overflow-hidden`}>
-        <div className="relative bg-[#24324A] px-4 py-5 text-white sm:px-6 sm:py-6">
-          <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#F26B5E]/20 blur-3xl" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="px-4 py-5 text-[#24324A] sm:px-6 sm:py-6" style={{ backgroundImage: theme.gradient }}>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={avatarFor(profile)} alt={profile.display_name} className="h-16 w-16 rounded-2xl border-2 border-white/20 object-cover shadow-lg sm:h-20 sm:w-20" />
+              <img src={avatarFor(profile)} alt={profile.display_name} className="h-16 w-16 rounded-2xl border-2 border-white/60 object-cover shadow-sm sm:h-20 sm:w-20" />
               <div className="min-w-0">
-                <div className="mb-1 flex flex-wrap items-center gap-2"><h2 className="truncate text-xl font-black sm:text-2xl">{profile.display_name}</h2><span className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider">{data.viewer.app_role}</span></div>
-                <p className="text-sm font-bold text-white/85">{profile.role_title}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-white/60"><Users className="h-3.5 w-3.5" /> {profile.division}</p>
+                <div className="mb-1 flex flex-wrap items-center gap-2"><h2 className="truncate text-xl font-black sm:text-2xl">{profile.display_name}</h2><span className="rounded-lg border border-white/40 bg-white/45 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#24324A]">{data.viewer.app_role}</span></div>
+                <p className="text-sm font-bold text-[#24324A]/85">{profile.role_title}</p>
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[#24324A]/65"><Users className="h-3.5 w-3.5" /> {profile.division}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:min-w-64">
-              <div className="rounded-2xl bg-white/10 px-4 py-3 backdrop-blur"><span className="text-[9px] font-bold uppercase tracking-wider text-white/60">Progress Hari Ini</span><strong className="mt-1 block text-2xl font-black">{todayProgress}%</strong></div>
-              <div className="rounded-2xl bg-white/10 px-4 py-3 backdrop-blur"><span className="text-[9px] font-bold uppercase tracking-wider text-white/60">Nilai Terakhir</span><strong className="mt-1 block text-2xl font-black">{review ? Math.round(review.overall_score) : '-'}</strong></div>
+              <div className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Progress Hari Ini</span><strong className="mt-1 block text-2xl font-black">{todayProgress}%</strong></div>
+              <div className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Nilai Terakhir</span><strong className="mt-1 block text-2xl font-black">{review ? Math.round(review.overall_score) : '-'}</strong></div>
             </div>
           </div>
         </div>

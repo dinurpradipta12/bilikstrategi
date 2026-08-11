@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock, CheckSquare, FolderKanban } from 'lucide-react';
+import { Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -61,6 +61,14 @@ export default function MobileBottomNav() {
       href: '/projects',
       icon: FolderKanban,
       activeColor: '#3B82F6',
+    },
+    {
+      id: 'performance',
+      accessKey: 'performance',
+      label: 'KPI',
+      href: '/performance',
+      icon: Target,
+      activeColor: '#F26B5E',
     },
   ];
   const visibleNavItems = navItems.filter(
