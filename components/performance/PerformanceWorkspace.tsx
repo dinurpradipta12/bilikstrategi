@@ -209,7 +209,7 @@ function PageHeader({ data, refreshing, onRefresh }: { data: PerformanceBootstra
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[#737680] dark:text-[#98A2B3]">
           {data.viewer.can_manage
-            ? 'Pantau completion rate, atur job description, dan evaluasi progres setiap anggota dalam satu workspace.'
+            ? 'Pantau completion rate, atur job description, evaluasi progres team, dan laporkan daily activity Anda sendiri.'
             : 'Kelola checklist harian, laporkan progres, dan lihat target serta evaluasi sesuai role Anda.'}
         </p>
       </div>
@@ -816,11 +816,13 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
   const dailyItems = applicableItems.filter((item) => item.item_type === 'daily_activity' || (item.item_type === 'initiative' && item.cadence === 'daily'));
   const jobItems = applicableItems.filter((item) => item.item_type === 'job_description');
   const okrItems = applicableItems.filter((item) => ['objective', 'key_result', 'initiative'].includes(item.item_type) && !(item.item_type === 'initiative' && item.cadence === 'daily'));
-  const dateUpdates = data.updates.filter((update) => update.activity_date === date);
+  const personalUpdates = data.updates.filter((update) => update.user_email === profile.user_email);
+  const personalReviews = data.reviews.filter((item) => item.user_email === profile.user_email);
+  const dateUpdates = personalUpdates.filter((update) => update.activity_date === date);
   const todayProgress = dailyItems.length > 0
     ? average(dailyItems.map((item) => latestUpdate(dateUpdates, profile.user_email, item.id, date)?.progress || 0))
     : average(dateUpdates.map((update) => update.progress));
-  const review = latestReview(data.reviews, profile.user_email);
+  const review = latestReview(personalReviews, profile.user_email);
   const theme = profileTheme(profile);
 
   const submitCustom = async (event: React.FormEvent) => {
@@ -905,15 +907,47 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
       {tab === 'okr' && (
         <div className="space-y-4">
           <div><h2 className="text-sm font-extrabold text-[#24324A] dark:text-[#F4F6FA]">OKR, Key Result &amp; Initiative</h2><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Laporkan progress aktual agar objective team dan personal selalu terukur.</p></div>
-          {okrItems.length === 0 ? <EmptyState icon={Goal} title="OKR belum ditetapkan" description="Owner atau admin belum menambahkan objective dan key result untuk scope Anda." /> : okrItems.map((item) => <ActivityEditor key={item.id} item={item} profile={profile} update={latestUpdate(data.updates, profile.user_email, item.id)} date={localDateKey()} saveAction={saveAction} />)}
+          {okrItems.length === 0 ? <EmptyState icon={Goal} title="OKR belum ditetapkan" description="Owner atau admin belum menambahkan objective dan key result untuk scope Anda." /> : okrItems.map((item) => <ActivityEditor key={item.id} item={item} profile={profile} update={latestUpdate(personalUpdates, profile.user_email, item.id)} date={localDateKey()} saveAction={saveAction} />)}
         </div>
       )}
 
       {tab === 'reviews' && (
         <div className="space-y-4">
-          {data.reviews.length === 0 ? <EmptyState icon={ClipboardCheck} title="Belum ada penilaian" description="Review dari owner atau admin akan muncul di sini setelah periode evaluasi." /> : data.reviews.map((item) => <section key={item.id} className={`${panelClass} p-4 sm:p-5`}><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-[#9A9DA5]">Periode {formatDate(item.period_start)} – {formatDate(item.period_end)}</p><h3 className="mt-2 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">Review Performa</h3></div><div className="rounded-2xl bg-[#EEF8F3] px-5 py-3 text-center dark:bg-[#1E3A2D]"><strong className="block text-2xl font-black text-[#347256] dark:text-[#78C59A]">{Math.round(item.overall_score)}</strong><span className="text-[9px] font-bold uppercase tracking-wider text-[#5C8B72]">Overall Score</span></div></div><div className="mt-5 grid grid-cols-3 gap-3">{[['Quality', item.quality_score], ['Ownership', item.ownership_score], ['Teamwork', item.collaboration_score]].map(([label, score]) => <div key={String(label)} className="rounded-xl bg-[#F7F7F8] p-3 text-center dark:bg-[#252B34]"><strong className="block text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{Math.round(Number(score))}</strong><span className="text-[9px] text-[#737680]">{label}</span></div>)}</div>{item.notes && <div className="mt-4 rounded-xl border border-[#E8E8EC] px-4 py-3 dark:border-[#303742]"><p className="text-[10px] font-bold uppercase tracking-wider text-[#9A9DA5]">Feedback</p><p className="mt-2 text-xs leading-6 text-[#4A5568] dark:text-[#CBD2DC]">{item.notes}</p></div>}</section>)}
+          {personalReviews.length === 0 ? <EmptyState icon={ClipboardCheck} title="Belum ada penilaian" description="Review dari owner atau admin akan muncul di sini setelah periode evaluasi." /> : personalReviews.map((item) => <section key={item.id} className={`${panelClass} p-4 sm:p-5`}><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-[#9A9DA5]">Periode {formatDate(item.period_start)} – {formatDate(item.period_end)}</p><h3 className="mt-2 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">Review Performa</h3></div><div className="rounded-2xl bg-[#EEF8F3] px-5 py-3 text-center dark:bg-[#1E3A2D]"><strong className="block text-2xl font-black text-[#347256] dark:text-[#78C59A]">{Math.round(item.overall_score)}</strong><span className="text-[9px] font-bold uppercase tracking-wider text-[#5C8B72]">Overall Score</span></div></div><div className="mt-5 grid grid-cols-3 gap-3">{[['Quality', item.quality_score], ['Ownership', item.ownership_score], ['Teamwork', item.collaboration_score]].map(([label, score]) => <div key={String(label)} className="rounded-xl bg-[#F7F7F8] p-3 text-center dark:bg-[#252B34]"><strong className="block text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{Math.round(Number(score))}</strong><span className="text-[9px] text-[#737680]">{label}</span></div>)}</div>{item.notes && <div className="mt-4 rounded-xl border border-[#E8E8EC] px-4 py-3 dark:border-[#303742]"><p className="text-[10px] font-bold uppercase tracking-wider text-[#9A9DA5]">Feedback</p><p className="mt-2 text-xs leading-6 text-[#4A5568] dark:text-[#CBD2DC]">{item.notes}</p></div>}</section>)}
         </div>
       )}
+    </>
+  );
+}
+
+function ManagerWorkspaceSwitcher({ data, saveAction }: { data: PerformanceBootstrap; saveAction: SaveAction }) {
+  const [view, setView] = useState<'team' | 'personal'>('team');
+
+  const views = [
+    { id: 'team', label: 'Dashboard Team', icon: BarChart3 },
+    { id: 'personal', label: 'Daily Saya', icon: ListChecks },
+  ] as const;
+
+  return (
+    <>
+      <div className="mb-5 grid w-full grid-cols-2 gap-1 rounded-2xl border border-[#E5E7EB] bg-white p-1.5 shadow-sm dark:border-[#303742] dark:bg-[#171B22] sm:w-fit sm:min-w-[360px]">
+        {views.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setView(id)}
+            aria-pressed={view === id}
+            className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-extrabold transition ${view === id ? 'bg-[#24324A] text-white shadow-sm dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F3F4F6] dark:text-[#AAB2BF] dark:hover:bg-[#252B34]'}`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'team'
+        ? <ManagerWorkspace data={data} saveAction={saveAction} />
+        : <MemberWorkspace data={data} saveAction={saveAction} />}
     </>
   );
 }
@@ -989,7 +1023,7 @@ export default function PerformanceWorkspace() {
       {!data.storage_ready && <StorageWarning message={data.warning} />}
       {error && <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#F4C7C2] bg-[#FFF5F3] px-4 py-3 text-xs font-semibold text-[#A6463D] dark:border-[#6B3834] dark:bg-[#351F1E] dark:text-[#F4AAA3]"><AlertCircle className="h-4 w-4 flex-shrink-0" />{error}</div>}
       {notice && <div className="fixed bottom-24 left-1/2 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-xl bg-[#24324A] px-4 py-3 text-xs font-extrabold text-white shadow-2xl md:bottom-6"><CheckCircle2 className="h-4 w-4 text-[#78C59A]" />{notice}</div>}
-      {data.viewer.can_manage ? <ManagerWorkspace data={data} saveAction={saveAction} /> : <MemberWorkspace data={data} saveAction={saveAction} />}
+      {data.viewer.can_manage ? <ManagerWorkspaceSwitcher data={data} saveAction={saveAction} /> : <MemberWorkspace data={data} saveAction={saveAction} />}
     </div>
   );
 }
