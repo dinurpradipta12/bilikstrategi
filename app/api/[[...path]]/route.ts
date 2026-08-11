@@ -25,6 +25,7 @@ import * as notifications from '../notifications/handler';
 import * as performance from '../performance/handler';
 import * as approvals from '../approvals/handler';
 import * as ownerProfitability from '../owner/profitability/handler';
+import * as automations from '../automations/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -60,6 +61,7 @@ const routes: Record<string, RouteModule> = {
   performance,
   approvals,
   'owner/profitability': ownerProfitability,
+  automations,
 };
 
 function normalizePath(pathname: string) {

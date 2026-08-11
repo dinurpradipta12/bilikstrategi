@@ -28,6 +28,8 @@ type NotificationContextValue = {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 const REFRESH_EVENT = 'notifications-refresh';
+const AUTOMATION_RUN_KEY = 'bilik_automation_last_runner_at';
+const AUTOMATION_RUN_INTERVAL = 60_000;
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -70,6 +72,36 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       window.removeEventListener('bilik-workspace-updated', handleWorkspace);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const runDueAutomations = async () => {
+      try {
+        const lastRun = Number(localStorage.getItem(AUTOMATION_RUN_KEY) || '0');
+        if (Date.now() - lastRun < AUTOMATION_RUN_INTERVAL - 1000) return;
+        // Reserve the local runner slot before the request so multiple mounted
+        // providers/tabs do not continuously hit the API. Server run keys are
+        // the cross-device dedupe layer.
+        localStorage.setItem(AUTOMATION_RUN_KEY, String(Date.now()));
+        await fetch('/api/automations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'run_due' }),
+        });
+      } catch {
+        // Automation is optional until its migration is installed. Notification
+        // polling must continue even when the runner is not ready.
+      }
+    };
+
+    void runDueAutomations();
+    const interval = window.setInterval(() => void runDueAutomations(), AUTOMATION_RUN_INTERVAL);
+    const handleFocus = () => void runDueAutomations();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   const markRead = useCallback(async (id: string) => {
     setNotifications((current) => current.map((item) => (item.id === id ? { ...item, is_read: true } : item)));

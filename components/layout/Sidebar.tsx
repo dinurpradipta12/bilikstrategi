@@ -28,6 +28,7 @@ import {
   Target,
   BadgeCheck,
   ChartNoAxesCombined,
+  Zap,
 } from 'lucide-react';
 import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -191,6 +192,7 @@ export default function Sidebar() {
     { key: 'performance', name: 'KPI & Daily Activity', href: '/performance', icon: Target },
     { key: 'approvals', name: 'Approval Center', href: '/approvals', icon: BadgeCheck },
     { key: 'profitability', name: 'Project Profitability', href: '/profitability', icon: ChartNoAxesCombined, managerOnly: true },
+    { key: 'automations', name: 'Automation Center', href: '/automations', icon: Zap, managerOnly: true },
     { key: 'attendance', name: 'Presensi Live', href: '/attendance', icon: Clock },
     { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },

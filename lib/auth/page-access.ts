@@ -15,6 +15,7 @@ export type PageAccessKey =
   | 'performance'
   | 'approvals'
   | 'profitability'
+  | 'automations'
   | 'notifications'
   | 'activity_logs'
   | 'settings'
@@ -43,6 +44,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'performance', label: 'KPI & Daily Activity', href: '/performance' },
   { key: 'approvals', label: 'Approval Center', href: '/approvals' },
   { key: 'profitability', label: 'Project Profitability', href: '/profitability' },
+  { key: 'automations', label: 'Automation Center', href: '/automations' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
   { key: 'settings', label: 'Settings', href: '/settings' },
@@ -66,6 +68,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   performance: true,
   approvals: true,
   profitability: false,
+  automations: false,
   notifications: true,
   activity_logs: true,
   settings: true,
