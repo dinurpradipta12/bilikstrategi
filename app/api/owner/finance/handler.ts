@@ -30,6 +30,15 @@ function number(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function percent(value: unknown, fallback = 0) {
+  return Math.min(100, Math.max(0, number(value, fallback)));
+}
+
+function nullableMoney(value: unknown) {
+  if (value === null || value === undefined || text(value) === '') return null;
+  return Math.max(0, number(value));
+}
+
 function dateOnly(value: unknown, fallback = new Date().toISOString().slice(0, 10)) {
   const candidate = text(value);
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : fallback;
@@ -120,11 +129,13 @@ export async function GET(req: NextRequest) {
     const yearStart = encodeURIComponent(`${selectedYear}-01-01`);
     const nextYearStart = encodeURIComponent(`${nextYear}-01-01`);
 
-    const [settings, entries, salaries, salaryPayments, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
+    const [settings, entries, salaries, salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
       readRows(`app_owner_finance_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&select=*`),
       readRows(`app_owner_finance_entries?workspace_id=eq.${workspace}&order=entry_date.desc,created_at.desc&limit=500&select=*`),
       readRows(`app_owner_salary_settings?workspace_id=eq.${workspace}&order=display_name.asc&select=*`),
       readOptionalRows(`app_owner_salary_payments?workspace_id=eq.${workspace}&month_key=gte.${yearStart}&month_key=lt.${nextYearStart}&order=month_key.desc,paid_date.desc&select=*`),
+      readOptionalRows(`app_project_profit_share_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&order=project_name.asc&select=*`),
+      readOptionalRows(`app_project_profitability_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&order=project_name.asc&select=*`),
       readOptionalRows('clients?select=*'),
       readOptionalRows('projects?select=*'),
       readOptionalRows('task_cache?select=*&limit=5000'),
@@ -134,7 +145,7 @@ export async function GET(req: NextRequest) {
       readOptionalRows('active_sessions?select=*&limit=500'),
     ]);
 
-    const optional = [salaryPayments, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions];
+    const optional = [salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions];
     const warnings = optional
       .filter((result): result is { rows: any[]; warning: string } => !Array.isArray(result))
       .map((result) => result.warning)
@@ -154,6 +165,8 @@ export async function GET(req: NextRequest) {
         entries,
         salaries,
         salaryPayments: Array.isArray(salaryPayments) ? salaryPayments : salaryPayments.rows,
+        profitShareSettings: Array.isArray(profitShareSettings) ? profitShareSettings : profitShareSettings.rows,
+        profitShareStorageReady: Array.isArray(profitShareSettings),
         operational: {
           clients: Array.isArray(clients) ? clients : clients.rows,
           projects: Array.isArray(projects) ? projects : projects.rows,
@@ -162,6 +175,7 @@ export async function GET(req: NextRequest) {
           quotes: Array.isArray(quotes) ? quotes : quotes.rows,
           attendanceLogs: Array.isArray(attendanceLogs) ? attendanceLogs : attendanceLogs.rows,
           activeSessions: Array.isArray(activeSessions) ? activeSessions : activeSessions.rows,
+          profitabilitySettings: Array.isArray(profitabilitySettings) ? profitabilitySettings : profitabilitySettings.rows,
         },
         warnings,
       },
@@ -221,6 +235,37 @@ export async function POST(req: NextRequest) {
       };
       const saved = await writeRow('app_owner_finance_entries?on_conflict=id', payload);
       return NextResponse.json({ success: true, entry: Array.isArray(saved) ? saved[0] : saved });
+    }
+
+    if (action === 'save_profit_share_setting') {
+      const projectKey = text(body.project_key);
+      const projectName = text(body.project_name);
+      if (!projectKey || !projectName) {
+        return NextResponse.json({ error: 'Project wajib dipilih sebelum menyimpan pembagian profit.' }, { status: 400 });
+      }
+      const payload = {
+        workspace_id: WORKSPACE_ID,
+        project_key: projectKey.slice(0, 240),
+        month_key: monthKey(text(body.month || body.month_key).slice(0, 7)),
+        project_name: projectName.slice(0, 240),
+        client_name: text(body.client_name).slice(0, 240),
+        agreed_service_value: nullableMoney(body.agreed_service_value),
+        operational_deduction_percent: percent(body.operational_deduction_percent),
+        tax_percent: percent(body.tax_percent),
+        other_deduction_amount: Math.max(0, number(body.other_deduction_amount)),
+        team_share_percent: percent(body.team_share_percent, 30),
+        task_weight_percent: percent(body.task_weight_percent, 40),
+        completion_weight_percent: percent(body.completion_weight_percent, 30),
+        hours_weight_percent: percent(body.hours_weight_percent, 30),
+        notes: text(body.notes).slice(0, 2000),
+        updated_by_email: owner.identity.email,
+        updated_at: now,
+      };
+      const saved = await writeRow(
+        'app_project_profit_share_settings?on_conflict=workspace_id,project_key,month_key',
+        payload
+      );
+      return NextResponse.json({ success: true, setting: Array.isArray(saved) ? saved[0] : saved });
     }
 
     if (action === 'delete_entry') {

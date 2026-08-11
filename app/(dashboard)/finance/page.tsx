@@ -1,27 +1,39 @@
 'use client';
 
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import {
   ArrowDownRight,
   ArrowUpRight,
   Briefcase,
   CheckCircle2,
   CircleDollarSign,
+  Clock,
+  Coins,
   Loader2,
+  ListChecks,
   Pencil,
   Plus,
   ReceiptText,
   RefreshCw,
   Save,
   ShieldCheck,
+  SlidersHorizontal,
   Target,
   Trash2,
   TrendingUp,
+  TriangleAlert,
   Users,
   Wallet,
   X,
 } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import {
+  calculateProjectProfitShares,
+  type ProfitShareMemberIdentity,
+  type ProfitShareSetting,
+  type ProjectProfitShareRow,
+} from '@/lib/finance/profit-sharing';
 
 type FinanceSettings = {
   month_key: string;
@@ -76,6 +88,8 @@ type FinancePayload = {
   entries: FinanceEntry[];
   salaries: SalarySetting[];
   salaryPayments: SalaryPayment[];
+  profitShareSettings: ProfitShareSetting[];
+  profitShareStorageReady: boolean;
   operational: {
     clients: any[];
     projects: any[];
@@ -83,6 +97,7 @@ type FinancePayload = {
     invoices: any[];
     quotes: any[];
     attendanceLogs: any[];
+    profitabilitySettings: Array<Record<string, unknown>>;
   };
   warnings?: string[];
 };
@@ -149,9 +164,9 @@ function formatCurrency(amount: number, currency = 'IDR') {
       style: 'currency',
       currency: currency || 'IDR',
       maximumFractionDigits: 0,
-    }).format(Math.max(0, amount));
+    }).format(amount);
   } catch {
-    return `${currency || 'IDR'} ${Math.round(Math.max(0, amount)).toLocaleString('id-ID')}`;
+    return `${currency || 'IDR'} ${Math.round(amount).toLocaleString('id-ID')}`;
   }
 }
 
@@ -292,7 +307,8 @@ export default function OwnerFinancePage() {
   const [entryForm, setEntryForm] = useState<FinanceEntry>(emptyEntry);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [paymentDraft, setPaymentDraft] = useState<SalaryPayment | null>(null);
-  const [activeTab, setActiveTab] = useState<'finance' | 'salary-recap'>('finance');
+  const [profitShareDraft, setProfitShareDraft] = useState<ProfitShareSetting | null>(null);
+  const [activeTab, setActiveTab] = useState<'finance' | 'profit-sharing' | 'salary-recap'>('finance');
   const [selectedSalaryRecap, setSelectedSalaryRecap] = useState<SalaryRecapRow | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -344,6 +360,23 @@ export default function OwnerFinancePage() {
         entries: Array.isArray(payload.entries) ? payload.entries : [],
         salaries,
         salaryPayments: Array.isArray(payload.salaryPayments) ? payload.salaryPayments : [],
+        profitShareSettings: (Array.isArray(payload.profitShareSettings) ? payload.profitShareSettings : []).map((setting: ProfitShareSetting) => ({
+          ...setting,
+          project_key: toText(setting.project_key),
+          month_key: toText(setting.month_key),
+          project_name: toText(setting.project_name),
+          client_name: toText(setting.client_name),
+          agreed_service_value: setting.agreed_service_value === null || setting.agreed_service_value === undefined ? null : toNumber(setting.agreed_service_value),
+          operational_deduction_percent: toNumber(setting.operational_deduction_percent),
+          tax_percent: toNumber(setting.tax_percent),
+          other_deduction_amount: toNumber(setting.other_deduction_amount),
+          team_share_percent: toNumber(setting.team_share_percent, 30),
+          task_weight_percent: toNumber(setting.task_weight_percent, 40),
+          completion_weight_percent: toNumber(setting.completion_weight_percent, 30),
+          hours_weight_percent: toNumber(setting.hours_weight_percent, 30),
+          notes: toText(setting.notes),
+        })),
+        profitShareStorageReady: payload.profitShareStorageReady === true,
         operational: {
           clients: Array.isArray(payload.operational?.clients) ? payload.operational.clients : [],
           projects: Array.isArray(payload.operational?.projects) ? payload.operational.projects : [],
@@ -351,6 +384,7 @@ export default function OwnerFinancePage() {
           invoices: Array.isArray(payload.operational?.invoices) ? payload.operational.invoices : [],
           quotes: Array.isArray(payload.operational?.quotes) ? payload.operational.quotes : [],
           attendanceLogs: Array.isArray(payload.operational?.attendanceLogs) ? payload.operational.attendanceLogs : [],
+          profitabilitySettings: Array.isArray(payload.operational?.profitabilitySettings) ? payload.operational.profitabilitySettings : [],
         },
         warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
       });
@@ -429,6 +463,29 @@ export default function OwnerFinancePage() {
     () => (data?.entries || []).filter((entry) => toText(entry.entry_date).slice(0, 7) === month),
     [data?.entries, month]
   );
+
+  const profitShareMembers = useMemo<ProfitShareMemberIdentity[]>(() => teamMembers.map((member) => ({
+    id: toText(member.id),
+    name: memberName(member),
+    email: toText(member.email).toLowerCase(),
+    avatar: toText(member.profilePicture),
+  })), [teamMembers]);
+
+  const profitShareRows = useMemo<ProjectProfitShareRow[]>(() => {
+    if (!data) return [];
+    return calculateProjectProfitShares({
+      month,
+      entries: data.entries,
+      settings: data.profitShareSettings,
+      members: profitShareMembers,
+      salaries: data.salaries,
+      operational: data.operational,
+    });
+  }, [data, month, profitShareMembers]);
+
+  const projectOptions = useMemo(() => Array.from(new Set((data?.operational.projects || [])
+    .map((project) => toText(project?.name || project?.project_name))
+    .filter(Boolean))), [data?.operational.projects]);
 
   const metrics = useMemo(() => {
     const operational = data?.operational;
@@ -607,7 +664,7 @@ export default function OwnerFinancePage() {
 
   const updateSettings = (field: keyof FinanceSettings, value: string) => {
     setData((current) => ({
-      ...(current || { entries: [], salaries: [], salaryPayments: [], operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [] } }),
+      ...(current || { entries: [], salaries: [], salaryPayments: [], profitShareSettings: [], profitShareStorageReady: false, operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [], profitabilitySettings: [] } }),
       settings: { ...(current?.settings || settings), [field]: field === 'currency' || field === 'month_key' ? value : toNumber(value) },
     } as FinancePayload));
   };
@@ -630,6 +687,16 @@ export default function OwnerFinancePage() {
       setEntryForm(emptyEntry());
       setIsEntryModalOpen(false);
     }
+  };
+
+  const submitProfitShare = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!profitShareDraft) return;
+    const saved = await postFinance(
+      { action: 'save_profit_share_setting', month, ...profitShareDraft },
+      `Pengaturan bagi hasil ${profitShareDraft.project_name} tersimpan.`
+    );
+    if (saved) setProfitShareDraft(null);
   };
 
   const editEntry = (entry: FinanceEntry) => {
@@ -701,13 +768,13 @@ export default function OwnerFinancePage() {
   }
 
   return (
-    <main className="min-h-full bg-[#F7F7F8] dark:bg-[#171A20] px-4 py-5 sm:px-6 lg:px-8">
+    <main className="min-h-full overflow-x-hidden bg-[#F7F7F8] px-4 py-5 dark:bg-[#171A20] sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1500px] space-y-5">
         <header className="flex flex-col gap-4 border-b border-[#E8E8EC] dark:border-[#303742] pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.16em] text-[#F26B5E]"><Wallet className="h-4 w-4" /> Owner Finance</div>
             <h1 className="mt-2 text-2xl font-bold text-[#24324A] dark:text-[#F4F6FA] sm:text-3xl">Pendapatan & Budget Operasional</h1>
-            <p className="mt-1 max-w-2xl text-sm text-[#737680] dark:text-[#98A2B3]">Rekap deal customer, project berjalan, target bulanan, dan estimasi payroll berdasarkan beban task serta jam kerja.</p>
+            <p className="mt-1 max-w-2xl text-sm text-[#737680] dark:text-[#98A2B3]">Rekap deal customer, budget, payroll, serta pembagian profit project berdasarkan task, completion, dan jam kerja.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-xs font-bold text-[#737680] dark:text-[#98A2B3]" htmlFor="finance-month">Periode</label>
@@ -723,9 +790,12 @@ export default function OwnerFinancePage() {
           <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#E8E8EC] bg-white dark:border-[#303742] dark:bg-[#20242C]"><Loader2 className="h-7 w-7 animate-spin text-[#F26B5E]" /></div>
         ) : (
           <>
-            <div className="inline-flex rounded-xl border border-[#E8E8EC] bg-white p-1 shadow-sm dark:border-[#303742] dark:bg-[#20242C]" role="tablist" aria-label="Tampilan finance">
-              <button type="button" role="tab" aria-selected={activeTab === 'finance'} onClick={() => setActiveTab('finance')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'finance' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Finance & Payroll</button>
-              <button type="button" role="tab" aria-selected={activeTab === 'salary-recap'} onClick={() => setActiveTab('salary-recap')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'salary-recap' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Rekap Gaji 12 Bulan</button>
+            <div className="w-full overflow-x-auto pb-1">
+              <div className="inline-flex min-w-max rounded-xl border border-[#E8E8EC] bg-white p-1 shadow-sm dark:border-[#303742] dark:bg-[#20242C]" role="tablist" aria-label="Tampilan finance">
+                <button type="button" role="tab" aria-selected={activeTab === 'finance'} onClick={() => setActiveTab('finance')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'finance' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Finance & Payroll</button>
+                <button type="button" role="tab" aria-selected={activeTab === 'profit-sharing'} onClick={() => setActiveTab('profit-sharing')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'profit-sharing' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Bagi Hasil Project</button>
+                <button type="button" role="tab" aria-selected={activeTab === 'salary-recap'} onClick={() => setActiveTab('salary-recap')} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${activeTab === 'salary-recap' ? 'bg-[#24324A] text-white dark:bg-[#F26B5E]' : 'text-[#737680] hover:bg-[#F7F7F8] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]'}`}>Rekap Gaji 12 Bulan</button>
+              </div>
             </div>
 
             {activeTab === 'finance' ? (
@@ -780,12 +850,13 @@ export default function OwnerFinancePage() {
                     <Field label="Jenis"><select value={entryForm.entry_type} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_type: event.target.value as FinanceEntry['entry_type'] }))}><option value="revenue">Pendapatan</option><option value="expense">Biaya</option></select></Field>
                     <Field label="Status"><select value={entryForm.status} onChange={(event) => setEntryForm((entry) => ({ ...entry, status: event.target.value as FinanceEntry['status'] }))}><option value="deal">Deal</option><option value="pending">Pending</option><option value="paid">Paid</option><option value="cancelled">Cancelled</option></select></Field>
                     <Field label="Customer"><input value={entryForm.customer_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, customer_name: event.target.value }))} placeholder="Nama customer" /></Field>
-                    <Field label="Project"><input value={entryForm.project_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, project_name: event.target.value }))} placeholder="Nama project" /></Field>
+                    <div><Field label="Project"><input list="finance-project-options" value={entryForm.project_name} onChange={(event) => setEntryForm((entry) => ({ ...entry, project_name: event.target.value }))} placeholder="Pilih atau tulis nama project" /></Field><datalist id="finance-project-options">{projectOptions.map((project) => <option key={project} value={project} />)}</datalist></div>
                     <Field label="Kategori"><input value={entryForm.category} onChange={(event) => setEntryForm((entry) => ({ ...entry, category: event.target.value }))} placeholder="Project deal / software" /></Field>
                     <Field label="Nominal"><input type="number" min="0" value={entryForm.amount} onChange={(event) => setEntryForm((entry) => ({ ...entry, amount: toNumber(event.target.value) }))} /></Field>
                     <Field label="Tanggal"><input type="date" value={entryForm.entry_date} onChange={(event) => setEntryForm((entry) => ({ ...entry, entry_date: event.target.value }))} /></Field>
                   </div>
                   <Field label="Catatan"><textarea rows={3} value={entryForm.notes} onChange={(event) => setEntryForm((entry) => ({ ...entry, notes: event.target.value }))} placeholder="Opsional" /></Field>
+                  <p className="rounded-xl bg-[#EEF2F7] px-4 py-3 text-[11px] leading-5 text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">Pendapatan berstatus <strong>Deal</strong> atau <strong>Paid</strong> akan otomatis menjadi nilai jasa pada tab Bagi Hasil Project. Gunakan nama project yang sama agar pencocokan akurat.</p>
                   <div className="flex justify-end gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742]"><button type="button" onClick={() => { setIsEntryModalOpen(false); setEntryForm(emptyEntry()); }} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-4 w-4" /> {entryForm.id ? 'Simpan perubahan' : 'Simpan transaksi'}</button></div>
                 </form>
               </Modal>
@@ -809,6 +880,18 @@ export default function OwnerFinancePage() {
               </Modal>
             )}
               </>
+            ) : activeTab === 'profit-sharing' ? (
+              <ProfitSharingTab
+                rows={profitShareRows}
+                currency={settings.currency}
+                storageReady={data?.profitShareStorageReady !== false}
+                isSaving={isSaving}
+                draft={profitShareDraft}
+                onConfigure={(row) => setProfitShareDraft({ ...row.setting })}
+                onDraftChange={setProfitShareDraft}
+                onSave={submitProfitShare}
+                onClose={() => setProfitShareDraft(null)}
+              />
             ) : (
               <SalaryRecapTab
                 rows={salaryRecapRows}
@@ -824,6 +907,150 @@ export default function OwnerFinancePage() {
       </div>
     </main>
   );
+}
+
+function revenueSourceLabel(source: ProjectProfitShareRow['revenue_source']) {
+  return {
+    manual: 'Nilai deal manual',
+    finance: 'Transaksi Finance',
+    invoice: 'Invoice Paid',
+    quote: 'Penawaran Accepted',
+    project: 'Project / Profitability',
+    none: 'Belum ada nilai jasa',
+  }[source];
+}
+
+function ProfitSharingTab({
+  rows,
+  currency,
+  storageReady,
+  isSaving,
+  draft,
+  onConfigure,
+  onDraftChange,
+  onSave,
+  onClose,
+}: {
+  rows: ProjectProfitShareRow[];
+  currency: string;
+  storageReady: boolean;
+  isSaving: boolean;
+  draft: ProfitShareSetting | null;
+  onConfigure: (row: ProjectProfitShareRow) => void;
+  onDraftChange: React.Dispatch<React.SetStateAction<ProfitShareSetting | null>>;
+  onSave: (event: FormEvent) => void;
+  onClose: () => void;
+}) {
+  const totals = rows.reduce((summary, row) => ({
+    service: summary.service + row.service_value,
+    deductions: summary.deductions + row.total_deduction,
+    net: summary.net + row.net_profit,
+    teamPool: summary.teamPool + row.team_fee_pool,
+  }), { service: 0, deductions: 0, net: 0, teamPool: 0 });
+  const activeRow = draft ? rows.find((row) => row.project_key === draft.project_key) : undefined;
+  const weightTotal = draft
+    ? toNumber(draft.task_weight_percent) + toNumber(draft.completion_weight_percent) + toNumber(draft.hours_weight_percent)
+    : 0;
+  const roundedWeightTotal = Math.round(weightTotal * 100) / 100;
+  const weightsBalanced = Math.abs(weightTotal - 100) < 0.01;
+  const updateDraft = (field: keyof ProfitShareSetting, value: string | number | null) => {
+    onDraftChange((current) => current ? { ...current, [field]: value } : current);
+  };
+
+  return (
+    <div className="min-w-0 space-y-5">
+      {!storageReady && (
+        <section className="flex items-start gap-3 rounded-2xl border border-[#E6A23C]/35 bg-[#FEF3D6] p-4 text-[#805500] dark:border-[#E6A23C]/40 dark:bg-[#3D321F] dark:text-[#F1B852]">
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="min-w-0"><h2 className="text-sm font-bold">Penyimpanan bagi hasil belum aktif</h2><p className="mt-1 break-words text-xs leading-5">Jalankan migration <code className="break-all">20260812010000_project_profit_sharing.sql</code> di Supabase SQL Editor. Simulasi tetap dapat dilihat, tetapi pengaturan belum bisa disimpan.</p></div>
+        </section>
+      )}
+
+      <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl"><div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[#F26B5E]"><Coins className="h-4 w-4" /> Profit Sharing Project</div><h2 className="mt-2 text-lg font-bold text-[#24324A] dark:text-[#F4F6FA]">Pembagian fee berbasis kontribusi nyata</h2><p className="mt-1 text-xs leading-5 text-[#737680] dark:text-[#98A2B3]">Nilai jasa dikurangi biaya project, operasional, pajak, dan potongan lain. Pool tim kemudian dibagi berdasarkan task selesai, completion rate, serta jam kerja pada project.</p></div>
+          <div className="rounded-xl bg-[#EEF2F7] px-4 py-3 text-[11px] leading-5 text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]"><strong>Urutan nilai otomatis:</strong><br />Finance Deal/Paid → Invoice Paid → Penawaran Accepted → nilai project.</div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard icon={CircleDollarSign} label="Nilai jasa" value={formatCompactCurrency(totals.service, currency)} detail={`${rows.length} project terdeteksi`} accent="green" />
+          <MetricCard icon={ReceiptText} label="Total potongan" value={formatCompactCurrency(totals.deductions, currency)} detail="Biaya, operasional, pajak, lainnya" accent="amber" />
+          <MetricCard icon={TrendingUp} label="Profit bersih" value={formatCompactCurrency(totals.net, currency)} detail="Setelah seluruh potongan" accent="blue" />
+          <MetricCard icon={Users} label="Pool fee tim" value={formatCompactCurrency(totals.teamPool, currency)} detail={`${rows.filter((row) => row.configured).length}/${rows.length} project sudah diatur`} accent="coral" />
+        </div>
+      </section>
+
+      {rows.length === 0 ? (
+        <section className="rounded-2xl border border-dashed border-[#E8E8EC] bg-white px-5 py-14 text-center dark:border-[#303742] dark:bg-[#20242C]">
+          <Briefcase className="mx-auto h-9 w-9 text-[#98A2B3]" /><h2 className="mt-3 text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Belum ada project yang dapat dihitung</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Tambahkan project atau transaksi Finance dengan nama project untuk memulai perhitungan.</p>
+        </section>
+      ) : rows.map((row) => (
+        <article key={row.project_key} className="min-w-0 overflow-hidden rounded-2xl border border-[#E8E8EC] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+          <div className="border-b border-[#E8E8EC] p-5 dark:border-[#303742]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{row.project_name}</h2><span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${row.configured ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>{row.configured ? 'Aturan tersimpan' : 'Simulasi default'}</span><span className="rounded-full bg-[#EEF2F7] px-2 py-1 text-[10px] font-bold text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">{revenueSourceLabel(row.revenue_source)}</span></div><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">{row.client_name} · Status {row.project_status || 'belum diatur'}</p></div>
+              <button type="button" onClick={() => onConfigure(row)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 dark:bg-[#F26B5E]"><SlidersHorizontal className="h-4 w-4" /> Atur perhitungan</button>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <BusinessStat label="Nilai jasa" value={formatCompactCurrency(row.service_value, currency)} />
+              <BusinessStat label="Total potongan" value={formatCompactCurrency(row.total_deduction, currency)} />
+              <BusinessStat label="Profit bersih" value={formatCompactCurrency(row.net_profit, currency)} />
+              <BusinessStat label="Pool tim" value={formatCompactCurrency(row.team_fee_pool, currency)} />
+              <BusinessStat label="Bagian perusahaan" value={formatCompactCurrency(row.company_retained, currency)} />
+            </div>
+          </div>
+
+          <div className="grid min-w-0 gap-5 p-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div className="min-w-0 space-y-4">
+              <div className="rounded-xl bg-[#F7F7F8] p-4 dark:bg-[#282D36]"><p className="text-[11px] font-extrabold uppercase tracking-wide text-[#737680] dark:text-[#98A2B3]">Rincian potongan</p><div className="mt-3 space-y-2 text-xs"><ProfitLine label="Biaya project dari ledger" value={row.recorded_expense} currency={currency} /><ProfitLine label={`Operasional (${toNumber(row.setting.operational_deduction_percent)}%)`} value={row.operational_deduction} currency={currency} /><ProfitLine label={`Pajak (${toNumber(row.setting.tax_percent)}%)`} value={row.tax_deduction} currency={currency} /><ProfitLine label="Potongan lainnya" value={row.other_deduction} currency={currency} /><div className="border-t border-[#E0E3E8] pt-2 dark:border-[#3A414C]"><ProfitLine label="Total" value={row.total_deduction} currency={currency} strong /></div></div></div>
+              <div className="grid grid-cols-3 gap-2"><ContributionStat icon={ListChecks} label="Task" value={`${row.tasks_completed}/${row.tasks_total}`} /><ContributionStat icon={Target} label="Completion" value={`${Math.round(row.completion_percent)}%`} /><ContributionStat icon={Clock} label="Jam project" value={`${row.labor_hours.toFixed(1)}j`} /></div>
+              <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Bobot aktif: task {toNumber(row.setting.task_weight_percent)}%, completion {toNumber(row.setting.completion_weight_percent)}%, dan jam kerja {toNumber(row.setting.hours_weight_percent)}%. Komponen tanpa data otomatis dikeluarkan lalu bobot sisanya dinormalisasi.</div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Alokasi fee anggota</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Pool tim {toNumber(row.setting.team_share_percent)}% dari profit bersih.</p></div><Users className="h-5 w-5 shrink-0 text-[#7B68EE]" /></div>
+              {row.allocations.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-10 text-center text-xs text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Belum ada assignee task atau jam kerja yang cocok dengan project ini.</div>
+              ) : (
+                <div className="max-w-full overflow-x-auto rounded-xl border border-[#E8E8EC] dark:border-[#303742]">
+                  <table className="w-full min-w-[690px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-4 py-3 font-bold">Anggota</th><th className="px-4 py-3 text-right font-bold">Task</th><th className="px-4 py-3 text-right font-bold">Completion</th><th className="px-4 py-3 text-right font-bold">Jam</th><th className="px-4 py-3 text-right font-bold">Kontribusi</th><th className="px-4 py-3 text-right font-bold">Fee</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{row.allocations.map((allocation) => <tr key={allocation.key} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-4 py-3"><div className="flex items-center gap-2"><Image unoptimized src={allocation.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(allocation.name)}&background=EEF2F7&color=24324A`} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover" /><div className="min-w-0"><div className="max-w-[180px] truncate font-bold">{allocation.name}</div><div className="max-w-[180px] truncate text-[10px] text-[#737680] dark:text-[#98A2B3]">{allocation.email || 'ClickUp member'}</div></div></div></td><td className="px-4 py-3 text-right">{allocation.tasks_completed}/{allocation.tasks_assigned}</td><td className="px-4 py-3 text-right">{Math.round(allocation.completion_percent)}%</td><td className="px-4 py-3 text-right">{allocation.hours.toFixed(1)}</td><td className="px-4 py-3 text-right font-bold text-[#7B68EE]">{allocation.contribution_percent.toFixed(1)}%</td><td className="px-4 py-3 text-right font-extrabold text-[#4F9D78]">{formatCurrency(allocation.fee_amount, currency)}</td></tr>)}</tbody></table>
+                </div>
+              )}
+            </div>
+          </div>
+        </article>
+      ))}
+
+      {draft && (
+        <Modal title={`Atur bagi hasil - ${draft.project_name}`} onClose={onClose} wide>
+          <form onSubmit={onSave} className="space-y-5">
+            <div className="rounded-xl bg-[#EEF2F7] px-4 py-3 text-xs leading-5 text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">Kosongkan nilai deal agar sistem membaca otomatis. Nilai yang sedang terdeteksi: <strong>{formatCurrency(activeRow?.service_value || 0, currency)}</strong> dari {activeRow ? revenueSourceLabel(activeRow.revenue_source) : 'data project'}.</div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Nama project"><input value={draft.project_name} disabled /></Field>
+              <Field label="Customer / client"><input value={draft.client_name} onChange={(event) => updateDraft('client_name', event.target.value)} placeholder="Nama client" /></Field>
+              <Field label="Nilai jasa deal (opsional)"><input type="number" min="0" value={draft.agreed_service_value ?? ''} onChange={(event) => updateDraft('agreed_service_value', event.target.value === '' ? null : toNumber(event.target.value))} placeholder="Otomatis jika dikosongkan" /></Field>
+              <Field label="Pool fee untuk tim (%)"><input type="number" min="0" max="100" step="0.01" value={draft.team_share_percent} onChange={(event) => updateDraft('team_share_percent', toNumber(event.target.value))} /></Field>
+            </div>
+
+            <section className="rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742]"><div className="mb-3"><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Potongan sebelum profit dibagi</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Biaya project dari ledger selalu ikut dipotong otomatis.</p></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Operasional (%)"><input type="number" min="0" max="100" step="0.01" value={draft.operational_deduction_percent} onChange={(event) => updateDraft('operational_deduction_percent', toNumber(event.target.value))} /></Field><Field label="Pajak (%)"><input type="number" min="0" max="100" step="0.01" value={draft.tax_percent} onChange={(event) => updateDraft('tax_percent', toNumber(event.target.value))} /></Field><Field label="Potongan lain (nominal)"><input type="number" min="0" value={draft.other_deduction_amount} onChange={(event) => updateDraft('other_deduction_amount', toNumber(event.target.value))} /></Field></div></section>
+
+            <section className="rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742]"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Bobot kontribusi anggota</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Sistem menormalisasi bobot yang tersedia; disarankan total 100%.</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${weightsBalanced ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>Total {roundedWeightTotal}%</span></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Task selesai (%)"><input type="number" min="0" max="100" step="0.01" value={draft.task_weight_percent} onChange={(event) => updateDraft('task_weight_percent', toNumber(event.target.value))} /></Field><Field label="Completion rate (%)"><input type="number" min="0" max="100" step="0.01" value={draft.completion_weight_percent} onChange={(event) => updateDraft('completion_weight_percent', toNumber(event.target.value))} /></Field><Field label="Jam kerja project (%)"><input type="number" min="0" max="100" step="0.01" value={draft.hours_weight_percent} onChange={(event) => updateDraft('hours_weight_percent', toNumber(event.target.value))} /></Field></div></section>
+
+            <Field label="Catatan aturan"><textarea rows={3} value={draft.notes} onChange={(event) => updateDraft('notes', event.target.value)} placeholder="Contoh: potongan tools campaign, kesepakatan fee tim, atau dasar perhitungan pajak" /></Field>
+            <div className="rounded-xl bg-[#F7F7F8] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><strong className="text-[#24324A] dark:text-[#F4F6FA]">Rumus:</strong> nilai jasa − (biaya ledger + operasional + pajak + potongan lain) = profit bersih. Profit bersih × pool tim = fee yang dibagi berdasarkan skor kontribusi.</div>
+            <div className="flex flex-col-reverse gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742] sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving || !storageReady} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-4 w-4" /> Simpan aturan</button></div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ProfitLine({ label, value, currency, strong = false }: { label: string; value: number; currency: string; strong?: boolean }) {
+  return <div className={`flex items-center justify-between gap-3 ${strong ? 'font-extrabold text-[#24324A] dark:text-[#F4F6FA]' : 'text-[#737680] dark:text-[#C7D0DD]'}`}><span>{label}</span><span className="shrink-0">{formatCurrency(value, currency)}</span></div>;
+}
+
+function ContributionStat({ icon: Icon, label, value }: { icon: typeof Wallet; label: string; value: string }) {
+  return <div className="min-w-0 rounded-xl border border-[#E8E8EC] p-3 text-center dark:border-[#303742]"><Icon className="mx-auto h-4 w-4 text-[#7B68EE]" /><p className="mt-2 truncate text-[10px] font-bold uppercase text-[#737680] dark:text-[#98A2B3]">{label}</p><p className="mt-1 text-sm font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{value}</p></div>;
 }
 
 function SalaryRecapTab({
