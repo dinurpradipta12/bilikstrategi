@@ -16,6 +16,7 @@ import type {
   PerformanceViewer,
 } from '@/lib/performance/types';
 import { performanceItemAppliesToProfile } from '@/lib/performance/rules';
+import { syncDailyActivityApproval } from '@/lib/approvals/server';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -574,6 +575,13 @@ export async function POST(req: NextRequest) {
         });
       }
       const row = Array.isArray(saved) ? saved[0] : saved;
+      if (row) {
+        await syncDailyActivityApproval({ req, context, update: row }).catch((error) => {
+          // Daily reporting remains available while the optional Approval Center
+          // migration is being deployed. Once ready, the next save re-syncs it.
+          console.warn('[Performance] Could not sync daily activity approval:', error);
+        });
+      }
       return noStoreJson({ success: true, update: row ? mapUpdate(row) : null });
     }
 
