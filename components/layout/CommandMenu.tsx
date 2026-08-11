@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, PlusCircle, CheckSquare, Briefcase, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight } from 'lucide-react';
+import { Search, PlusCircle, CheckSquare, Briefcase, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight, Target } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
@@ -214,6 +214,14 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 >
                   <Users className="w-4 h-4 text-[#24324A] mr-3" />
                   <span>Lihat Team Workload</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
+                </button>}
+                {canSeePage('performance') && <button
+                  onClick={() => handleNavigate('/performance')}
+                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
+                >
+                  <Target className="w-4 h-4 text-[#7B68EE] mr-3" />
+                  <span>Buka KPI &amp; Daily Activity</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
                 {canSeePage('settings') && <button

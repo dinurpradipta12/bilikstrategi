@@ -35,6 +35,7 @@ import {
   Ban,
   ChevronDown,
   ChevronUp,
+  Target,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
@@ -1403,6 +1404,23 @@ export default function AttendancePage() {
           </Link>
         </div>
       </div>
+
+      {/* Mobile-friendly entry point while the bottom navigation stays limited to Presensi, Task, and Project. */}
+      <Link
+        href="/performance"
+        className="flex w-full items-center gap-3 rounded-2xl border border-[#DDE5F0] bg-gradient-to-r from-[#F4F7FB] to-white p-3.5 shadow-2xs transition hover:border-[#7B68EE]/40 hover:shadow-sm md:p-4"
+      >
+        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#24324A] text-white">
+          <Target className="h-5 w-5 text-[#A99CF6]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-extrabold text-[#24324A] md:text-sm">KPI &amp; Daily Activity</span>
+          <span className="mt-0.5 block truncate text-[10px] text-[#737680] md:text-[11px]">Isi checklist kerja, progres, dan lihat job description sesuai role Anda.</span>
+        </span>
+        <span className="inline-flex flex-shrink-0 items-center gap-1 text-[10px] font-extrabold text-[#7B68EE] md:text-xs">
+          Buka <ArrowRight className="h-3.5 w-3.5" />
+        </span>
+      </Link>
 
       {/* Alert Notice Banner */}
       {lastCheckOutNotice && (

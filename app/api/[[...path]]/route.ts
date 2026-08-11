@@ -22,6 +22,7 @@ import * as clickupWebhook from '../webhooks/clickup/handler';
 import * as ownerFinance from '../owner/finance/handler';
 import * as ownerSalarySlips from '../owner/salary-slips/handler';
 import * as notifications from '../notifications/handler';
+import * as performance from '../performance/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,7 @@ const routes: Record<string, RouteModule> = {
   'owner/finance': ownerFinance,
   'owner/salary-slips': ownerSalarySlips,
   notifications,
+  performance,
 };
 
 function normalizePath(pathname: string) {

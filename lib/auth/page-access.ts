@@ -12,6 +12,7 @@ export type PageAccessKey =
   | 'invoices'
   | 'quotes'
   | 'agreements'
+  | 'performance'
   | 'notifications'
   | 'activity_logs'
   | 'settings'
@@ -37,6 +38,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'invoices', label: 'Invoices', href: '/invoices' },
   { key: 'quotes', label: 'Penawaran Harga', href: '/quotes' },
   { key: 'agreements', label: 'Collaboration Agreement', href: '/agreements' },
+  { key: 'performance', label: 'KPI & Daily Activity', href: '/performance' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
   { key: 'settings', label: 'Settings', href: '/settings' },
@@ -57,6 +59,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   invoices: true,
   quotes: true,
   agreements: true,
+  performance: true,
   notifications: true,
   activity_logs: true,
   settings: true,
