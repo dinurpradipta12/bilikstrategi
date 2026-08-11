@@ -15,6 +15,7 @@ import type {
   PerformanceUpdateStatus,
   PerformanceViewer,
 } from '@/lib/performance/types';
+import { performanceItemAppliesToProfile } from '@/lib/performance/rules';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -262,15 +263,6 @@ function mapReview(row: any): PerformanceReview {
   };
 }
 
-function itemAppliesToProfile(item: PerformanceItem, profile: PerformanceProfile) {
-  if (!item.active) return false;
-  const scopeValue = item.scope_value.trim().toLowerCase();
-  if (item.scope_type === 'team') return scopeValue === '*' || scopeValue === 'all' || !scopeValue;
-  if (item.scope_type === 'division') return profile.division.trim().toLowerCase() === scopeValue;
-  if (item.scope_type === 'role') return profile.role_title.trim().toLowerCase() === scopeValue;
-  return profile.user_email.trim().toLowerCase() === scopeValue;
-}
-
 function mergeProfiles(
   workspaceId: string,
   storedProfiles: PerformanceProfile[],
@@ -407,7 +399,7 @@ export async function GET(req: NextRequest) {
           viewer,
           profile: currentProfile,
           profiles: [currentProfile],
-          items: allItems.filter((item) => itemAppliesToProfile(item, currentProfile)),
+          items: allItems.filter((item) => performanceItemAppliesToProfile(item, currentProfile)),
           updates: allUpdates.filter((update) => update.user_email === context.identity.email),
           reviews: allReviews.filter((review) => review.user_email === context.identity.email),
           roles: [],

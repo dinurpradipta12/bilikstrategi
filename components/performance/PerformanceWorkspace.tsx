@@ -37,6 +37,10 @@ import {
   type PerformanceUpdate,
   type PerformanceUpdateStatus,
 } from '@/lib/performance/types';
+import {
+  performanceItemAppearsInDailyList,
+  performanceItemAppliesToProfile,
+} from '@/lib/performance/rules';
 
 type SaveAction = (payload: Record<string, unknown>) => Promise<any>;
 
@@ -91,15 +95,6 @@ function profileTheme(profile: PerformanceProfile) {
 function avatarFor(profile: PerformanceProfile) {
   const theme = profileTheme(profile);
   return profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.display_name)}&background=${theme.avatar}&color=24324A`;
-}
-
-function itemApplies(item: PerformanceItem, profile: PerformanceProfile) {
-  if (!item.active) return false;
-  const scope = item.scope_value.trim().toLowerCase();
-  if (item.scope_type === 'team') return scope === '*' || scope === 'all' || !scope;
-  if (item.scope_type === 'division') return profile.division.trim().toLowerCase() === scope;
-  if (item.scope_type === 'role') return profile.role_title.trim().toLowerCase() === scope;
-  return profile.user_email.trim().toLowerCase() === scope;
 }
 
 function latestReview(reviews: PerformanceReview[], email: string) {
@@ -313,8 +308,8 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
 
   const memberMetrics = useMemo(() => activeProfiles.map((profile) => {
     const dailyItems = data.items.filter((item) => (
-      itemApplies(item, profile) &&
-      (item.item_type === 'daily_activity' || (item.item_type === 'initiative' && item.cadence === 'daily'))
+      performanceItemAppliesToProfile(item, profile) &&
+      performanceItemAppearsInDailyList(item)
     ));
     const todayRows = data.updates.filter((update) => update.user_email === profile.user_email && update.activity_date === today);
     const templateProgress = dailyItems.map((item) => latestUpdate(todayRows, profile.user_email, item.id, today)?.progress || 0);
@@ -542,7 +537,7 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
                 </div>
                 <div>
                   <p className="md:hidden text-[9px] font-bold uppercase tracking-wider text-[#9A9DA5]">Target</p>
-                  <p className="text-xs font-semibold text-[#4A5568] dark:text-[#CBD2DC]">{item.scope_type === 'team' ? 'Semua Team' : `${item.scope_type}: ${item.scope_value}`}</p>
+                  <p className="text-xs font-semibold text-[#4A5568] dark:text-[#CBD2DC]">{item.scope_type === 'team' ? 'Semua User' : `${item.scope_type}: ${item.scope_value}`}</p>
                 </div>
                 <div className="flex items-center gap-2 md:block">
                   <span className={`inline-flex rounded-lg px-2.5 py-1 text-[10px] font-extrabold ${cadenceClasses(item.cadence)}`}>{PERFORMANCE_CADENCE_LABELS[item.cadence]}</span>
@@ -609,7 +604,7 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {data.profiles.map((profile) => {
-              const applicable = data.items.filter((item) => itemApplies(item, profile)).length;
+              const applicable = data.items.filter((item) => performanceItemAppliesToProfile(item, profile)).length;
               const review = latestReview(data.reviews, profile.user_email);
               return (
                 <button key={profile.user_email} type="button" onClick={() => editProfile(profile)} className={`${panelClass} p-4 text-left transition hover:-translate-y-0.5 hover:border-[#F26B5E]/50 hover:shadow-md`}>
@@ -685,8 +680,8 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
             <label><span className={labelClass}>Nama Kegiatan / Objective</span><input required value={itemDraft.title} onChange={(event) => setItemDraft({ ...itemDraft, title: event.target.value })} className={inputClass} placeholder="Contoh: Upload konten sesuai jadwal" /></label>
             <label><span className={labelClass}>Detail &amp; Ekspektasi</span><textarea value={itemDraft.description} onChange={(event) => setItemDraft({ ...itemDraft, description: event.target.value })} className={`${inputClass} min-h-24 resize-y`} placeholder="Jelaskan output, standar kualitas, atau bukti yang diharapkan..." /></label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label><span className={labelClass}>Berlaku Untuk</span><select value={itemDraft.scope_type} onChange={(event) => setItemDraft({ ...itemDraft, scope_type: event.target.value as PerformanceItem['scope_type'], scope_value: event.target.value === 'team' ? '*' : '' })} className={inputClass}><option value="team">Semua Team</option><option value="division">Divisi</option><option value="role">Jabatan / Role</option><option value="user">User Tertentu</option></select></label>
-              <label><span className={labelClass}>Nilai Scope</span>{itemDraft.scope_type === 'team' ? <input disabled value="Semua Team" className={`${inputClass} opacity-60`} /> : itemDraft.scope_type === 'user' ? <select value={itemDraft.scope_value} onChange={(event) => setItemDraft({ ...itemDraft, scope_value: event.target.value })} className={inputClass}><option value="">Pilih user</option>{data.profiles.map((profile) => <option key={profile.user_email} value={profile.user_email}>{profile.display_name}</option>)}</select> : <><input list={`scope-${itemDraft.scope_type}`} required value={itemDraft.scope_value} onChange={(event) => setItemDraft({ ...itemDraft, scope_value: event.target.value })} className={inputClass} placeholder={itemDraft.scope_type === 'division' ? 'Contoh: Social Media' : 'Contoh: Social Media Specialist'} /><datalist id={`scope-${itemDraft.scope_type}`}>{Array.from(new Set(data.profiles.map((profile) => itemDraft.scope_type === 'division' ? profile.division : profile.role_title))).map((value) => <option key={value} value={value} />)}</datalist></>}</label>
+              <label><span className={labelClass}>Berlaku Untuk</span><select value={itemDraft.scope_type} onChange={(event) => setItemDraft({ ...itemDraft, scope_type: event.target.value as PerformanceItem['scope_type'], scope_value: event.target.value === 'team' ? '*' : '' })} className={inputClass}><option value="team">Semua User</option><option value="division">Divisi</option><option value="role">Jabatan / Role</option><option value="user">User Tertentu</option></select></label>
+              <label><span className={labelClass}>Nilai Scope</span>{itemDraft.scope_type === 'team' ? <input disabled value="Semua User" className={`${inputClass} opacity-60`} /> : itemDraft.scope_type === 'user' ? <select value={itemDraft.scope_value} onChange={(event) => setItemDraft({ ...itemDraft, scope_value: event.target.value })} className={inputClass}><option value="">Pilih user</option>{data.profiles.map((profile) => <option key={profile.user_email} value={profile.user_email}>{profile.display_name}</option>)}</select> : <><input list={`scope-${itemDraft.scope_type}`} required value={itemDraft.scope_value} onChange={(event) => setItemDraft({ ...itemDraft, scope_value: event.target.value })} className={inputClass} placeholder={itemDraft.scope_type === 'division' ? 'Contoh: Social Media' : 'Contoh: Social Media Specialist'} /><datalist id={`scope-${itemDraft.scope_type}`}>{Array.from(new Set(data.profiles.map((profile) => itemDraft.scope_type === 'division' ? profile.division : profile.role_title))).map((value) => <option key={value} value={value} />)}</datalist></>}</label>
             </div>
             {(itemDraft.item_type === 'key_result' || itemDraft.item_type === 'initiative') && <label><span className={labelClass}>Objective Induk (Opsional)</span><select value={itemDraft.parent_id} onChange={(event) => setItemDraft({ ...itemDraft, parent_id: event.target.value })} className={inputClass}><option value="">Tanpa objective induk</option>{data.items.filter((item) => item.item_type === 'objective' && item.id !== itemDraft.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -809,10 +804,13 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
   const [customProgress, setCustomProgress] = useState(0);
   const [savingCustom, setSavingCustom] = useState(false);
   const profile = data.profile;
-  const applicableItems = data.items.filter((item) => itemApplies(item, profile));
-  const dailyItems = applicableItems.filter((item) => item.item_type === 'daily_activity' || (item.item_type === 'initiative' && item.cadence === 'daily'));
+  const applicableItems = data.items.filter((item) => performanceItemAppliesToProfile(item, profile));
+  const dailyItems = applicableItems.filter(performanceItemAppearsInDailyList);
   const jobItems = applicableItems.filter((item) => item.item_type === 'job_description');
-  const okrItems = applicableItems.filter((item) => ['objective', 'key_result', 'initiative'].includes(item.item_type) && !(item.item_type === 'initiative' && item.cadence === 'daily'));
+  const okrItems = applicableItems.filter((item) => (
+    ['objective', 'key_result', 'initiative'].includes(item.item_type) &&
+    !performanceItemAppearsInDailyList(item)
+  ));
   const personalUpdates = data.updates.filter((update) => update.user_email === profile.user_email);
   const personalReviews = data.reviews.filter((item) => item.user_email === profile.user_email);
   const dateUpdates = personalUpdates.filter((update) => update.activity_date === date);
