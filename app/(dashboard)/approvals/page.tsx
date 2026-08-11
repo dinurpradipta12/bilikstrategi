@@ -22,6 +22,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
+import ModalPortal from '@/components/ui/ModalPortal';
 import type {
   ApprovalBootstrap,
   ApprovalRequest,
@@ -333,8 +334,8 @@ export default function ApprovalsPage() {
       </section>
 
       {showSubmit && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#182238]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowSubmit(false); }}>
-          <form onSubmit={submitRequest} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-3xl sm:p-6">
+        <ModalPortal onClose={() => setShowSubmit(false)}>
+          <form role="dialog" aria-modal="true" onSubmit={submitRequest} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-3xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div><h2 className="text-lg font-black text-[#24324A]">Buat Permintaan</h2><p className="mt-1 text-xs text-[#737680]">Permintaan akan langsung masuk ke antrean Owner/Admin.</p></div>
               <button type="button" onClick={() => setShowSubmit(false)} className="rounded-xl p-2 text-[#737680] hover:bg-[#F2F4F7]"><X className="h-5 w-5" /></button>
@@ -346,19 +347,19 @@ export default function ApprovalsPage() {
             </div>
             <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowSubmit(false)} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680]">Batal</button><button type="submit" disabled={saving || !form.title.trim()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Kirim</button></div>
           </form>
-        </div>
+        </ModalPortal>
       )}
 
       {selected && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-[#182238]/45 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
-          <form onSubmit={reviewRequest} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-3xl sm:p-6">
+        <ModalPortal onClose={() => setSelected(null)}>
+          <form role="dialog" aria-modal="true" onSubmit={reviewRequest} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-3xl sm:p-6">
             <div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-black text-[#24324A]">Tinjau Permintaan</h2><p className="mt-1 text-xs text-[#737680]">{selected.requested_by_name} · {TYPE_META[selected.request_type]?.label}</p></div><button type="button" onClick={() => setSelected(null)} className="rounded-xl p-2 text-[#737680] hover:bg-[#F2F4F7]"><X className="h-5 w-5" /></button></div>
             <div className="mt-5 rounded-2xl border border-[#E5E8ED] bg-[#F8F9FB] p-4"><h3 className="font-black text-[#24324A]">{selected.title}</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[#626874]">{selected.description || 'Tidak ada detail tambahan.'}</p></div>
             <div className="mt-5 grid grid-cols-3 gap-2">{(['approved', 'revision', 'rejected'] as const).map((value) => { const meta = STATUS_META[value]; const Icon = meta.icon; return <button key={value} type="button" onClick={() => setReviewStatus(value)} className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border px-2 text-[10px] font-extrabold transition ${reviewStatus === value ? 'border-[#24324A] bg-[#24324A] text-white' : 'border-[#E1E5EB] bg-white text-[#5E6470]'}`}><Icon className="h-5 w-5" />{meta.label}</button>; })}</div>
             <label className="mt-5 block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Catatan Reviewer</span><textarea rows={4} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder={reviewStatus === 'revision' ? 'Tuliskan bagian yang perlu diperbaiki...' : 'Tambahkan catatan bila diperlukan.'} className="w-full resize-y rounded-xl border border-[#DDE2EA] p-3 text-sm leading-6 text-[#24324A] outline-none focus:border-[#7F91B0]" /></label>
             <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setSelected(null)} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680]">Batal</button><button type="submit" disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />} Simpan Keputusan</button></div>
           </form>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );
