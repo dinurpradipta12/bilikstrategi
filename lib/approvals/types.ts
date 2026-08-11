@@ -1,10 +1,30 @@
-export type ApprovalRequestType =
-  | 'daily_activity'
-  | 'leave'
-  | 'overtime'
-  | 'deliverable'
-  | 'kpi'
-  | 'general';
+export const APPROVAL_REQUEST_TYPES = [
+  'daily_activity',
+  'script',
+  'strategy',
+  'deliverable',
+  'work_other',
+  'leave',
+  'overtime',
+  'kpi',
+  'general',
+] as const;
+
+export type ApprovalRequestType = (typeof APPROVAL_REQUEST_TYPES)[number];
+
+export type ApprovalRequestCategory = 'work' | 'operational';
+
+export const APPROVAL_CATEGORY_BY_TYPE: Record<ApprovalRequestType, ApprovalRequestCategory> = {
+  daily_activity: 'work',
+  script: 'work',
+  strategy: 'work',
+  deliverable: 'work',
+  work_other: 'work',
+  leave: 'operational',
+  overtime: 'operational',
+  kpi: 'operational',
+  general: 'operational',
+};
 
 export type ApprovalStatus = 'pending' | 'approved' | 'revision' | 'rejected' | 'cancelled';
 

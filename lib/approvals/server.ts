@@ -50,6 +50,7 @@ export async function syncDailyActivityApproval(input: {
     title: String(input.update.title || 'Daily Activity').slice(0, 300),
     description: String(input.update.details || '').slice(0, 5000),
     metadata: {
+      approval_category: 'work',
       activity_date: input.update.activity_date || null,
       progress: Number(input.update.progress || 0),
       activity_status: input.update.status || 'todo',
@@ -95,7 +96,7 @@ export async function syncDailyActivityApproval(input: {
     entityType: 'approval',
     entityId: String(approval.id),
     entityUrl: '/approvals',
-    payload: { approval_id: approval.id, request_type: 'daily_activity' },
+    payload: { approval_id: approval.id, request_type: 'daily_activity', approval_category: 'work' },
     dedupeKey: `approval:${approval.id}:submitted:${now}`,
   });
 

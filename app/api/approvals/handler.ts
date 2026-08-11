@@ -6,13 +6,17 @@ import {
 } from '@/lib/auth/server-workspace-context';
 import { publishNotification } from '@/lib/notifications/server';
 import { isSupabaseAdminConfigured, supabaseAdminFetch } from '@/lib/supabase/admin-rest-client';
-import type { ApprovalRequestType, ApprovalStatus } from '@/lib/approvals/types';
+import {
+  APPROVAL_CATEGORY_BY_TYPE,
+  APPROVAL_REQUEST_TYPES,
+  type ApprovalRequestType,
+  type ApprovalStatus,
+} from '@/lib/approvals/types';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const REQUEST_TYPES: ApprovalRequestType[] = ['daily_activity', 'leave', 'overtime', 'deliverable', 'kpi', 'general'];
 const REVIEW_STATUSES: ApprovalStatus[] = ['approved', 'revision', 'rejected'];
 
 function json(data: unknown, init: ResponseInit = {}) {
@@ -102,7 +106,10 @@ export async function POST(req: NextRequest) {
     const workspace = encodeURIComponent(context.workspaceId);
 
     if (action === 'submit') {
-      const requestType = REQUEST_TYPES.includes(body.request_type) ? body.request_type : 'general';
+      const requestType: ApprovalRequestType = APPROVAL_REQUEST_TYPES.includes(body.request_type)
+        ? body.request_type
+        : 'general';
+      const requestCategory = APPROVAL_CATEGORY_BY_TYPE[requestType];
       const title = cleanText(body.title, '', 300);
       if (!title) throw new Error('Judul permintaan wajib diisi.');
       const requestedEmail = context.canManage && body.requested_by_email
@@ -120,7 +127,10 @@ export async function POST(req: NextRequest) {
         requested_by_avatar: requestedEmail === context.identity.email ? context.identity.avatarUrl || null : null,
         title,
         description: cleanText(body.description, '', 5000),
-        metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {},
+        metadata: {
+          ...(body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {}),
+          approval_category: requestCategory,
+        },
         status: 'pending',
         submitted_at: now,
         updated_at: now,
@@ -144,7 +154,7 @@ export async function POST(req: NextRequest) {
         entityType: 'approval',
         entityId: approval?.id,
         entityUrl: '/approvals',
-        payload: { approval_id: approval?.id, request_type: requestType },
+        payload: { approval_id: approval?.id, request_type: requestType, approval_category: requestCategory },
         dedupeKey: `approval:${approval?.id || now}:submitted`,
       });
       return json({ success: true, request: approval });
