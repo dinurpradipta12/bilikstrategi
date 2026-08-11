@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -9,16 +9,15 @@ import {
   CheckSquare,
   ListTodo,
   GanttChartSquare,
-  CalendarDays,
   Users,
   Clock,
   Building2,
   FolderArchive,
   Bell,
-  History,
   Settings,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ShieldCheck,
   FileSpreadsheet,
   ReceiptText,
@@ -36,10 +35,53 @@ import { useTheme } from '@/lib/theme';
 import darkExpandedLogo from '@/src/lcputihbilik.png';
 import darkCollapsedLogo from '@/src/whitebilik.png';
 
+function subscribeSidebarState(onStoreChange: () => void) {
+  window.addEventListener('sidebar-toggle', onStoreChange);
+  window.addEventListener('storage', onStoreChange);
+  return () => {
+    window.removeEventListener('sidebar-toggle', onStoreChange);
+    window.removeEventListener('storage', onStoreChange);
+  };
+}
+
+function getSidebarStateSnapshot() {
+  return localStorage.getItem('bilik_sidebar_collapsed') === 'true';
+}
+
+function subscribeNotificationCount(onStoreChange: () => void) {
+  const handleUnreadUpdate = (event: Event) => {
+    const detail = (event as CustomEvent<{ type?: string; count?: number }>).detail;
+    if (detail?.type === 'notification' && typeof detail.count === 'number') {
+      localStorage.setItem('bilik_notif_unread_count', String(detail.count));
+      onStoreChange();
+    }
+  };
+  const handleStorage = (event: StorageEvent) => {
+    if (!event.key || event.key === 'bilik_notif_unread_count') onStoreChange();
+  };
+  window.addEventListener('unread-badge-update', handleUnreadUpdate);
+  window.addEventListener('storage', handleStorage);
+  return () => {
+    window.removeEventListener('unread-badge-update', handleUnreadUpdate);
+    window.removeEventListener('storage', handleStorage);
+  };
+}
+
+function getNotificationCountSnapshot() {
+  return Number(localStorage.getItem('bilik_notif_unread_count') || '0');
+}
+
+type SavedTeamMember = {
+  email?: unknown;
+  name?: unknown;
+  role?: unknown;
+  page_access?: unknown;
+};
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { isDark } = useTheme();
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useSyncExternalStore(subscribeSidebarState, getSidebarStateSnapshot, () => false);
   const [userProfile, setUserProfile] = useState({
     name: 'Bilik Strategi',
     role: 'member',
@@ -49,19 +91,25 @@ export default function Sidebar() {
     managerAccount: false,
   });
 
-  const [notifUnread, setNotifUnread] = useState<number>(0);
+  const notifUnread = useSyncExternalStore(subscribeNotificationCount, getNotificationCountSnapshot, () => 0);
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
-
-  useEffect(() => {
-    const isCollapsedSaved = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
-    setCollapsed(isCollapsedSaved);
-  }, []);
+  const [openNavGroup, setOpenNavGroup] = useState<string | null>(null);
 
   const handleToggleCollapsed = () => {
     const nextState = !collapsed;
-    setCollapsed(nextState);
+    if (nextState) setOpenNavGroup(null);
     localStorage.setItem('bilik_sidebar_collapsed', String(nextState));
     window.dispatchEvent(new Event('sidebar-toggle'));
+  };
+
+  const handleToggleNavGroup = (groupId: string) => {
+    if (collapsed) {
+      setOpenNavGroup(groupId);
+      localStorage.setItem('bilik_sidebar_collapsed', 'false');
+      window.dispatchEvent(new Event('sidebar-toggle'));
+      return;
+    }
+    setOpenNavGroup((current) => current === groupId ? null : groupId);
   };
 
   useEffect(() => {
@@ -109,13 +157,13 @@ export default function Sidebar() {
           try {
             const parsed = JSON.parse(savedTeamStr);
             if (Array.isArray(parsed)) {
-              const found = parsed.find(
-                (m: any) =>
-                  (m.email && String(m.email).toLowerCase().trim() === email.toLowerCase().trim()) ||
-                  (m.name && String(m.name).toLowerCase().trim() === username.toLowerCase().trim())
+              const found = (parsed as SavedTeamMember[]).find(
+                (member) =>
+                  (member.email && String(member.email).toLowerCase().trim() === email.toLowerCase().trim()) ||
+                  (member.name && String(member.name).toLowerCase().trim() === username.toLowerCase().trim())
               );
               if (found && found.role) {
-                resolvedRole = found.role;
+                resolvedRole = String(found.role);
               }
               if (found?.page_access) {
                 resolvedPageAccess = normalizePageAccess(found.page_access);
@@ -145,32 +193,17 @@ export default function Sidebar() {
     window.addEventListener('storage', handleStorage);
     window.addEventListener('bilik-role-updated', handleStorage);
 
-    // Read real-time unread badge counts (defaults to 0 when no unread messages/notifs exist)
-    const savedNotifUnread = Number(localStorage.getItem('bilik_notif_unread_count') || '0');
-
-    setNotifUnread(savedNotifUnread);
-
-    const handleUnreadUpdate = (e: any) => {
-      if (e.detail?.type === 'notification' && typeof e.detail?.count === 'number') {
-        setNotifUnread(e.detail.count);
-        localStorage.setItem('bilik_notif_unread_count', String(e.detail.count));
-      }
-    };
-
-    window.addEventListener('unread-badge-update', handleUnreadUpdate);
-
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('bilik-role-updated', handleStorage);
-      window.removeEventListener('unread-badge-update', handleUnreadUpdate);
     };
   }, []);
 
   // Keep workspace notification counts visible until the user opens them.
   useEffect(() => {
     if (pathname.startsWith('/notifications')) {
-      setNotifUnread(0);
       localStorage.setItem('bilik_notif_unread_count', '0');
+      window.dispatchEvent(new CustomEvent('unread-badge-update', { detail: { type: 'notification', count: 0 } }));
     }
   }, [pathname]);
 
@@ -203,7 +236,6 @@ export default function Sidebar() {
     { key: 'quotes', name: 'Penawaran Harga', href: '/quotes', icon: FileText },
     { key: 'agreements', name: 'Collaboration Agreement', href: '/agreements', icon: FileSignature },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
-    { key: 'activity_logs', name: 'Activity Log', href: '/activity-logs', icon: History },
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
   const visibleNavItems = navItems.filter((item) => {
@@ -211,10 +243,44 @@ export default function Sidebar() {
     if (item.managerOnly) return userProfile.managerAccount;
     return userProfile.unrestrictedPageAccess || pageAccess[item.key as PageAccessKey] !== false;
   });
-  const commonNavItems = visibleNavItems.filter((item) => !item.ownerOnly && !item.managerOnly);
-  const managerNavItems = visibleNavItems.filter((item) => item.managerOnly && !item.ownerOnly);
-  const ownerNavItems = visibleNavItems.filter((item) => item.ownerOnly);
-  const renderNavItem = (item: typeof visibleNavItems[number]) => {
+  const dashboardItem = visibleNavItems.find((item) => item.key === 'dashboard');
+  const navGroups = [
+    {
+      id: 'projects-work',
+      name: 'Project & Pekerjaan',
+      icon: Briefcase,
+      keys: ['projects', 'tasks', 'my_tasks', 'timeline'],
+    },
+    {
+      id: 'team-performance',
+      name: 'Tim & Performa',
+      icon: Users,
+      keys: ['team', 'performance', 'approvals', 'attendance'],
+    },
+    {
+      id: 'operations-documents',
+      name: 'Operasional & Dokumen',
+      icon: FolderArchive,
+      keys: ['clients', 'assets', 'content_plan', 'invoices', 'quotes', 'agreements'],
+    },
+    {
+      id: 'workspace',
+      name: 'Workspace',
+      icon: Settings,
+      keys: ['notifications', 'settings'],
+    },
+    {
+      id: 'owner-admin',
+      name: 'Owner / Admin',
+      icon: ShieldCheck,
+      keys: ['profitability', 'automations', 'finance', 'salary_slips'],
+    },
+  ].map((group) => ({
+    ...group,
+    items: visibleNavItems.filter((item) => group.keys.includes(item.key)),
+  })).filter((group) => group.items.length > 0);
+
+  const renderNavItem = (item: typeof visibleNavItems[number], nested = false) => {
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
     const Icon = item.icon;
 
@@ -222,11 +288,11 @@ export default function Sidebar() {
       <Link
         key={item.name}
         href={item.href}
-        className={`flex items-center border-l-2 border-transparent px-3 py-2.5 text-xs font-medium transition-colors ${
+        className={`flex items-center rounded-lg border-l-2 border-transparent py-2.5 text-xs font-medium transition-colors ${
           isActive
-            ? 'border-[#F26B5E] text-[#24324A] font-semibold'
-            : 'text-[#737680] hover:text-[#202124]'
-        } ${collapsed ? 'justify-center' : ''}`}
+            ? 'border-[#F26B5E] bg-[#FFF0ED] text-[#24324A] font-semibold dark:bg-[#472925] dark:text-[#F4F6FA]'
+            : 'text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] dark:text-[#AAB4C5] dark:hover:bg-[#282D36] dark:hover:text-[#F4F6FA]'
+        } ${collapsed ? 'justify-center px-3' : nested ? 'px-3 pl-4' : 'px-3'}`}
         title={collapsed ? item.name : undefined}
       >
         <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#F26B5E]' : ''} ${collapsed ? '' : 'mr-3'}`} />
@@ -237,6 +303,41 @@ export default function Sidebar() {
           </span>
         )}
       </Link>
+    );
+  };
+
+  const renderNavGroup = (group: typeof navGroups[number]) => {
+    const isOpen = openNavGroup === group.id;
+    const isGroupActive = group.items.some((item) => pathname === item.href || pathname.startsWith(item.href + '/'));
+    const GroupIcon = group.icon;
+    const groupBadge = group.items.reduce((sum, item) => sum + (item.badge || 0), 0);
+
+    return (
+      <div key={group.id} className="space-y-1">
+        <button
+          type="button"
+          onClick={() => handleToggleNavGroup(group.id)}
+          aria-expanded={!collapsed && isOpen}
+          aria-controls={`sidebar-group-${group.id}`}
+          className={`relative flex w-full items-center rounded-lg px-3 py-2.5 text-left text-xs font-bold transition-colors ${
+            isGroupActive
+              ? 'bg-[#F7F7F8] text-[#24324A] dark:bg-[#282D36] dark:text-[#F4F6FA]'
+              : 'text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] dark:text-[#AAB4C5] dark:hover:bg-[#282D36] dark:hover:text-[#F4F6FA]'
+          } ${collapsed ? 'justify-center' : ''}`}
+          title={collapsed ? group.name : undefined}
+        >
+          <GroupIcon className={`h-4 w-4 shrink-0 ${isGroupActive ? 'text-[#F26B5E]' : ''} ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && <span className="min-w-0 flex-1 truncate">{group.name}</span>}
+          {!collapsed && groupBadge > 0 && <span className="mr-2 rounded-full bg-[#F26B5E] px-1.5 py-0.5 text-[10px] font-bold text-white">{groupBadge}</span>}
+          {!collapsed && <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />}
+          {collapsed && groupBadge > 0 && <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#F26B5E]" />}
+        </button>
+        {!collapsed && isOpen && (
+          <div id={`sidebar-group-${group.id}`} className="ml-5 space-y-1 border-l border-[#E8E8EC] pl-2 dark:border-[#3A414C]">
+            {group.items.map((item) => renderNavItem(item, true))}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -279,34 +380,9 @@ export default function Sidebar() {
       {/* Navigation Menu */}
       <nav className="flex-1 overflow-y-auto p-2">
         <div className="space-y-1">
-          {commonNavItems.map(renderNavItem)}
+          {dashboardItem && renderNavItem(dashboardItem)}
+          {navGroups.map(renderNavGroup)}
         </div>
-        {managerNavItems.length > 0 && (
-          <div className="mt-3 border-t border-[#E8E8EC] pt-3">
-            {!collapsed && (
-              <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#7B68EE]" />
-                Owner / Admin
-              </div>
-            )}
-            <div className="space-y-1">
-              {managerNavItems.map(renderNavItem)}
-            </div>
-          </div>
-        )}
-        {ownerNavItems.length > 0 && (
-          <div className="mt-3 border-t border-[#E8E8EC] pt-3">
-            {!collapsed && (
-              <div className="mb-2 flex items-center gap-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#F26B5E]" />
-                Khusus Owner
-              </div>
-            )}
-            <div className="space-y-1">
-              {ownerNavItems.map(renderNavItem)}
-            </div>
-          </div>
-        )}
       </nav>
 
       {/* Footer Profile Box */}

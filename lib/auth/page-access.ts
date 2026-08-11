@@ -17,7 +17,6 @@ export type PageAccessKey =
   | 'profitability'
   | 'automations'
   | 'notifications'
-  | 'activity_logs'
   | 'settings'
   | 'calendar';
 
@@ -46,7 +45,6 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'profitability', label: 'Project Profitability', href: '/profitability' },
   { key: 'automations', label: 'Automation Center', href: '/automations' },
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
-  { key: 'activity_logs', label: 'Activity Log', href: '/activity-logs' },
   { key: 'settings', label: 'Settings', href: '/settings' },
   { key: 'calendar', label: 'Calendar', href: '/calendar' },
 ];
@@ -70,7 +68,6 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   profitability: false,
   automations: false,
   notifications: true,
-  activity_logs: true,
   settings: true,
   calendar: true,
 };

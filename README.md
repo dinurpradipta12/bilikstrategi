@@ -18,9 +18,8 @@
 10. **Client Listing**: Katalog klien agency yang tersimpan di Supabase, terhubung dengan Folder ClickUp dan histori retainer.
 11. **Agency Chat**: Channel komunikasi tim terintegrasi ClickUp Chat (dengan fallback) dan *Tab Visibility API polling* untuk menghemat bandwidth.
 12. **Notification Center**: Log notifikasi aktivitas (task baru, deadline mendekat, task overdue, komentar, mention, pesan).
-13. **Activity Log & Audit Trail**: Catatan audit pengubah entitas, sumber event (Web App vs Webhook), dan perubahan nilai (old vs new value).
-14. **Settings & ClickUp Integration Diagnostic**: Halaman pengujian koneksi ClickUp API, status token terenkripsi, webhook listener, dan pengaturan peran pengguna.
-15. **Global Command Menu (`Cmd/Ctrl + K`)**: Shortcut navigasi cepat dan pembuatan task dari mana saja.
+13. **Settings & ClickUp Integration Diagnostic**: Halaman pengujian koneksi ClickUp API, status token terenkripsi, webhook listener, dan pengaturan peran pengguna.
+14. **Global Command Menu (`Cmd/Ctrl + K`)**: Shortcut navigasi cepat dan pembuatan task dari mana saja.
 
 ---
 
@@ -56,7 +55,6 @@ bilik-strategi/
 │   │   ├── clients/           # Client Directory & ClickUp Folders
 │   │   ├── chat/              # Team Communication & Tab Polling
 │   │   ├── notifications/     # Notification Center
-│   │   ├── activity-logs/     # Audit & Event Trail
 │   │   ├── settings/          # Integration & Role Settings
 │   │   └── layout.tsx         # Dashboard Shell Layout
 │   ├── api/

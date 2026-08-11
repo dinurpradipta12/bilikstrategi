@@ -252,7 +252,7 @@ html.dark [class~='border-l'] {
 }
 
 html.dark [class~='border-[#E8E8EC]'],
-html.dark [class~='divide-[#E8E8EC'] > :not([hidden]) ~ :not([hidden])],
+html.dark [class~='divide-[#E8E8EC]'] > :not([hidden]) ~ :not([hidden]),
 html.dark [class~='border-[#E5EAF0]'] {
   border-color: var(--border) !important;
 }
