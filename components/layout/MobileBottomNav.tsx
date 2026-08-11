@@ -3,9 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock, CheckSquare, FileSignature, FileText, FolderKanban, ReceiptText } from 'lucide-react';
-import { Wallet } from 'lucide-react';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { Clock, CheckSquare, FolderKanban } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -13,7 +11,6 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
   const [hasUnrestrictedPageAccess, setHasUnrestrictedPageAccess] = useState(false);
-  const [isOwnerAccount, setIsOwnerAccount] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,7 +21,6 @@ export default function MobileBottomNav() {
         if (cancelled || !data?.user) return;
         const role = String(data.user.app_role || '').toLowerCase();
         setHasUnrestrictedPageAccess(data.user.is_superuser === true || role === 'owner');
-        setIsOwnerAccount(isSuperuserEmail(data.user.email));
         setPageAccess(normalizePageAccess(data.user.page_access));
       })
       .catch(() => {});
@@ -41,7 +37,6 @@ export default function MobileBottomNav() {
     href: string;
     icon: typeof Clock;
     activeColor: string;
-    ownerOnly?: boolean;
   }> = [
     {
       id: 'attendance',
@@ -67,51 +62,9 @@ export default function MobileBottomNav() {
       icon: FolderKanban,
       activeColor: '#3B82F6',
     },
-    {
-      id: 'invoices',
-      accessKey: 'invoices',
-      label: 'Invoice',
-      href: '/invoices',
-      icon: ReceiptText,
-      activeColor: '#F26B5E',
-    },
-    {
-      id: 'quotes',
-      accessKey: 'quotes',
-      label: 'Penawaran',
-      href: '/quotes',
-      icon: FileText,
-      activeColor: '#E6A23C',
-    },
-    {
-      id: 'finance',
-      accessKey: 'dashboard',
-      label: 'Finance',
-      href: '/finance',
-      icon: Wallet,
-      activeColor: '#F26B5E',
-      ownerOnly: true,
-    },
-    {
-      id: 'salary-slips',
-      accessKey: 'dashboard',
-      label: 'Slip Gaji',
-      href: '/salary-slips',
-      icon: FileText,
-      activeColor: '#4F9D78',
-      ownerOnly: true,
-    },
-    {
-      id: 'agreements',
-      accessKey: 'agreements',
-      label: 'Agreement',
-      href: '/agreements',
-      icon: FileSignature,
-      activeColor: '#7B68EE',
-    },
   ];
   const visibleNavItems = navItems.filter(
-    (item) => item.ownerOnly ? isOwnerAccount : hasUnrestrictedPageAccess || pageAccess[item.accessKey] !== false
+    (item) => hasUnrestrictedPageAccess || pageAccess[item.accessKey] !== false
   );
 
   return (
