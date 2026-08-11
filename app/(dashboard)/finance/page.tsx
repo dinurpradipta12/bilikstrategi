@@ -98,6 +98,7 @@ type FinancePayload = {
     quotes: any[];
     attendanceLogs: any[];
     profitabilitySettings: Array<Record<string, unknown>>;
+    projectMeta: Array<Record<string, unknown>>;
   };
   warnings?: string[];
 };
@@ -156,6 +157,37 @@ function toNumber(value: unknown, fallback = 0) {
 
 function toText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : value == null ? fallback : String(value);
+}
+
+function normalizeMemberShareOverrides(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, share]) => [key.trim().toLowerCase(), Math.min(100, Math.max(0, toNumber(share)))] as const)
+      .filter(([key]) => Boolean(key))
+  );
+}
+
+function draftForProfitShareRow(row: ProjectProfitShareRow): ProfitShareSetting {
+  const savedShares = normalizeMemberShareOverrides(row.setting.member_share_overrides);
+  const useSavedShares = row.setting.allocation_mode === 'manual' && Object.keys(savedShares).length > 0;
+  const memberShares = Object.fromEntries(row.allocations.map((allocation) => [
+    allocation.key.toLowerCase(),
+    Math.round((useSavedShares ? toNumber(savedShares[allocation.key.toLowerCase()]) : allocation.contribution_percent) * 100) / 100,
+  ]));
+
+  if (!useSavedShares && row.allocations.length) {
+    const keys = row.allocations.map((allocation) => allocation.key.toLowerCase());
+    const total = keys.reduce((sum, key) => sum + toNumber(memberShares[key]), 0);
+    const lastKey = keys[keys.length - 1];
+    memberShares[lastKey] = Math.max(0, Math.round((toNumber(memberShares[lastKey]) + 100 - total) * 100) / 100);
+  }
+
+  return {
+    ...row.setting,
+    allocation_mode: row.setting.allocation_mode === 'manual' ? 'manual' : 'automatic',
+    member_share_overrides: memberShares,
+  };
 }
 
 function formatCurrency(amount: number, currency = 'IDR') {
@@ -374,6 +406,8 @@ export default function OwnerFinancePage() {
           task_weight_percent: toNumber(setting.task_weight_percent, 40),
           completion_weight_percent: toNumber(setting.completion_weight_percent, 30),
           hours_weight_percent: toNumber(setting.hours_weight_percent, 30),
+          allocation_mode: setting.allocation_mode === 'manual' ? 'manual' : 'automatic',
+          member_share_overrides: normalizeMemberShareOverrides(setting.member_share_overrides),
           notes: toText(setting.notes),
         })),
         profitShareStorageReady: payload.profitShareStorageReady === true,
@@ -385,6 +419,7 @@ export default function OwnerFinancePage() {
           quotes: Array.isArray(payload.operational?.quotes) ? payload.operational.quotes : [],
           attendanceLogs: Array.isArray(payload.operational?.attendanceLogs) ? payload.operational.attendanceLogs : [],
           profitabilitySettings: Array.isArray(payload.operational?.profitabilitySettings) ? payload.operational.profitabilitySettings : [],
+          projectMeta: Array.isArray(payload.operational?.projectMeta) ? payload.operational.projectMeta : [],
         },
         warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
       });
@@ -664,7 +699,7 @@ export default function OwnerFinancePage() {
 
   const updateSettings = (field: keyof FinanceSettings, value: string) => {
     setData((current) => ({
-      ...(current || { entries: [], salaries: [], salaryPayments: [], profitShareSettings: [], profitShareStorageReady: false, operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [], profitabilitySettings: [] } }),
+      ...(current || { entries: [], salaries: [], salaryPayments: [], profitShareSettings: [], profitShareStorageReady: false, operational: { clients: [], projects: [], tasks: [], invoices: [], quotes: [], attendanceLogs: [], profitabilitySettings: [], projectMeta: [] } }),
       settings: { ...(current?.settings || settings), [field]: field === 'currency' || field === 'month_key' ? value : toNumber(value) },
     } as FinancePayload));
   };
@@ -887,7 +922,7 @@ export default function OwnerFinancePage() {
                 storageReady={data?.profitShareStorageReady !== false}
                 isSaving={isSaving}
                 draft={profitShareDraft}
-                onConfigure={(row) => setProfitShareDraft({ ...row.setting })}
+                onConfigure={(row) => setProfitShareDraft(draftForProfitShareRow(row))}
                 onDraftChange={setProfitShareDraft}
                 onSave={submitProfitShare}
                 onClose={() => setProfitShareDraft(null)}
@@ -953,8 +988,22 @@ function ProfitSharingTab({
     : 0;
   const roundedWeightTotal = Math.round(weightTotal * 100) / 100;
   const weightsBalanced = Math.abs(weightTotal - 100) < 0.01;
-  const updateDraft = (field: keyof ProfitShareSetting, value: string | number | null) => {
+  const manualShareTotal = activeRow && draft
+    ? activeRow.allocations.reduce((sum, allocation) => sum + toNumber(draft.member_share_overrides[allocation.key.toLowerCase()]), 0)
+    : 0;
+  const roundedManualShareTotal = Math.round(manualShareTotal * 100) / 100;
+  const manualSharesBalanced = draft?.allocation_mode !== 'manual' || Boolean(activeRow?.allocations.length && Math.abs(manualShareTotal - 100) < 0.01);
+  const updateDraft = (field: keyof ProfitShareSetting, value: string | number | null | Record<string, number>) => {
     onDraftChange((current) => current ? { ...current, [field]: value } : current);
+  };
+  const updateMemberShare = (key: string, value: unknown) => {
+    onDraftChange((current) => current ? {
+      ...current,
+      member_share_overrides: {
+        ...current.member_share_overrides,
+        [key.toLowerCase()]: Math.min(100, Math.max(0, toNumber(value))),
+      },
+    } : current);
   };
 
   return (
@@ -962,7 +1011,7 @@ function ProfitSharingTab({
       {!storageReady && (
         <section className="flex items-start gap-3 rounded-2xl border border-[#E6A23C]/35 bg-[#FEF3D6] p-4 text-[#805500] dark:border-[#E6A23C]/40 dark:bg-[#3D321F] dark:text-[#F1B852]">
           <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
-          <div className="min-w-0"><h2 className="text-sm font-bold">Penyimpanan bagi hasil belum aktif</h2><p className="mt-1 break-words text-xs leading-5">Jalankan migration <code className="break-all">20260812010000_project_profit_sharing.sql</code> di Supabase SQL Editor. Simulasi tetap dapat dilihat, tetapi pengaturan belum bisa disimpan.</p></div>
+          <div className="min-w-0"><h2 className="text-sm font-bold">Penyimpanan bagi hasil belum aktif</h2><p className="mt-1 break-words text-xs leading-5">Jalankan migration <code className="break-all">20260812010000_project_profit_sharing.sql</code>, lalu <code className="break-all">20260812020000_project_profit_share_members.sql</code> di Supabase SQL Editor. Simulasi tetap dapat dilihat, tetapi pengaturan belum bisa disimpan.</p></div>
         </section>
       )}
 
@@ -987,7 +1036,16 @@ function ProfitSharingTab({
         <article key={row.project_key} className="min-w-0 overflow-hidden rounded-2xl border border-[#E8E8EC] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
           <div className="border-b border-[#E8E8EC] p-5 dark:border-[#303742]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{row.project_name}</h2><span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${row.configured ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>{row.configured ? 'Aturan tersimpan' : 'Simulasi default'}</span><span className="rounded-full bg-[#EEF2F7] px-2 py-1 text-[10px] font-bold text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">{revenueSourceLabel(row.revenue_source)}</span></div><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">{row.client_name} · Status {row.project_status || 'belum diatur'}</p></div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="break-words text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{row.project_name}</h2>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${row.configured ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>{row.configured ? 'Aturan tersimpan' : 'Simulasi default'}</span>
+                  <span className="rounded-full bg-[#EEF2F7] px-2 py-1 text-[10px] font-bold text-[#40536F] dark:bg-[#2A3340] dark:text-[#C7D0DD]">{revenueSourceLabel(row.revenue_source)}</span>
+                  <span className="rounded-full bg-[#F2EEFF] px-2 py-1 text-[10px] font-bold text-[#6955D9] dark:bg-[#302B4A] dark:text-[#B5A8FF]">{row.allocations.length} anggota {row.member_source === 'project_team' ? 'project' : 'dari task'}</span>
+                  <span className="rounded-full bg-[#EEF8F3] px-2 py-1 text-[10px] font-bold text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]">{row.setting.allocation_mode === 'manual' ? 'Pembagian manual' : 'Pembagian otomatis'}</span>
+                </div>
+                <p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">{row.client_name} · Status {row.project_status || 'belum diatur'}</p>
+              </div>
               <button type="button" onClick={() => onConfigure(row)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 dark:bg-[#F26B5E]"><SlidersHorizontal className="h-4 w-4" /> Atur perhitungan</button>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -1003,16 +1061,16 @@ function ProfitSharingTab({
             <div className="min-w-0 space-y-4">
               <div className="rounded-xl bg-[#F7F7F8] p-4 dark:bg-[#282D36]"><p className="text-[11px] font-extrabold uppercase tracking-wide text-[#737680] dark:text-[#98A2B3]">Rincian potongan</p><div className="mt-3 space-y-2 text-xs"><ProfitLine label="Biaya project dari ledger" value={row.recorded_expense} currency={currency} /><ProfitLine label={`Operasional (${toNumber(row.setting.operational_deduction_percent)}%)`} value={row.operational_deduction} currency={currency} /><ProfitLine label={`Pajak (${toNumber(row.setting.tax_percent)}%)`} value={row.tax_deduction} currency={currency} /><ProfitLine label="Potongan lainnya" value={row.other_deduction} currency={currency} /><div className="border-t border-[#E0E3E8] pt-2 dark:border-[#3A414C]"><ProfitLine label="Total" value={row.total_deduction} currency={currency} strong /></div></div></div>
               <div className="grid grid-cols-3 gap-2"><ContributionStat icon={ListChecks} label="Task" value={`${row.tasks_completed}/${row.tasks_total}`} /><ContributionStat icon={Target} label="Completion" value={`${Math.round(row.completion_percent)}%`} /><ContributionStat icon={Clock} label="Jam project" value={`${row.labor_hours.toFixed(1)}j`} /></div>
-              <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Bobot aktif: task {toNumber(row.setting.task_weight_percent)}%, completion {toNumber(row.setting.completion_weight_percent)}%, dan jam kerja {toNumber(row.setting.hours_weight_percent)}%. Komponen tanpa data otomatis dikeluarkan lalu bobot sisanya dinormalisasi.</div>
+              <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">{row.setting.allocation_mode === 'manual' ? 'Persentase kontribusi mengikuti pembagian manual yang disimpan pada pengaturan project.' : <>Bobot aktif: task {toNumber(row.setting.task_weight_percent)}%, completion {toNumber(row.setting.completion_weight_percent)}%, dan jam kerja {toNumber(row.setting.hours_weight_percent)}%. Komponen tanpa data otomatis dikeluarkan lalu bobot sisanya dinormalisasi.</>}</div>
             </div>
 
             <div className="min-w-0">
-              <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Alokasi fee anggota</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Pool tim {toNumber(row.setting.team_share_percent)}% dari profit bersih.</p></div><Users className="h-5 w-5 shrink-0 text-[#7B68EE]" /></div>
+              <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Alokasi fee anggota</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Pool tim {toNumber(row.setting.team_share_percent)}% dari profit bersih · {row.member_source === 'project_team' ? 'sinkron dari Team Members project' : 'fallback dari assignee task'}.</p></div><Users className="h-5 w-5 shrink-0 text-[#7B68EE]" /></div>
               {row.allocations.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-10 text-center text-xs text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Belum ada assignee task atau jam kerja yang cocok dengan project ini.</div>
+                <div className="rounded-xl border border-dashed border-[#D8DDE5] px-4 py-10 text-center text-xs text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Belum ada Team Members atau assignee task yang cocok dengan project ini.</div>
               ) : (
                 <div className="max-w-full overflow-x-auto rounded-xl border border-[#E8E8EC] dark:border-[#303742]">
-                  <table className="w-full min-w-[690px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-4 py-3 font-bold">Anggota</th><th className="px-4 py-3 text-right font-bold">Task</th><th className="px-4 py-3 text-right font-bold">Completion</th><th className="px-4 py-3 text-right font-bold">Jam</th><th className="px-4 py-3 text-right font-bold">Kontribusi</th><th className="px-4 py-3 text-right font-bold">Fee</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{row.allocations.map((allocation) => <tr key={allocation.key} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-4 py-3"><div className="flex items-center gap-2"><Image unoptimized src={allocation.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(allocation.name)}&background=EEF2F7&color=24324A`} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover" /><div className="min-w-0"><div className="max-w-[180px] truncate font-bold">{allocation.name}</div><div className="max-w-[180px] truncate text-[10px] text-[#737680] dark:text-[#98A2B3]">{allocation.email || 'ClickUp member'}</div></div></div></td><td className="px-4 py-3 text-right">{allocation.tasks_completed}/{allocation.tasks_assigned}</td><td className="px-4 py-3 text-right">{Math.round(allocation.completion_percent)}%</td><td className="px-4 py-3 text-right">{allocation.hours.toFixed(1)}</td><td className="px-4 py-3 text-right font-bold text-[#7B68EE]">{allocation.contribution_percent.toFixed(1)}%</td><td className="px-4 py-3 text-right font-extrabold text-[#4F9D78]">{formatCurrency(allocation.fee_amount, currency)}</td></tr>)}</tbody></table>
+                  <table className="w-full min-w-[690px] text-left text-xs"><thead className="bg-[#F7F7F8] text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><tr><th className="px-4 py-3 font-bold">Anggota</th><th className="px-4 py-3 text-right font-bold">Task</th><th className="px-4 py-3 text-right font-bold">Completion</th><th className="px-4 py-3 text-right font-bold">Jam</th><th className="px-4 py-3 text-right font-bold">Kontribusi</th><th className="px-4 py-3 text-right font-bold">Fee</th></tr></thead><tbody className="divide-y divide-[#E8E8EC] dark:divide-[#303742]">{row.allocations.map((allocation) => <tr key={allocation.key} className="text-[#24324A] dark:text-[#F4F6FA]"><td className="px-4 py-3"><div className="flex items-center gap-2"><Image unoptimized src={allocation.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(allocation.name)}&background=EEF2F7&color=24324A`} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover" /><div className="min-w-0"><div className="max-w-[180px] truncate font-bold">{allocation.name}</div><div className="max-w-[180px] truncate text-[10px] text-[#737680] dark:text-[#98A2B3]">{allocation.role || allocation.email || 'Anggota project'}</div>{allocation.role && allocation.email ? <div className="max-w-[180px] truncate text-[10px] text-[#98A2B3]">{allocation.email}</div> : null}</div></div></td><td className="px-4 py-3 text-right">{allocation.tasks_completed}/{allocation.tasks_assigned}</td><td className="px-4 py-3 text-right">{Math.round(allocation.completion_percent)}%</td><td className="px-4 py-3 text-right">{allocation.hours.toFixed(1)}</td><td className="px-4 py-3 text-right font-bold text-[#7B68EE]">{allocation.contribution_percent.toFixed(1)}%</td><td className="px-4 py-3 text-right font-extrabold text-[#4F9D78]">{formatCurrency(allocation.fee_amount, currency)}</td></tr>)}</tbody></table>
                 </div>
               )}
             </div>
@@ -1033,11 +1091,36 @@ function ProfitSharingTab({
 
             <section className="rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742]"><div className="mb-3"><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Potongan sebelum profit dibagi</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Biaya project dari ledger selalu ikut dipotong otomatis.</p></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Operasional (%)"><input type="number" min="0" max="100" step="0.01" value={draft.operational_deduction_percent} onChange={(event) => updateDraft('operational_deduction_percent', toNumber(event.target.value))} /></Field><Field label="Pajak (%)"><input type="number" min="0" max="100" step="0.01" value={draft.tax_percent} onChange={(event) => updateDraft('tax_percent', toNumber(event.target.value))} /></Field><Field label="Potongan lain (nominal)"><input type="number" min="0" value={draft.other_deduction_amount} onChange={(event) => updateDraft('other_deduction_amount', toNumber(event.target.value))} /></Field></div></section>
 
-            <section className="rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742]"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Bobot kontribusi anggota</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Sistem menormalisasi bobot yang tersedia; disarankan total 100%.</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${weightsBalanced ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>Total {roundedWeightTotal}%</span></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Task selesai (%)"><input type="number" min="0" max="100" step="0.01" value={draft.task_weight_percent} onChange={(event) => updateDraft('task_weight_percent', toNumber(event.target.value))} /></Field><Field label="Completion rate (%)"><input type="number" min="0" max="100" step="0.01" value={draft.completion_weight_percent} onChange={(event) => updateDraft('completion_weight_percent', toNumber(event.target.value))} /></Field><Field label="Jam kerja project (%)"><input type="number" min="0" max="100" step="0.01" value={draft.hours_weight_percent} onChange={(event) => updateDraft('hours_weight_percent', toNumber(event.target.value))} /></Field></div></section>
+            <section className="rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742]">
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_260px] sm:items-end">
+                <div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Pembagian hasil per anggota project</h3><p className="mt-1 text-[11px] leading-5 text-[#737680] dark:text-[#98A2B3]">Daftar selalu mengikuti Team Members pada detail project. Perubahan anggota project akan otomatis terbaca saat halaman dimuat ulang.</p></div>
+                <Field label="Metode pembagian"><select value={draft.allocation_mode} onChange={(event) => updateDraft('allocation_mode', event.target.value === 'manual' ? 'manual' : 'automatic')}><option value="automatic">Otomatis dari kontribusi</option><option value="manual">Manual per anggota</option></select></Field>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742]">
+                <div><p className="text-xs font-bold text-[#24324A] dark:text-[#F4F6FA]">{activeRow?.allocations.length || 0} anggota project</p><p className="mt-1 text-[10px] text-[#737680] dark:text-[#98A2B3]">{activeRow?.member_source === 'project_team' ? 'Bersumber dari Team Members project.' : 'Team Members belum diatur; sementara memakai assignee task.'}</p></div>
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${manualSharesBalanced ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FFF0ED] text-[#C94D43] dark:bg-[#472925] dark:text-[#FF8B80]'}`}>Total pembagian {draft.allocation_mode === 'manual' ? roundedManualShareTotal : 100}%</span>
+              </div>
+              {activeRow?.allocations.length ? (
+                <div className="mt-3 divide-y divide-[#E8E8EC] overflow-hidden rounded-xl border border-[#E8E8EC] dark:divide-[#303742] dark:border-[#303742]">
+                  {activeRow.allocations.map((allocation) => (
+                    <div key={allocation.key} className="grid gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_130px] sm:items-center">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Image unoptimized src={allocation.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(allocation.name)}&background=EEF2F7&color=24324A`} alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                        <div className="min-w-0"><p className="truncate text-xs font-bold text-[#24324A] dark:text-[#F4F6FA]">{allocation.name}</p><p className="truncate text-[10px] text-[#737680] dark:text-[#98A2B3]">{allocation.role || allocation.email || 'Anggota project'} · {allocation.tasks_completed}/{allocation.tasks_assigned} task · {allocation.hours.toFixed(1)} jam</p></div>
+                      </div>
+                      <label className="relative block"><span className="sr-only">Persentase {allocation.name}</span><input type="number" min="0" max="100" step="0.01" disabled={draft.allocation_mode !== 'manual'} value={draft.allocation_mode === 'manual' ? toNumber(draft.member_share_overrides[allocation.key.toLowerCase()]) : Math.round(allocation.contribution_percent * 100) / 100} onChange={(event) => updateMemberShare(allocation.key, event.target.value)} className="pr-8 text-right disabled:cursor-not-allowed disabled:bg-[#F7F7F8] disabled:text-[#737680] dark:disabled:bg-[#282D36]" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#98A2B3]">%</span></label>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="mt-3 rounded-xl border border-dashed border-[#D8DDE5] px-4 py-8 text-center text-xs text-[#737680] dark:border-[#3A414C] dark:text-[#98A2B3]">Atur Team Members di detail project agar pembagian fee dapat disimpan.</div>}
+              {draft.allocation_mode === 'manual' && !manualSharesBalanced ? <p className="mt-3 text-[11px] font-bold text-[#C94D43] dark:text-[#FF8B80]">Total pembagian manual harus tepat 100% sebelum aturan dapat disimpan.</p> : null}
+            </section>
+
+            <section className={`rounded-xl border border-[#E8E8EC] p-4 dark:border-[#303742] ${draft.allocation_mode === 'manual' ? 'opacity-60' : ''}`}><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-[#24324A] dark:text-[#F4F6FA]">Bobot kontribusi otomatis</h3><p className="mt-1 text-[11px] text-[#737680] dark:text-[#98A2B3]">Digunakan pada metode otomatis; sistem menormalisasi komponen yang memiliki data.</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${weightsBalanced ? 'bg-[#EEF8F3] text-[#317A58] dark:bg-[#1E392C] dark:text-[#62B58D]' : 'bg-[#FEF3D6] text-[#A56A00] dark:bg-[#3D321F] dark:text-[#F1B852]'}`}>Total {roundedWeightTotal}%</span></div><div className="grid gap-4 sm:grid-cols-3"><Field label="Task selesai (%)"><input disabled={draft.allocation_mode === 'manual'} type="number" min="0" max="100" step="0.01" value={draft.task_weight_percent} onChange={(event) => updateDraft('task_weight_percent', toNumber(event.target.value))} /></Field><Field label="Completion rate (%)"><input disabled={draft.allocation_mode === 'manual'} type="number" min="0" max="100" step="0.01" value={draft.completion_weight_percent} onChange={(event) => updateDraft('completion_weight_percent', toNumber(event.target.value))} /></Field><Field label="Jam kerja project (%)"><input disabled={draft.allocation_mode === 'manual'} type="number" min="0" max="100" step="0.01" value={draft.hours_weight_percent} onChange={(event) => updateDraft('hours_weight_percent', toNumber(event.target.value))} /></Field></div></section>
 
             <Field label="Catatan aturan"><textarea rows={3} value={draft.notes} onChange={(event) => updateDraft('notes', event.target.value)} placeholder="Contoh: potongan tools campaign, kesepakatan fee tim, atau dasar perhitungan pajak" /></Field>
-            <div className="rounded-xl bg-[#F7F7F8] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><strong className="text-[#24324A] dark:text-[#F4F6FA]">Rumus:</strong> nilai jasa − (biaya ledger + operasional + pajak + potongan lain) = profit bersih. Profit bersih × pool tim = fee yang dibagi berdasarkan skor kontribusi.</div>
-            <div className="flex flex-col-reverse gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742] sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving || !storageReady} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-4 w-4" /> Simpan aturan</button></div>
+            <div className="rounded-xl bg-[#F7F7F8] px-4 py-3 text-[11px] leading-5 text-[#737680] dark:bg-[#282D36] dark:text-[#98A2B3]"><strong className="text-[#24324A] dark:text-[#F4F6FA]">Rumus:</strong> nilai jasa − (biaya ledger + operasional + pajak + potongan lain) = profit bersih. Profit bersih × pool tim = fee yang dibagi {draft.allocation_mode === 'manual' ? 'sesuai persentase manual setiap anggota project' : 'berdasarkan skor task, completion, dan jam kerja'}.</div>
+            <div className="flex flex-col-reverse gap-2 border-t border-[#E8E8EC] pt-4 dark:border-[#303742] sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-[#E8E8EC] px-4 py-2.5 text-xs font-bold text-[#737680] hover:bg-[#F7F7F8] dark:border-[#303742] dark:text-[#C7D0DD] dark:hover:bg-[#282D36]">Batal</button><button type="submit" disabled={isSaving || !storageReady || !manualSharesBalanced} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-extrabold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#F26B5E]"><Save className="h-4 w-4" /> Simpan aturan</button></div>
           </form>
         </Modal>
       )}

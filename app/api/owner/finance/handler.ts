@@ -39,6 +39,15 @@ function nullableMoney(value: unknown) {
   return Math.max(0, number(value));
 }
 
+function memberShares(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, share]) => [key.trim().toLowerCase().slice(0, 240), percent(share)] as const)
+      .filter(([key]) => Boolean(key))
+  );
+}
+
 function dateOnly(value: unknown, fallback = new Date().toISOString().slice(0, 10)) {
   const candidate = text(value);
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : fallback;
@@ -129,12 +138,12 @@ export async function GET(req: NextRequest) {
     const yearStart = encodeURIComponent(`${selectedYear}-01-01`);
     const nextYearStart = encodeURIComponent(`${nextYear}-01-01`);
 
-    const [settings, entries, salaries, salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions] = await Promise.all([
+    const [settings, entries, salaries, salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions, projectMeta] = await Promise.all([
       readRows(`app_owner_finance_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&select=*`),
       readRows(`app_owner_finance_entries?workspace_id=eq.${workspace}&order=entry_date.desc,created_at.desc&limit=500&select=*`),
       readRows(`app_owner_salary_settings?workspace_id=eq.${workspace}&order=display_name.asc&select=*`),
       readOptionalRows(`app_owner_salary_payments?workspace_id=eq.${workspace}&month_key=gte.${yearStart}&month_key=lt.${nextYearStart}&order=month_key.desc,paid_date.desc&select=*`),
-      readOptionalRows(`app_project_profit_share_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&order=project_name.asc&select=*`),
+      readOptionalRows(`app_project_profit_share_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&order=project_name.asc&select=*,allocation_mode,member_share_overrides`),
       readOptionalRows(`app_project_profitability_settings?workspace_id=eq.${workspace}&month_key=eq.${month}&order=project_name.asc&select=*`),
       readOptionalRows('clients?select=*'),
       readOptionalRows('projects?select=*'),
@@ -143,9 +152,10 @@ export async function GET(req: NextRequest) {
       readOptionalRows(`app_quotes?workspace_id=eq.${workspace}&limit=500&select=*`),
       readOptionalRows('attendance_logs?select=*&limit=5000'),
       readOptionalRows('active_sessions?select=*&limit=500'),
+      readOptionalRows('project_meta?select=project_id,meta,updated_at&limit=1000'),
     ]);
 
-    const optional = [salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions];
+    const optional = [salaryPayments, profitShareSettings, profitabilitySettings, clients, projects, tasks, invoices, quotes, attendanceLogs, activeSessions, projectMeta];
     const warnings = optional
       .filter((result): result is { rows: any[]; warning: string } => !Array.isArray(result))
       .map((result) => result.warning)
@@ -176,6 +186,7 @@ export async function GET(req: NextRequest) {
           attendanceLogs: Array.isArray(attendanceLogs) ? attendanceLogs : attendanceLogs.rows,
           activeSessions: Array.isArray(activeSessions) ? activeSessions : activeSessions.rows,
           profitabilitySettings: Array.isArray(profitabilitySettings) ? profitabilitySettings : profitabilitySettings.rows,
+          projectMeta: Array.isArray(projectMeta) ? projectMeta : projectMeta.rows,
         },
         warnings,
       },
@@ -243,6 +254,12 @@ export async function POST(req: NextRequest) {
       if (!projectKey || !projectName) {
         return NextResponse.json({ error: 'Project wajib dipilih sebelum menyimpan pembagian profit.' }, { status: 400 });
       }
+      const allocationMode = text(body.allocation_mode) === 'manual' ? 'manual' : 'automatic';
+      const shareOverrides = memberShares(body.member_share_overrides);
+      const shareTotal = Object.values(shareOverrides).reduce((sum, share) => sum + share, 0);
+      if (allocationMode === 'manual' && (Object.keys(shareOverrides).length === 0 || Math.abs(shareTotal - 100) > 0.01)) {
+        return NextResponse.json({ error: 'Pembagian manual wajib mencantumkan seluruh anggota project dengan total tepat 100%.' }, { status: 400 });
+      }
       const payload = {
         workspace_id: WORKSPACE_ID,
         project_key: projectKey.slice(0, 240),
@@ -257,6 +274,8 @@ export async function POST(req: NextRequest) {
         task_weight_percent: percent(body.task_weight_percent, 40),
         completion_weight_percent: percent(body.completion_weight_percent, 30),
         hours_weight_percent: percent(body.hours_weight_percent, 30),
+        allocation_mode: allocationMode,
+        member_share_overrides: allocationMode === 'manual' ? shareOverrides : {},
         notes: text(body.notes).slice(0, 2000),
         updated_by_email: owner.identity.email,
         updated_at: now,

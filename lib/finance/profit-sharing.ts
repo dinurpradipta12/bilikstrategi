@@ -15,6 +15,8 @@ export type ProfitShareSetting = {
   task_weight_percent: number;
   completion_weight_percent: number;
   hours_weight_percent: number;
+  allocation_mode: 'automatic' | 'manual';
+  member_share_overrides: Record<string, number>;
   notes: string;
 };
 
@@ -23,6 +25,7 @@ export type ProfitShareMemberIdentity = {
   name: string;
   email: string;
   avatar?: string;
+  role?: string;
 };
 
 export type ProfitShareMemberAllocation = {
@@ -30,6 +33,7 @@ export type ProfitShareMemberAllocation = {
   name: string;
   email: string;
   avatar: string;
+  role: string;
   tasks_assigned: number;
   tasks_completed: number;
   completion_percent: number;
@@ -58,6 +62,8 @@ export type ProjectProfitShareRow = {
   tasks_completed: number;
   completion_percent: number;
   labor_hours: number;
+  member_source: 'project_team' | 'task_assignees';
+  manual_share_total: number;
   setting: ProfitShareSetting;
   allocations: ProfitShareMemberAllocation[];
 };
@@ -76,6 +82,7 @@ type ProfitShareInput = {
     quotes?: any[];
     attendanceLogs?: any[];
     profitabilitySettings?: any[];
+    projectMeta?: any[];
   };
 };
 
@@ -103,6 +110,22 @@ function clampPercent(value: unknown, fallback = 0) {
 
 function normalize(value: unknown) {
   return text(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function memberKey(member: ProfitShareMemberIdentity) {
+  return text(member.email).toLowerCase() || text(member.id) || normalize(member.name);
+}
+
+function membersMatch(left: ProfitShareMemberIdentity, right: ProfitShareMemberIdentity) {
+  const leftId = text(left.id);
+  const rightId = text(right.id);
+  const leftEmail = text(left.email).toLowerCase();
+  const rightEmail = text(right.email).toLowerCase();
+  return Boolean(
+    (leftId && rightId && leftId === rightId) ||
+    (leftEmail && rightEmail && leftEmail === rightEmail) ||
+    (normalize(left.name) && normalize(left.name) === normalize(right.name))
+  );
 }
 
 function looseMatch(left: unknown, right: unknown) {
@@ -272,16 +295,26 @@ function defaultSetting(project: ProjectCandidate, month: string): ProfitShareSe
     task_weight_percent: 40,
     completion_weight_percent: 30,
     hours_weight_percent: 30,
+    allocation_mode: 'automatic',
+    member_share_overrides: {},
     notes: '',
   };
 }
 
-function mergeMembers(input: ProfitShareInput, projectTasks: any[]) {
+function mergeMembers(input: ProfitShareInput, projectTasks: any[], projectMembers: ProfitShareMemberIdentity[]) {
+  const referenceMembers: ProfitShareMemberIdentity[] = [
+    ...input.members,
+    ...(input.salaries || []).map((salary) => ({
+      name: text(salary.display_name, text(salary.user_email).split('@')[0]),
+      email: text(salary.user_email).toLowerCase(),
+    })),
+    ...projectTasks.flatMap(taskAssignees),
+  ];
   const map = new Map<string, ProfitShareMemberIdentity>();
   const add = (member: ProfitShareMemberIdentity) => {
     const name = text(member.name, member.email?.split('@')[0] || 'Anggota');
     const email = text(member.email).toLowerCase();
-    const key = email || text(member.id) || normalize(name);
+    const key = memberKey({ ...member, name, email });
     if (!key) return;
     const existing = map.get(key);
     map.set(key, {
@@ -289,15 +322,70 @@ function mergeMembers(input: ProfitShareInput, projectTasks: any[]) {
       name: name || existing?.name || 'Anggota',
       email: email || existing?.email || '',
       avatar: text(member.avatar || existing?.avatar),
+      role: text(member.role || existing?.role),
     });
   };
-  input.members.forEach(add);
-  (input.salaries || []).forEach((salary) => add({
-    name: text(salary.display_name, text(salary.user_email).split('@')[0]),
-    email: text(salary.user_email).toLowerCase(),
-  }));
-  projectTasks.flatMap(taskAssignees).forEach(add);
+
+  if (projectMembers.length) {
+    projectMembers.forEach((projectMember) => {
+      const reference = referenceMembers.find((member) => membersMatch(projectMember, member));
+      add({
+        id: text(projectMember.id || reference?.id),
+        name: text(projectMember.name || reference?.name, 'Anggota'),
+        email: text(projectMember.email || reference?.email).toLowerCase(),
+        avatar: text(projectMember.avatar || reference?.avatar),
+        role: text(projectMember.role || reference?.role),
+      });
+    });
+  } else {
+    referenceMembers.forEach(add);
+  }
   return Array.from(map.values());
+}
+
+function projectMembersByProject(input: ProfitShareInput, projects: ProjectCandidate[]) {
+  const result = new Map<string, ProfitShareMemberIdentity[]>();
+  (input.operational.projectMeta || []).forEach((row) => {
+    const meta = row?.meta || {};
+    const project = projectForValues([
+      row?.project_id,
+      meta?.projectId,
+      meta?.project_id,
+      meta?.clickupListId,
+      meta?.clickup_list_id,
+      meta?.name,
+      meta?.projectName,
+    ], projects);
+    const teamMembers = Array.isArray(meta?.teamMembers)
+      ? meta.teamMembers
+      : Array.isArray(meta?.team_members)
+        ? meta.team_members
+        : [];
+    if (!project || !teamMembers.length) return;
+
+    const map = new Map<string, ProfitShareMemberIdentity>();
+    teamMembers.forEach((member: any) => {
+      const normalized: ProfitShareMemberIdentity = {
+        id: text(member?.id || member?.user_id),
+        name: text(member?.name || member?.username || member?.email, 'Anggota'),
+        email: text(member?.email).toLowerCase(),
+        avatar: text(member?.avatar_url || member?.avatar || member?.profilePicture || member?.profile_picture),
+        role: text(member?.role || member?.job_title || member?.position),
+      };
+      const key = memberKey(normalized);
+      if (!key) return;
+      const existing = map.get(key);
+      map.set(key, existing ? {
+        id: text(normalized.id || existing.id),
+        name: text(normalized.name || existing.name, 'Anggota'),
+        email: text(normalized.email || existing.email).toLowerCase(),
+        avatar: text(normalized.avatar || existing.avatar),
+        role: text(normalized.role || existing.role),
+      } : normalized);
+    });
+    result.set(project.key, Array.from(map.values()));
+  });
+  return result;
 }
 
 function buildProjects(input: ProfitShareInput) {
@@ -355,6 +443,7 @@ function buildProjects(input: ProfitShareInput) {
 
 export function calculateProjectProfitShares(input: ProfitShareInput): ProjectProfitShareRow[] {
   const projects = buildProjects(input);
+  const projectMembers = projectMembersByProject(input, projects);
   const monthEntries = input.entries.filter((entry) => monthOf(entry?.entry_date) === input.month && entry?.status !== 'cancelled');
   const attendance = (input.operational.attendanceLogs || []).filter((log) => monthOf(log?.date || log?.attendance_date || log?.created_at) === input.month);
   const tasks = input.operational.tasks || [];
@@ -368,7 +457,14 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
 
   return projects.map((project) => {
     const savedSetting = settingFor(project, input.month, input.settings);
-    const setting = { ...defaultSetting(project, input.month), ...(savedSetting || {}) };
+    const setting: ProfitShareSetting = {
+      ...defaultSetting(project, input.month),
+      ...(savedSetting || {}),
+      allocation_mode: savedSetting?.allocation_mode === 'manual' ? 'manual' : 'automatic',
+      member_share_overrides: savedSetting?.member_share_overrides && typeof savedSetting.member_share_overrides === 'object'
+        ? savedSetting.member_share_overrides
+        : {},
+    };
     const projectEntries = monthEntries.filter((entry) => entryProjects.get(entry) === project.key);
     const financeRevenue = projectEntries
       .filter((entry) => entry?.entry_type === 'revenue' && ['deal', 'paid'].includes(text(entry?.status).toLowerCase()))
@@ -413,7 +509,9 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
     const teamFeePool = Math.max(0, netProfit) * clampPercent(setting.team_share_percent, 30) / 100;
 
     const projectTasks = tasks.filter((task) => taskProjects.get(task) === project.key);
-    const members = mergeMembers(input, projectTasks);
+    const configuredProjectMembers = projectMembers.get(project.key) || [];
+    const memberSource: ProjectProfitShareRow['member_source'] = configuredProjectMembers.length ? 'project_team' : 'task_assignees';
+    const members = mergeMembers(input, projectTasks, configuredProjectMembers);
     const rawAllocations = members.map((member) => {
       const memberTasks = projectTasks.filter((task) => memberMatchesTask(task, member));
       const completed = memberTasks.filter(completedTask).length;
@@ -427,7 +525,7 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
         completion: memberTasks.length ? completed / memberTasks.length : 0,
         hours: loggedHours > 0 ? loggedHours : taskHours,
       };
-    }).filter((item) => item.assigned > 0 || item.hours > 0);
+    }).filter((item) => configuredProjectMembers.length > 0 || item.assigned > 0 || item.hours > 0);
 
     const totalCompletedCredit = rawAllocations.reduce((sum, item) => sum + item.completed, 0);
     const totalAssignedCredit = rawAllocations.reduce((sum, item) => sum + item.assigned, 0);
@@ -439,7 +537,7 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
     const hoursWeight = totalHours > 0 ? clampPercent(setting.hours_weight_percent, 30) : 0;
     const availableWeight = taskWeight + completionWeight + hoursWeight;
 
-    const scores = rawAllocations.map((item) => {
+    const automaticScores = rawAllocations.map((item) => {
       if (availableWeight <= 0) return rawAllocations.length ? 1 / rawAllocations.length : 0;
       const taskValue = totalCompletedCredit > 0 ? item.completed : item.assigned;
       return (
@@ -448,6 +546,11 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
         (hoursWeight / availableWeight) * (totalHours > 0 ? item.hours / totalHours : 0)
       );
     });
+    const manualShares = rawAllocations.map((item) => clampPercent(setting.member_share_overrides[memberKey(item.member)]));
+    const manualShareTotal = manualShares.reduce((sum, share) => sum + share, 0);
+    const scores = setting.allocation_mode === 'manual' && manualShareTotal > 0
+      ? manualShares.map((share) => share / manualShareTotal)
+      : automaticScores;
     const scoreTotal = scores.reduce((sum, score) => sum + score, 0) || 1;
     let allocatedFee = 0;
     const allocations = rawAllocations.map((item, index): ProfitShareMemberAllocation => {
@@ -459,6 +562,7 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
         name: item.member.name,
         email: item.member.email,
         avatar: text(item.member.avatar),
+        role: text(item.member.role),
         tasks_assigned: item.assigned,
         tasks_completed: item.completed,
         completion_percent: item.assigned ? (item.completed / item.assigned) * 100 : 0,
@@ -489,6 +593,8 @@ export function calculateProjectProfitShares(input: ProfitShareInput): ProjectPr
       tasks_completed: tasksCompleted,
       completion_percent: projectTasks.length ? (tasksCompleted / projectTasks.length) * 100 : 0,
       labor_hours: totalHours,
+      member_source: memberSource,
+      manual_share_total: manualShareTotal,
       setting,
       allocations,
     };
