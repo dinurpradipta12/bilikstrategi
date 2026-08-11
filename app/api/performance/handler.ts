@@ -348,12 +348,13 @@ export async function GET(req: NextRequest) {
     since.setDate(since.getDate() - 92);
     const sinceDate = since.toISOString().slice(0, 10);
 
-    const [profileRows, itemRows, updateRows, reviewRows, roleRows] = await Promise.all([
+    const [profileRows, itemRows, updateRows, reviewRows, roleRows, workspaceMemberRows] = await Promise.all([
       adminJson(`app_performance_profiles?select=*&workspace_id=eq.${workspace}&order=display_name.asc`),
       adminJson(`app_performance_items?select=*&workspace_id=eq.${workspace}&order=sort_order.asc,created_at.asc`),
       adminJson(`app_performance_updates?select=*&workspace_id=eq.${workspace}&activity_date=gte.${sinceDate}&order=activity_date.desc,updated_at.desc`),
       adminJson(`app_performance_reviews?select=*&workspace_id=eq.${workspace}&order=period_end.desc,updated_at.desc`),
       adminJson('app_user_roles?select=email,display_name,role,is_superuser,status&status=eq.active&order=display_name.asc'),
+      adminJson(`app_workspace_members?select=user_email,user_avatar&workspace_id=eq.${workspace}&status=eq.active`).catch(() => []),
     ]);
 
     const roles: PerformanceRoleRecord[] = (Array.isArray(roleRows) ? roleRows : []).map((row: any) => ({
@@ -364,7 +365,17 @@ export async function GET(req: NextRequest) {
       status: row.status === 'inactive' ? 'inactive' : 'active',
     }));
     const storedProfiles = (Array.isArray(profileRows) ? profileRows : []).map(mapProfile);
-    const profiles = mergeProfiles(context.workspaceId, storedProfiles, roles);
+    const clickUpAvatarByEmail = new Map<string, string>();
+    (Array.isArray(workspaceMemberRows) ? workspaceMemberRows : []).forEach((row: any) => {
+      const email = cleanEmail(row.user_email);
+      const avatar = cleanText(row.user_avatar, '', 1200);
+      if (email && avatar) clickUpAvatarByEmail.set(email, avatar);
+    });
+    const profiles = mergeProfiles(context.workspaceId, storedProfiles, roles).map((profile) => ({
+      ...profile,
+      avatar_url: clickUpAvatarByEmail.get(profile.user_email)
+        || (profile.user_email === context.identity.email ? context.identity.avatarUrl || null : null),
+    }));
     const currentProfile = profiles.find((profile) => profile.user_email === context.identity.email) || defaultProfile(context);
     const allItems = (Array.isArray(itemRows) ? itemRows : []).map(mapItem);
     const allUpdates = (Array.isArray(updateRows) ? updateRows : []).map(mapUpdate);
@@ -444,7 +455,6 @@ export async function POST(req: NextRequest) {
         workspace_id: context.workspaceId,
         user_email: userEmail,
         display_name: cleanText(body.display_name, userEmail.split('@')[0], 160),
-        avatar_url: cleanText(body.avatar_url, '', 1200) || null,
         division: cleanText(body.division, 'Agency Team', 160),
         role_title: cleanText(body.role_title, 'Team Member', 160),
         job_summary: cleanText(body.job_summary, '', 5000),

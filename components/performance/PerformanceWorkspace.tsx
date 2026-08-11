@@ -286,7 +286,6 @@ const emptyItemDraft: ItemDraft = {
 type ProfileDraft = {
   user_email: string;
   display_name: string;
-  avatar_url: string;
   division: string;
   role_title: string;
   job_summary: string;
@@ -348,7 +347,6 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
     setProfileDraft({
       user_email: firstRole?.email || '',
       display_name: firstRole?.display_name || '',
-      avatar_url: '',
       division: 'Agency Team',
       role_title: 'Team Member',
       job_summary: '',
@@ -361,7 +359,6 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
   const editProfile = (profile: PerformanceProfile) => setProfileDraft({
     user_email: profile.user_email,
     display_name: profile.display_name,
-    avatar_url: profile.avatar_url || '',
     division: profile.division,
     role_title: profile.role_title,
     job_summary: profile.job_summary,
@@ -713,8 +710,8 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
               <label><span className={labelClass}>Divisi</span><input list="performance-divisions" required value={profileDraft.division} onChange={(event) => setProfileDraft({ ...profileDraft, division: event.target.value })} className={inputClass} placeholder="Social Media" /><datalist id="performance-divisions">{Array.from(new Set(data.profiles.map((profile) => profile.division))).map((value) => <option key={value} value={value} />)}</datalist></label>
               <label><span className={labelClass}>Jabatan / Role</span><input list="performance-roles" required value={profileDraft.role_title} onChange={(event) => setProfileDraft({ ...profileDraft, role_title: event.target.value })} className={inputClass} placeholder="Social Media Specialist" /><datalist id="performance-roles">{Array.from(new Set(data.profiles.map((profile) => profile.role_title))).map((value) => <option key={value} value={value} />)}<option value="Social Media Specialist" /></datalist></label>
               <label><span className={labelClass}>Manager</span><select value={profileDraft.manager_email} onChange={(event) => setProfileDraft({ ...profileDraft, manager_email: event.target.value })} className={inputClass}><option value="">Belum ditentukan</option>{data.profiles.filter((profile) => profile.user_email !== profileDraft.user_email).map((profile) => <option key={profile.user_email} value={profile.user_email}>{profile.display_name}</option>)}</select></label>
-              <label><span className={labelClass}>Avatar URL (Opsional)</span><input value={profileDraft.avatar_url} onChange={(event) => setProfileDraft({ ...profileDraft, avatar_url: event.target.value })} className={inputClass} placeholder="https://..." /></label>
             </div>
+            <div className="rounded-xl border border-[#D9E5F5] bg-[#F2F7FF] px-3 py-3 text-[11px] leading-5 text-[#49617F] dark:border-[#33445B] dark:bg-[#1B2635] dark:text-[#AFC3DE]">Avatar otomatis mengikuti foto profil ClickUp berdasarkan Email Login. Ubah foto langsung dari profil ClickUp jika diperlukan.</div>
             <label><span className={labelClass}>Ringkasan Pekerjaan</span><textarea value={profileDraft.job_summary} onChange={(event) => setProfileDraft({ ...profileDraft, job_summary: event.target.value })} className={`${inputClass} min-h-28 resize-y`} placeholder="Jelaskan fokus utama dan outcome yang diharapkan dari role ini..." /></label>
             <label className="flex items-center gap-3 rounded-xl border border-[#E5E7EB] px-3 py-3 text-xs font-bold text-[#4A5568] dark:border-[#303742] dark:text-[#CBD2DC]"><input type="checkbox" checked={profileDraft.active} onChange={(event) => setProfileDraft({ ...profileDraft, active: event.target.checked })} className="h-4 w-4 accent-[#F26B5E]" /> Profil aktif dan masuk perhitungan team</label>
             <div className="rounded-xl bg-[#F7F7F8] px-3 py-3 text-[11px] leading-5 text-[#737680] dark:bg-[#252B34] dark:text-[#AAB2BF]">Hak dashboard owner mengikuti role aplikasi Owner/Admin yang diatur pada halaman Team. Field profil ini tidak dapat menaikkan hak akses sendiri.</div>
@@ -954,6 +951,7 @@ function ManagerWorkspaceSwitcher({ data, saveAction }: { data: PerformanceBoots
 
 export default function PerformanceWorkspace() {
   const [data, setData] = useState<PerformanceBootstrap | null>(null);
+  const [clickUpAvatars, setClickUpAvatars] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -975,20 +973,43 @@ export default function PerformanceWorkspace() {
     }
   }, []);
 
+  const loadClickUpAvatars = useCallback(async () => {
+    try {
+      const response = await fetch('/api/clickup/teams', { cache: 'no-store' });
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => ({}));
+      const members = Array.isArray(payload.members) ? payload.members : [];
+      const next: Record<string, string> = {};
+      members.forEach((member: any) => {
+        const email = String(member?.email || '').trim().toLowerCase();
+        const avatar = String(member?.profilePicture || '').trim();
+        if (email && avatar) next[email] = avatar;
+      });
+      setClickUpAvatars(next);
+    } catch {
+      // Keep the existing avatar map when ClickUp is temporarily unavailable.
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
-    const refresh = () => loadData(true);
+    loadClickUpAvatars();
+    const refreshPerformance = () => loadData(true);
+    const refreshAll = () => {
+      loadData(true);
+      loadClickUpAvatars();
+    };
     const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') refresh();
+      if (document.visibilityState === 'visible') refreshPerformance();
     }, 5000);
-    window.addEventListener('focus', refresh);
-    window.addEventListener('bilik-workspace-updated', refresh);
+    window.addEventListener('focus', refreshAll);
+    window.addEventListener('bilik-workspace-updated', refreshAll);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener('focus', refresh);
-      window.removeEventListener('bilik-workspace-updated', refresh);
+      window.removeEventListener('focus', refreshAll);
+      window.removeEventListener('bilik-workspace-updated', refreshAll);
     };
-  }, [loadData]);
+  }, [loadClickUpAvatars, loadData]);
 
   const saveAction = useCallback<SaveAction>(async (payload) => {
     const response = await fetch('/api/performance', {
@@ -1009,7 +1030,24 @@ export default function PerformanceWorkspace() {
     return result;
   }, [loadData]);
 
-  if (loading || !data) {
+  const syncedData = useMemo(() => {
+    if (!data) return null;
+    const syncProfile = (profile: PerformanceProfile): PerformanceProfile => ({
+      ...profile,
+      avatar_url: clickUpAvatars[profile.user_email.trim().toLowerCase()]
+        || profile.avatar_url
+        || (profile.user_email.trim().toLowerCase() === data.viewer.email.trim().toLowerCase()
+          ? data.viewer.avatar_url || null
+          : null),
+    });
+    return {
+      ...data,
+      profile: syncProfile(data.profile),
+      profiles: data.profiles.map(syncProfile),
+    };
+  }, [clickUpAvatars, data]);
+
+  if (loading || !syncedData) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center"><div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-[#24324A]/15 border-t-[#F26B5E]" /><p className="mt-3 text-xs font-bold text-[#737680]">Memuat workspace performance...</p></div>
@@ -1019,11 +1057,11 @@ export default function PerformanceWorkspace() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] pb-6">
-      <PageHeader data={data} refreshing={refreshing} onRefresh={() => loadData()} />
-      {!data.storage_ready && <StorageWarning message={data.warning} />}
+      <PageHeader data={syncedData} refreshing={refreshing} onRefresh={() => { loadData(); loadClickUpAvatars(); }} />
+      {!syncedData.storage_ready && <StorageWarning message={syncedData.warning} />}
       {error && <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#F4C7C2] bg-[#FFF5F3] px-4 py-3 text-xs font-semibold text-[#A6463D] dark:border-[#6B3834] dark:bg-[#351F1E] dark:text-[#F4AAA3]"><AlertCircle className="h-4 w-4 flex-shrink-0" />{error}</div>}
       {notice && <div className="fixed bottom-24 left-1/2 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-xl bg-[#24324A] px-4 py-3 text-xs font-extrabold text-white shadow-2xl md:bottom-6"><CheckCircle2 className="h-4 w-4 text-[#78C59A]" />{notice}</div>}
-      {data.viewer.can_manage ? <ManagerWorkspaceSwitcher data={data} saveAction={saveAction} /> : <MemberWorkspace data={data} saveAction={saveAction} />}
+      {syncedData.viewer.can_manage ? <ManagerWorkspaceSwitcher data={syncedData} saveAction={saveAction} /> : <MemberWorkspace data={syncedData} saveAction={saveAction} />}
     </div>
   );
 }
