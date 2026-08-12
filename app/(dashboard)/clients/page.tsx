@@ -715,8 +715,8 @@ export default function ClientsPage() {
       {/* DRAWER: CLIENT DETAIL DRAWER - VIA PORTAL */}
       {/* ========================================================================= */}
       {drawerOpen && selectedClient && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white w-full max-w-md h-full shadow-2xl p-6 overflow-y-auto space-y-6 relative flex flex-col justify-between">
+        <div data-modal-overlay className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs animate-fade-in">
+          <div data-modal-surface className="bg-white w-full max-w-md h-full shadow-2xl p-6 overflow-y-auto space-y-6 relative flex flex-col justify-between">
             <div className="space-y-6">
               <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-4">
                 <div className="flex items-center gap-3">

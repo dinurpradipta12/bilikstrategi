@@ -127,8 +127,8 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 bg-black/60 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden text-[#202124] relative z-[101]">
+    <div data-modal-overlay className="fixed inset-0 z-[100] flex items-start justify-center pt-20 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div data-modal-surface className="w-full max-w-2xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden text-[#202124] relative z-[101]">
         {/* Header Search Input */}
         <div className="flex items-center px-4 border-b border-[#E8E8EC]">
           <Search className="w-5 h-5 text-[#737680] mr-3" />

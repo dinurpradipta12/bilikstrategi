@@ -17,6 +17,9 @@
     --success: #4F9D78;
     --warning: #E6A23C;
     --danger: #D95858;
+    --modal-surface: #FFFFFF;
+    --modal-border: #E8E8EC;
+    --modal-backdrop: rgb(24 34 56 / 45%);
   }
 
   body {
@@ -63,6 +66,9 @@ html.dark {
   --success: #62B58D;
   --warning: #E9A955;
   --danger: #EF7373;
+  --modal-surface: #2B323D;
+  --modal-border: #4B5768;
+  --modal-backdrop: rgb(5 8 15 / 72%);
 }
 
 html.dark body {
@@ -335,6 +341,28 @@ html.dark [class~='hover:bg-[#EEF2F7]']:hover {
 
 html.dark [class~='hover:text-[#202124]']:hover {
   color: var(--text-primary) !important;
+}
+
+/* Standard modals sit one visual level above regular cards in dark mode.
+   The brighter surface, defined edge, and layered shadow prevent dialogs from
+   blending into the dimmed page behind them. Keep this after the legacy color
+   mappings so modal elevation wins over generic bg-white/border overrides. */
+html.dark [data-mobile-modal],
+html.dark [data-modal-overlay] {
+  background-color: var(--modal-backdrop) !important;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+html.dark [data-mobile-modal-panel],
+html.dark [data-mobile-modal] > [role='dialog'],
+html.dark [data-modal-surface] {
+  background-color: var(--modal-surface) !important;
+  border: 1px solid var(--modal-border) !important;
+  box-shadow:
+    0 30px 90px -14px rgb(0 0 0 / 88%),
+    0 0 0 1px rgb(255 255 255 / 5%),
+    0 0 42px rgb(93 124 170 / 14%) !important;
 }
 
 /* Dark-only readability refinements for analytics, calendar, assets, and chat. */

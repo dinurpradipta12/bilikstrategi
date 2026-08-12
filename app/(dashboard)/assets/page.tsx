@@ -851,8 +851,8 @@ export default function AssetManagementPage() {
       {/* MODAL 1: FILE VIEWER MODAL (LIHAT FILE) - VIA PORTAL */}
       {/* ========================================================================= */}
       {viewingAsset && mounted && createPortalDom(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setViewingAsset(null)}
               className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] p-1.5 rounded-full hover:bg-[#F7F7F8] cursor-pointer"

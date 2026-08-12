@@ -496,11 +496,11 @@ export default function TaskDetailDrawer({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-xs">
+    <div data-modal-overlay className="fixed inset-0 z-[100] flex justify-end bg-black/60 backdrop-blur-xs">
       {/* Backdrop overlay click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl bg-[#FFFFFF] h-full shadow-2xl flex flex-col border-l border-[#E8E8EC] z-10 animate-slide-left">
+      <div data-modal-surface className="relative w-full max-w-2xl bg-[#FFFFFF] h-full shadow-2xl flex flex-col border-l border-[#E8E8EC] z-10 animate-slide-left">
         {/* Drawer Header */}
         <div className="p-5 border-b border-[#E8E8EC] bg-[#F7F7F8] flex items-center justify-between">
           <div className="flex items-center gap-2">
