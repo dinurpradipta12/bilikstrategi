@@ -1521,8 +1521,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 1: EDIT OVERVIEW & SCOPE MODAL */}
       {isEditOverviewOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <Edit3 className="w-4 h-4 text-[#F26B5E]" />
@@ -1660,8 +1660,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 2: EDIT CLIENT INFO MODAL */}
       {isEditClientOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-lg bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-lg bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-[#F26B5E]" />
@@ -1884,8 +1884,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 3: EDIT TEAM MEMBERS MODAL (SELECT FROM CLICKUP) */}
       {isEditTeamOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#F26B5E]" />
@@ -1973,8 +1973,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 4: ADD FILE & ASSET MODAL */}
       {isAddFileOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <Paperclip className="w-4 h-4 text-[#F26B5E]" />
@@ -2037,8 +2037,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 5: ADD CLIENT FEEDBACK MODAL */}
       {isAddFeedbackOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-[#F26B5E]" />
@@ -2105,8 +2105,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       {/* MODAL 6: CATAT AKTIVITAS KUSTOM MODAL */}
       {isAddLogOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-            <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
+          <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+            <div data-mobile-modal-panel className="w-full max-w-md bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <History className="w-4 h-4 text-[#F26B5E]" />

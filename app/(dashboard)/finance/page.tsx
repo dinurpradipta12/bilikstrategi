@@ -1245,8 +1245,8 @@ function BusinessStat({ label, value, detail }: { label: string; value: string |
 }
 
 function Modal({ title, children, onClose, wide = false }: { title: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
-  return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[#24324A]/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
-    <div className={`max-h-[90vh] w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-y-auto rounded-2xl border border-[#E8E8EC] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#20242C]`}>
+  return <div data-mobile-modal className="fixed inset-0 z-[120] flex items-center justify-center bg-[#24324A]/45 p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div data-mobile-modal-panel className={`max-h-[90vh] w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} overflow-y-auto rounded-2xl border border-[#E8E8EC] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#20242C]`}>
       <div className="flex items-center justify-between border-b border-[#E8E8EC] px-5 py-4 dark:border-[#303742]"><h2 className="text-base font-bold text-[#24324A] dark:text-[#F4F6FA]">{title}</h2><button type="button" onClick={onClose} title="Tutup" className="rounded-lg p-2 text-[#737680] hover:bg-[#F7F7F8] dark:hover:bg-[#282D36]"><X className="h-5 w-5" /></button></div>
       <div className="p-5">{children}</div>
     </div>

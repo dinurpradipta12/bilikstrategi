@@ -195,10 +195,10 @@ export default function AutomationsPage() {
       {error && <div className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${data.storage_ready ? 'border-[#F3C9C5] bg-[#FFF5F3] text-[#9A453E]' : 'border-[#F2D6A4] bg-[#FFF9ED] text-[#8A5B16]'}`}><AlertTriangle className="mt-0.5 h-5 w-5 flex-none" /><div><p className="font-extrabold">{data.storage_ready ? 'Automation belum dapat diproses' : 'Database Automation Center belum aktif'}</p><p className="mt-1 text-xs leading-5">{error}</p></div></div>}
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Automation Aktif" value={activeRules} detail={`${data.rules.length} total rule`} icon={Zap} gradient="from-[#E2EEFF] to-[#C9DFFF]" />
-        <Stat label="Eksekusi Hari Ini" value={data.runs.filter((run) => run.created_at?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length} detail="Asia/Makassar" icon={Play} gradient="from-[#E1F3E8] to-[#CAE9D6]" />
-        <Stat label="Notifikasi Terkirim" value={data.runs.reduce((sum, run) => sum + Number(run.notified_count || 0), 0)} detail="Dari riwayat tersimpan" icon={BellRing} gradient="from-[#FFF0D6] to-[#FFE0AD]" />
-        <Stat label="Eksekusi Gagal" value={data.runs.filter((run) => run.status === 'failed').length} detail="Perlu ditinjau" icon={AlertTriangle} gradient="from-[#F6E6FA] to-[#E8D5F4]" />
+        <Stat label="Automation Aktif" value={activeRules} detail={`${data.rules.length} total rule`} icon={Zap} />
+        <Stat label="Eksekusi Hari Ini" value={data.runs.filter((run) => run.created_at?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length} detail="Asia/Makassar" icon={Play} />
+        <Stat label="Notifikasi Terkirim" value={data.runs.reduce((sum, run) => sum + Number(run.notified_count || 0), 0)} detail="Dari riwayat tersimpan" icon={BellRing} />
+        <Stat label="Eksekusi Gagal" value={data.runs.filter((run) => run.status === 'failed').length} detail="Perlu ditinjau" icon={AlertTriangle} />
       </section>
 
       <section>
@@ -218,8 +218,8 @@ export default function AutomationsPage() {
   );
 }
 
-function Stat({ label, value, detail, icon: Icon, gradient }: { label: string; value: number; detail: string; icon: typeof Zap; gradient: string }) {
-  return <article className={`rounded-2xl border border-white/70 bg-gradient-to-br ${gradient} p-4 shadow-sm sm:p-5`}><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#5E6470]">{label}</p><p className="mt-2 text-3xl font-black text-[#24324A]">{value}</p><p className="mt-1 text-[10px] font-semibold text-[#6E7380]">{detail}</p></div><div className="rounded-2xl bg-white/60 p-2.5"><Icon className="h-5 w-5 text-[#566B8D]" /></div></div></article>;
+function Stat({ label, value, detail, icon: Icon }: { label: string; value: number; detail: string; icon: typeof Zap }) {
+  return <article className="rounded-2xl border border-[#E1E5EB] bg-white p-4 shadow-sm dark:border-[#303742] dark:bg-[#20242C] sm:p-5"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#5E6470]">{label}</p><p className="mt-2 text-3xl font-black text-[#24324A]">{value}</p><p className="mt-1 text-[10px] font-semibold text-[#6E7380]">{detail}</p></div><div className="rounded-2xl bg-[#F2F4F7] p-2.5 dark:bg-[#282D36]"><Icon className="h-5 w-5 text-[#566B8D]" /></div></div></article>;
 }
 
 function RulesList({ rules, saving, runningId, onToggle, onEdit, onRun, onDelete }: { rules: AutomationRule[]; saving: boolean; runningId: string; onToggle: (rule: AutomationRule) => void; onEdit: (rule: AutomationRule) => void; onRun: (rule: AutomationRule) => void; onDelete: (rule: AutomationRule) => void }) {

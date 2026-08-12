@@ -687,8 +687,8 @@ export default function ContentPlanPage() {
       {/* MODAL 3: HUBUNGKAN GOOGLE SHEETS BARU - VIA PORTAL */}
       {/* ========================================================================= */}
       {showAddModal && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -813,8 +813,8 @@ export default function ContentPlanPage() {
       {/* MODAL 4: EDIT GOOGLE SHEETS LINK - VIA PORTAL */}
       {/* ========================================================================= */}
       {editingSheet && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setEditingSheet(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -944,8 +944,8 @@ export default function ContentPlanPage() {
       {/* MODAL 5: CUSTOM DELETE CONFIRMATION MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
       {deletingSheet && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative">
             <button onClick={() => setDeletingSheet(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>

@@ -1615,8 +1615,8 @@ export default function TeamWorkloadPage() {
 
       {/* MODAL SET RENTANG PERIODE KUSTOM */}
       {showPeriodModal && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowPeriodModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -1816,8 +1816,8 @@ export default function TeamWorkloadPage() {
 
       {/* MODAL EDIT DATA ANGGOTA TIM */}
       {showEditMemberModal && editingMember && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowEditMemberModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -2012,8 +2012,8 @@ export default function TeamWorkloadPage() {
 
       {/* MODAL TAMBAH TASK PRIORITAS KUSTOM */}
       {showAddTaskModal && targetMember && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowAddTaskModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>

@@ -1359,9 +1359,9 @@ export default function AttendancePage() {
   return (
     <div className="space-y-6 animate-fade-in pb-12 relative">
       {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
-        <div>
-          <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Presensi & Live Tracker</h1>
             <span className="px-2 py-0.5 text-[10px] font-mono bg-[#EEF2F7] text-[#24324A] rounded-md border border-[#E8E8EC]">
               @bilik-strategi
@@ -1372,12 +1372,12 @@ export default function AttendancePage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start md:self-auto flex-nowrap">
+        <div className="flex w-full max-w-full flex-nowrap items-center gap-2.5 self-start overflow-x-auto pb-1 md:w-auto md:overflow-visible md:pb-0 md:self-auto">
           {isAdminOrOwner && (
             <button
               type="button"
               onClick={() => setShowAdminResetModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 h-10 bg-[#FFF0ED] border border-[#F26B5E]/30 text-[#F26B5E] hover:bg-[#F26B5E] hover:text-white rounded-xl text-xs font-extrabold transition-all shadow-2xs cursor-pointer whitespace-nowrap"
+              className="flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#F26B5E]/30 bg-[#FFF0ED] px-3.5 py-2.5 text-xs font-extrabold text-[#F26B5E] shadow-2xs transition-all hover:bg-[#F26B5E] hover:text-white cursor-pointer"
               title="Reset seluruh riwayat presensi semua user di workspace (Khusus Admin)"
             >
               <X className="w-4 h-4" />
@@ -1388,7 +1388,7 @@ export default function AttendancePage() {
           <button
             type="button"
             onClick={() => setShowLeaveModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 h-10 bg-white border border-[#E8E8EC] text-[#24324A] hover:bg-[#F7F7F8] hover:border-[#D1D5DB] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap"
+            className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-[#E8E8EC] bg-white px-4 py-2.5 text-xs font-bold text-[#24324A] shadow-2xs transition-all hover:border-[#D1D5DB] hover:bg-[#F7F7F8] cursor-pointer"
           >
             <FileText className="w-4 h-4 text-[#7B68EE] flex-shrink-0" />
             <span>Form Izin / Sakit / Cuti</span>
@@ -1396,7 +1396,7 @@ export default function AttendancePage() {
 
           <Link
             href="/team?tab=timesheet"
-            className="flex items-center gap-2 px-4 py-2.5 h-10 bg-[#24324A] text-white rounded-xl text-xs font-bold hover:bg-[#1A2536] transition-all shadow-2xs whitespace-nowrap"
+            className="flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-[#24324A] px-4 py-2.5 text-xs font-bold text-white shadow-2xs transition-all hover:bg-[#1A2536]"
           >
             <BarChart3 className="w-4 h-4 text-[#4F9D78] flex-shrink-0" />
             <span>Rekap Timesheet & Lembur</span>
@@ -1405,10 +1405,10 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Mobile-friendly entry point while the bottom navigation stays limited to Presensi, Task, and Project. */}
+      {/* Mobile-friendly shortcut to the personal performance workspace. */}
       <Link
         href="/performance"
-        className="flex w-full items-center gap-3 rounded-2xl border border-[#DDE5F0] bg-gradient-to-r from-[#F4F7FB] to-white p-3.5 shadow-2xs transition hover:border-[#7B68EE]/40 hover:shadow-sm md:p-4"
+        className="flex w-full items-center gap-3 rounded-2xl border border-[#DDE5F0] bg-gradient-to-r from-[#F4F7FB] to-white p-3.5 shadow-2xs transition hover:border-[#7B68EE]/40 hover:shadow-sm dark:border-[#303742] dark:from-[#20242C] dark:to-[#20242C] md:p-4"
       >
         <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#24324A] text-white">
           <Target className="h-5 w-5 text-[#A99CF6]" />
@@ -2141,8 +2141,8 @@ export default function AttendancePage() {
 
       {/* Modal Form Pengajuan Izin / Sakit / Cuti */}
       {showLeaveModal && createPortal(
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
+        <div data-mobile-modal className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
             <button
               onClick={() => setShowLeaveModal(false)}
               className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer"
@@ -2231,8 +2231,8 @@ export default function AttendancePage() {
 
       {/* Modal Admin Confirmation: Reset Semua Presensi Tim */}
       {showAdminResetModal && createPortal(
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
+        <div data-mobile-modal className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 relative z-[101]">
             <button
               onClick={() => setShowAdminResetModal(false)}
               className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer"

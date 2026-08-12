@@ -146,10 +146,10 @@ export default function ProfitabilityPage() {
   }
 
   const cards = [
-    { label: 'Revenue Project', value: compactCurrency(data.summary.revenue, data.currency), detail: `${data.projects.length} project terukur`, icon: CircleDollarSign, gradient: 'from-[#DDEBFF] to-[#C7DCFF]', color: 'text-[#356AA0]' },
-    { label: 'Total Cost', value: compactCurrency(data.summary.cost, data.currency), detail: `${data.summary.labor_hours.toFixed(1)} jam kerja`, icon: WalletCards, gradient: 'from-[#F4E7FA] to-[#E8D5F4]', color: 'text-[#795099]' },
-    { label: 'Net Profit', value: compactCurrency(data.summary.profit, data.currency), detail: `${data.summary.margin_percent.toFixed(1)}% margin`, icon: TrendingUp, gradient: data.summary.profit >= 0 ? 'from-[#DFF3E7] to-[#C9E9D5]' : 'from-[#FDE5E2] to-[#F7CECA]', color: data.summary.profit >= 0 ? 'text-[#39785D]' : 'text-[#B14E46]' },
-    { label: 'Project Sehat', value: String(data.summary.healthy_projects), detail: `${data.summary.at_risk_projects} risiko rugi`, icon: CheckCircle2, gradient: 'from-[#FFF0D7] to-[#FFE0AC]', color: 'text-[#9B6514]' },
+    { label: 'Revenue Project', value: compactCurrency(data.summary.revenue, data.currency), detail: `${data.projects.length} project terukur`, icon: CircleDollarSign, color: 'text-[#356AA0]' },
+    { label: 'Total Cost', value: compactCurrency(data.summary.cost, data.currency), detail: `${data.summary.labor_hours.toFixed(1)} jam kerja`, icon: WalletCards, color: 'text-[#795099]' },
+    { label: 'Net Profit', value: compactCurrency(data.summary.profit, data.currency), detail: `${data.summary.margin_percent.toFixed(1)}% margin`, icon: TrendingUp, color: data.summary.profit >= 0 ? 'text-[#39785D]' : 'text-[#B14E46]' },
+    { label: 'Project Sehat', value: String(data.summary.healthy_projects), detail: `${data.summary.at_risk_projects} risiko rugi`, icon: CheckCircle2, color: 'text-[#9B6514]' },
   ];
 
   return (
@@ -170,7 +170,7 @@ export default function ProfitabilityPage() {
       {!data.storage_ready && <div className="rounded-2xl border border-[#F2D6A4] bg-[#FFF9ED] p-4 text-xs leading-5 text-[#8A5B16]"><strong>Migration profitability belum aktif.</strong> Data sumber tetap dihitung, tetapi budget dan override baru dapat disimpan setelah SQL fase 2 dijalankan.</div>}
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {cards.map((card) => <article key={card.label} className={`rounded-2xl border border-white/70 bg-gradient-to-br ${card.gradient} p-4 shadow-sm sm:p-5`}><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#5E6470]">{card.label}</p><p className="mt-2 truncate text-xl font-black text-[#24324A] sm:text-2xl">{card.value}</p><p className="mt-1 text-[10px] font-semibold text-[#6E7380]">{card.detail}</p></div><div className="rounded-2xl bg-white/60 p-2.5"><card.icon className={`h-5 w-5 ${card.color}`} /></div></div></article>)}
+        {cards.map((card) => <article key={card.label} className="rounded-2xl border border-[#E1E5EB] bg-white p-4 shadow-sm dark:border-[#303742] dark:bg-[#20242C] sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#5E6470]">{card.label}</p><p className="mt-2 truncate text-xl font-black text-[#24324A] sm:text-2xl">{card.value}</p><p className="mt-1 text-[10px] font-semibold text-[#6E7380]">{card.detail}</p></div><div className="rounded-2xl bg-[#F2F4F7] p-2.5 dark:bg-[#282D36]"><card.icon className={`h-5 w-5 ${card.color}`} /></div></div></article>)}
       </section>
 
       <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm">

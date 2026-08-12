@@ -549,8 +549,8 @@ export default function ClientsPage() {
       {/* MODAL 1: ADD / EDIT CLIENT MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
       {showAddModal && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowAddModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -679,8 +679,8 @@ export default function ClientsPage() {
       {/* MODAL 2: DELETE CLIENT CONFIRMATION MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
       {clientToDelete && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
             <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#D95858] border border-[#F26B5E]/30 flex items-center justify-center mx-auto shadow-xs">
               <Trash2 className="w-6 h-6" />
             </div>

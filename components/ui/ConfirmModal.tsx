@@ -36,11 +36,11 @@ export default function ConfirmModal({
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+    <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
       {/* Backdrop overlay */}
       <div className="absolute inset-0" onClick={loading ? undefined : onCancel} />
 
-      <div className="relative z-10 w-full max-w-md bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xl space-y-5 animate-slide-left">
+      <div data-mobile-modal-panel className="relative z-10 w-full max-w-md bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xl space-y-5 animate-slide-left">
         {/* Header with warning icon */}
         <div className="flex items-start gap-4">
           <div

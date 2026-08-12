@@ -640,8 +640,8 @@ function ProjectsListPage() {
 
       {/* Modal Tambah Project Baru */}
       {isModalOpen && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 relative z-[101] my-8">
+        <div data-mobile-modal className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in overflow-y-auto">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 relative z-[101] my-8">
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-[#24324A]">Buat Project Baru</h3>

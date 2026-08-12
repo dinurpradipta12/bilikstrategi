@@ -41,7 +41,8 @@ export default function ModalPortal({ children, onClose }: ModalPortalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-end justify-center bg-[#182238]/45 p-0 sm:items-center sm:p-4"
+      data-mobile-modal
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-[#182238]/45 p-0 md:items-center md:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCloseRef.current();
       }}

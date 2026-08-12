@@ -586,8 +586,8 @@ export default function TasksPage() {
 
       {/* Modal Tambah Task Baru */}
       {isModalOpen && mounted && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 relative z-[101]">
+        <div data-mobile-modal className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 relative z-[101]">
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
               <h3 className="text-sm font-extrabold text-[#24324A]">Buat Task Baru</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A]">

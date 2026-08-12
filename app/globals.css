@@ -100,6 +100,14 @@ html.dark [class~='bg-[#F7F7F8]'] {
 
 html.dark [class~='bg-[#F4F4F5]'],
 html.dark [class~='bg-[#F1F1F3]'],
+html.dark [class~='bg-[#F2F4F7]'],
+html.dark [class~='bg-[#F3F4F6]'],
+html.dark [class~='bg-[#F4F7FB]'],
+html.dark [class~='bg-[#F4F8FD]'],
+html.dark [class~='bg-[#F6F7F9]'],
+html.dark [class~='bg-[#F7F8FA]'],
+html.dark [class~='bg-[#F8F9FB]'],
+html.dark [class~='bg-[#FAFAFB]'],
 html.dark [class~='bg-[#EBEBED]'],
 html.dark [class~='bg-[#E8E8EC]'] {
   background-color: var(--surface-raised);
@@ -115,12 +123,31 @@ html.dark [class~='bg-[#EEF8F3]'] {
   background-color: #1E392C;
 }
 
-html.dark [class~='bg-[#FFF0ED]'] {
+html.dark [class~='bg-[#E7F4ED]'] {
+  background-color: #1E392C;
+}
+
+html.dark [class~='bg-[#FFF0ED]'],
+html.dark [class~='bg-[#FFF5F3]'],
+html.dark [class~='bg-[#FDE9E7]'] {
   background-color: #3B272B;
 }
 
-html.dark [class~='bg-[#FEF3D6]'] {
+html.dark [class~='bg-[#FEF3D6]'],
+html.dark [class~='bg-[#FFF0DF]'],
+html.dark [class~='bg-[#FFF1DB]'],
+html.dark [class~='bg-[#FFF2DF]'],
+html.dark [class~='bg-[#FFF9ED]'] {
   background-color: #3D321F;
+}
+
+html.dark [class~='bg-[#EAF2FF]'] {
+  background-color: #29364A;
+}
+
+html.dark [class~='bg-[#EEE9FF]'],
+html.dark [class~='bg-[#F2E9FA]'] {
+  background-color: #32294C;
 }
 
 html.dark [class~='bg-[#24324A]'] {
@@ -513,6 +540,13 @@ html.dark .floating-chat-icon {
   color: #FF8B80 !important;
 }
 
+/* Flat profile gradients stay light in both themes, so their ink must remain
+   navy instead of inheriting the global dark-surface text conversion. */
+html.dark .performance-profile-gradient,
+html.dark .performance-profile-gradient * {
+  color: #24324A !important;
+}
+
 html.dark ::-webkit-scrollbar-thumb {
   background: #4A5362;
 }
@@ -555,6 +589,56 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 .animate-slide-left {
   animation: slideLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mobileModalSheetIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mobileModalBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Form dialogs behave as bottom sheets on phones. Tablet and desktop retain
+   their centered modal layout. */
+@media (max-width: 767px) {
+  [data-mobile-modal] {
+    align-items: flex-end !important;
+    padding: 0 !important;
+    overflow: hidden;
+    animation: mobileModalBackdropIn 0.2s ease-out both;
+  }
+
+  [data-mobile-modal-panel],
+  [data-mobile-modal] > [role='dialog'] {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 92svh !important;
+    margin: 0 !important;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 1.5rem 1.5rem 0 0 !important;
+    transform-origin: bottom center;
+    will-change: transform, opacity;
+    animation: mobileModalSheetIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-mobile-modal],
+  [data-mobile-modal-panel],
+  [data-mobile-modal] > [role='dialog'] {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 /* ─── iPhone Dynamic Island Pill ──────────────────────────── */

@@ -250,18 +250,18 @@ export default function ApprovalsPage() {
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
-          { label: 'Menunggu', value: stats.pending, icon: Clock3, color: 'from-[#FFF3D8] to-[#FFE4B5]', iconColor: 'text-[#A46D18]' },
-          { label: 'Disetujui', value: stats.approved, icon: CheckCircle2, color: 'from-[#E3F4EA] to-[#CBE8D7]', iconColor: 'text-[#39785D]' },
-          { label: 'Perlu Revisi', value: stats.revision, icon: RotateCcw, color: 'from-[#EAEDFF] to-[#D9DEFF]', iconColor: 'text-[#5B61AD]' },
-          { label: 'Total Permintaan', value: stats.total, icon: Inbox, color: 'from-[#F2EAFE] to-[#E5D9F7]', iconColor: 'text-[#765096]' },
+          { label: 'Menunggu', value: stats.pending, icon: Clock3, iconColor: 'text-[#A46D18]' },
+          { label: 'Disetujui', value: stats.approved, icon: CheckCircle2, iconColor: 'text-[#39785D]' },
+          { label: 'Perlu Revisi', value: stats.revision, icon: RotateCcw, iconColor: 'text-[#5B61AD]' },
+          { label: 'Total Permintaan', value: stats.total, icon: Inbox, iconColor: 'text-[#765096]' },
         ].map((stat) => (
-          <article key={stat.label} className={`rounded-2xl border border-white/70 bg-gradient-to-br ${stat.color} p-4 shadow-sm sm:p-5`}>
+          <article key={stat.label} className="rounded-2xl border border-[#E1E5EB] bg-white p-4 shadow-sm dark:border-[#303742] dark:bg-[#20242C] sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5E6470]">{stat.label}</p>
                 <p className="mt-2 text-3xl font-black text-[#24324A]">{stat.value}</p>
               </div>
-              <div className="rounded-2xl bg-white/65 p-3"><stat.icon className={`h-5 w-5 ${stat.iconColor}`} /></div>
+              <div className="rounded-2xl bg-[#F2F4F7] p-3 dark:bg-[#282D36]"><stat.icon className={`h-5 w-5 ${stat.iconColor}`} /></div>
             </div>
           </article>
         ))}

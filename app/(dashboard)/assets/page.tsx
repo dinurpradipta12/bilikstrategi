@@ -977,8 +977,8 @@ export default function AssetManagementPage() {
       {/* MODAL 2: UPLOAD / TAMBAH ASSET BARU - VIA PORTAL */}
       {/* ========================================================================= */}
       {showUploadModal && mounted && createPortalDom(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -1152,8 +1152,8 @@ export default function AssetManagementPage() {
       {/* MODAL 3: EDIT ASSET MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
       {editingAsset && mounted && createPortalDom(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setEditingAsset(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
               <X className="w-5 h-5" />
             </button>
@@ -1322,8 +1322,8 @@ export default function AssetManagementPage() {
       {/* MODAL 4: DELETE CONFIRMATION MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
       {deletingAsset && mounted && createPortalDom(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
+        <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
+          <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
             <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#D95858] border border-[#F26B5E]/30 flex items-center justify-center mx-auto shadow-xs">
               <Trash2 className="w-6 h-6" />
             </div>

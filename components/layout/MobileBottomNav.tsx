@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
+import { BadgeCheck, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -70,6 +70,14 @@ export default function MobileBottomNav() {
       icon: Target,
       activeColor: '#F26B5E',
     },
+    {
+      id: 'approvals',
+      accessKey: 'approvals',
+      label: 'Approval',
+      href: '/approvals',
+      icon: BadgeCheck,
+      activeColor: '#E6A23C',
+    },
   ];
   const visibleNavItems = navItems.filter(
     (item) => hasUnrestrictedPageAccess || pageAccess[item.accessKey] !== false
@@ -81,7 +89,7 @@ export default function MobileBottomNav() {
         <ThemeToggle compact />
       </div>
       <div className="fixed bottom-4 left-4 right-4 z-[90] md:hidden pointer-events-auto">
-        <nav className="bg-[#24324A]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl px-2 py-2 flex items-center justify-around">
+        <nav className="bg-[#24324A]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl px-1 py-2 flex items-center justify-around">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -90,7 +98,7 @@ export default function MobileBottomNav() {
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex flex-col items-center justify-center flex-1 py-1 px-2 rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
+                className={`flex min-w-0 flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer select-none active:scale-95 ${
                   isActive
                     ? 'bg-white/10 text-white font-extrabold shadow-xs'
                     : 'text-[#8C9BAE] hover:text-white font-medium'
@@ -110,7 +118,7 @@ export default function MobileBottomNav() {
                     />
                   )}
                 </div>
-                <span className="text-[10px] tracking-tight mt-1 leading-none">
+                <span className="max-w-full truncate text-[9px] tracking-tight mt-1 leading-none min-[390px]:text-[10px]">
                   {item.label}
                 </span>
               </Link>

@@ -169,8 +169,8 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Target; t
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/55 p-0 backdrop-blur-sm sm:items-center sm:p-5">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-[#E5E7EB] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#171B22] sm:max-w-2xl sm:rounded-3xl">
+    <div data-mobile-modal className="fixed inset-0 z-[120] flex items-end justify-center bg-black/55 p-0 backdrop-blur-sm md:items-center md:p-5">
+      <div data-mobile-modal-panel className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-[#E5E7EB] bg-white shadow-2xl dark:border-[#303742] dark:bg-[#171B22] md:max-w-2xl md:rounded-3xl">
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-[#E8E8EC] bg-white/95 px-5 py-4 backdrop-blur dark:border-[#303742] dark:bg-[#171B22]/95">
           <div>
             <h2 className="text-base font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{title}</h2>
@@ -956,7 +956,7 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
   return (
     <>
       <section className={`${panelClass} mb-5 overflow-hidden`}>
-        <div className="px-4 py-5 text-[#24324A] sm:px-6 sm:py-6" style={{ backgroundImage: theme.gradient }}>
+        <div className="performance-profile-gradient px-4 py-5 text-[#24324A] sm:px-6 sm:py-6" style={{ backgroundImage: theme.gradient }}>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
