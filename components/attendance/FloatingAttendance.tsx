@@ -644,26 +644,26 @@ export default function FloatingAttendance() {
           aria-expanded={panelOpen}
           aria-haspopup="dialog"
           data-floating-attendance-trigger
-          className={`relative flex h-14 items-center justify-center overflow-hidden border text-white shadow-[0_14px_32px_rgba(36,50,74,0.28)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F26B5E] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#171A20] ${
+          className={`relative flex h-11 items-center justify-center overflow-hidden border shadow-[0_8px_22px_rgba(36,50,74,0.16)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F26B5E] focus-visible:ring-offset-2 md:h-14 md:shadow-[0_14px_32px_rgba(36,50,74,0.22)] dark:focus-visible:ring-offset-[#171A20] ${
             session
               ? session.isPaused
-                ? 'min-w-[9.5rem] rounded-full border-[#C78A2C] bg-[#A87528] px-4'
-                : 'min-w-[9.5rem] rounded-full border-[#367B5B] bg-[#24324A] px-4 dark:border-[#4F9D78] dark:bg-[#1F2733]'
-              : 'w-14 rounded-full border-[#1A2536] bg-[#24324A] hover:bg-[#1A2536]'
+                ? 'min-w-28 rounded-full border-[#F0C778] bg-[#FFF4D9] px-2.5 text-[#9A641C] hover:bg-[#FFEDC2] md:min-w-[9.5rem] md:px-4 dark:border-[#E9B85D] dark:bg-[#E9A955] dark:text-[#2B2111] dark:hover:bg-[#F0B966]'
+                : 'min-w-28 rounded-full border-[#9ED0B7] bg-[#E7F6EE] px-2.5 text-[#2F7658] hover:bg-[#DDF2E7] md:min-w-[9.5rem] md:px-4 dark:border-[#7CC8A4] dark:bg-[#62B58D] dark:text-[#153528] dark:hover:bg-[#75C59D]'
+              : 'w-11 rounded-full border-[#F7A49C] bg-[#FFF0ED] text-[#D95346] hover:bg-[#FFE4DF] md:w-14 dark:border-[#F48C82] dark:bg-[#F26B5E] dark:text-white dark:hover:bg-[#E76054]'
           }`}
         >
           {initializing ? (
-            <Loader2 className="h-5 w-5 animate-spin text-[#F26B5E]" />
+            <Loader2 className="h-4 w-4 animate-spin text-[#F26B5E] md:h-5 md:w-5" />
           ) : session ? (
             <>
-              <span className={`mr-2 h-2.5 w-2.5 shrink-0 rounded-full ${session.isPaused ? 'bg-[#FFD580]' : 'animate-pulse bg-[#62D49D]'}`} />
-              <span className="font-mono text-sm font-black tabular-nums" aria-live="off">{timerLabel}</span>
+              <span className={`mr-1.5 h-2 w-2 shrink-0 rounded-full md:mr-2 md:h-2.5 md:w-2.5 ${session.isPaused ? 'bg-[#E6A23C] dark:bg-[#5E3B08]' : 'animate-pulse bg-[#4F9D78] dark:bg-[#173427]'}`} />
+              <span className="font-mono text-xs font-black tabular-nums md:text-sm" aria-live="off">{timerLabel}</span>
             </>
           ) : (
-            <Clock3 className={`h-6 w-6 ${error && !viewer ? 'text-[#F4C95D]' : 'text-[#F26B5E]'}`} />
+            <Clock3 className={`h-5 w-5 md:h-6 md:w-6 ${error && !viewer ? 'text-[#D29232]' : 'text-[#D95346] dark:text-white'}`} />
           )}
           {!session && !initializing && (
-            <span className="absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-[#24324A] bg-[#4F9D78] dark:border-[#1F2733]" />
+            <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#FFF0ED] bg-[#4F9D78] md:bottom-1 md:right-1 md:h-3 md:w-3 dark:border-[#F26B5E]" />
           )}
         </button>
       </div>
