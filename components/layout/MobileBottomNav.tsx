@@ -93,11 +93,15 @@ export default function MobileBottomNav() {
 
   return (
     <>
-      <div className="fixed bottom-[6.25rem] right-5 z-[95] md:hidden pointer-events-auto">
+      <div className="fixed bottom-[6.25rem] left-5 z-[95] md:hidden pointer-events-auto">
         <ThemeToggle compact />
       </div>
       <div className="fixed bottom-4 left-4 right-4 z-[90] md:hidden pointer-events-auto">
-        <nav className="bg-[#24324A]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl px-1 py-2 flex items-center justify-around">
+        <nav
+          aria-label="Navigasi utama mobile"
+          data-mobile-bottom-nav
+          className="bg-[#24324A]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl px-1 py-2 flex items-center justify-around"
+        >
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);

@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import HolidayAccessBlock, { type HolidayAccessSnapshot } from '@/components/auth/HolidayAccessBlock';
+import FloatingAttendance from '@/components/attendance/FloatingAttendance';
 
 import MobileBottomNav from '@/components/layout/MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
@@ -270,6 +271,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Floating Bottom Navigation for Mobile & Tablet */}
       <MobileBottomNav />
+
+      {/* Presensi controls stay mounted while navigating between dashboard pages. */}
+      <FloatingAttendance />
 
       {/* Global Command Menu (Cmd+K) */}
       <CommandMenu

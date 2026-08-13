@@ -17,44 +17,59 @@ export interface ActiveCheckIn {
   notesInput: string;
 }
 
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
 // In-memory fallback
 const globalActiveCheckIns = new Map<string, ActiveCheckIn>();
-const globalAttendanceHistory: any[] = [];
+const globalAttendanceHistory: Array<Record<string, unknown>> = [];
 
-export async function GET() {
+export async function GET(req?: Request) {
+  const activeOnly = req
+    ? new URL(req.url).searchParams.get('active_only') === '1'
+    : false;
+
   try {
     // 1. Fetch active sessions from Supabase DB
     const { data: dbSessions } = await supabase.from('active_sessions').select('*');
 
-    // 2. Fetch all completed attendance logs from Supabase DB
-    const { data: dbLogs } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // The global floating control only needs active sessions. Avoid repeatedly
+    // loading the complete history while it polls in the background.
+    const { data: dbLogs } = activeOnly
+      ? { data: [] }
+      : await supabase
+          .from('attendance_logs')
+          .select('*')
+          .order('created_at', { ascending: false });
 
     const activeRows = Array.isArray(dbSessions) ? dbSessions : [];
     const logRows = Array.isArray(dbLogs) ? dbLogs : [];
 
-    const activeList: ActiveCheckIn[] = activeRows.map((row: any) => ({
-      user_name: row.user_name,
-      user_avatar: row.user_avatar,
-      checkInTime: row.check_in_time,
+    const activeList: ActiveCheckIn[] = activeRows.map((row: Record<string, unknown>) => ({
+      user_name: textValue(row.user_name),
+      user_avatar: textValue(row.user_avatar),
+      checkInTime: textValue(row.check_in_time),
       checkInTimestamp: Number(row.check_in_timestamp),
       isPaused: row.is_paused === true,
-      pausedAt: row.paused_at || null,
+      pausedAt: textValue(row.paused_at) || null,
       accumulatedSeconds: Number(row.accumulated_seconds || 0),
-      selectedProject: row.selected_project,
-      notesInput: row.notes_input || '',
+      selectedProject: textValue(row.selected_project),
+      notesInput: textValue(row.notes_input),
     }));
 
-    const historyList = logRows.length > 0 ? logRows : globalAttendanceHistory;
+    const historyList = activeOnly
+      ? undefined
+      : logRows.length > 0
+        ? logRows
+        : globalAttendanceHistory;
 
     return NextResponse.json(
       {
         success: true,
         source: 'supabase',
         activeCheckIns: activeList,
-        history: historyList,
+        ...(activeOnly ? {} : { history: historyList }),
       },
       {
         headers: {
@@ -73,7 +88,7 @@ export async function GET() {
       success: true,
       source: 'memory',
       activeCheckIns: activeList,
-      history: globalAttendanceHistory,
+      ...(activeOnly ? {} : { history: globalAttendanceHistory }),
     },
     {
       headers: {
@@ -272,7 +287,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Attendance action failed';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
