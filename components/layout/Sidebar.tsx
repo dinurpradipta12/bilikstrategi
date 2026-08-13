@@ -28,6 +28,7 @@ import {
   BadgeCheck,
   ChartNoAxesCombined,
   Zap,
+  Lightbulb,
 } from 'lucide-react';
 import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
@@ -230,6 +231,7 @@ export default function Sidebar() {
     { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
     { key: 'assets', name: 'Asset Management', href: '/assets', icon: FolderArchive },
     { key: 'content_plan', name: 'Content Plan & Sheets', href: '/content-plan', icon: FileSpreadsheet },
+    { key: 'content_ideas', name: 'Content Idea Bank', href: '/content-ideas', icon: Lightbulb },
     { key: 'invoices', name: 'Invoices', href: '/invoices', icon: ReceiptText },
     { key: 'finance', name: 'Finance & Budget', href: '/finance', icon: Wallet, ownerOnly: true },
     { key: 'salary_slips', name: 'Slip Gaji', href: '/salary-slips', icon: FileText, ownerOnly: true },
@@ -261,7 +263,7 @@ export default function Sidebar() {
       id: 'operations-documents',
       name: 'Operasional & Dokumen',
       icon: FolderArchive,
-      keys: ['clients', 'assets', 'content_plan', 'invoices', 'quotes', 'agreements'],
+      keys: ['clients', 'assets', 'content_plan', 'content_ideas', 'invoices', 'quotes', 'agreements'],
     },
     {
       id: 'workspace',

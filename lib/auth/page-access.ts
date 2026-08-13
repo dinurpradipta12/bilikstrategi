@@ -9,6 +9,7 @@ export type PageAccessKey =
   | 'clients'
   | 'assets'
   | 'content_plan'
+  | 'content_ideas'
   | 'invoices'
   | 'quotes'
   | 'agreements'
@@ -37,6 +38,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'clients', label: 'Client Listing', href: '/clients' },
   { key: 'assets', label: 'Asset Management', href: '/assets' },
   { key: 'content_plan', label: 'Content Plan & Sheets', href: '/content-plan' },
+  { key: 'content_ideas', label: 'Content Idea Bank', href: '/content-ideas' },
   { key: 'invoices', label: 'Invoices', href: '/invoices' },
   { key: 'quotes', label: 'Penawaran Harga', href: '/quotes' },
   { key: 'agreements', label: 'Collaboration Agreement', href: '/agreements' },
@@ -60,6 +62,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   clients: true,
   assets: true,
   content_plan: true,
+  content_ideas: true,
   invoices: true,
   quotes: true,
   agreements: true,

@@ -26,6 +26,7 @@ import * as performance from '../performance/handler';
 import * as approvals from '../approvals/handler';
 import * as ownerProfitability from '../owner/profitability/handler';
 import * as automations from '../automations/handler';
+import * as contentIdeas from '../content-ideas/handler';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
@@ -62,6 +63,7 @@ const routes: Record<string, RouteModule> = {
   approvals,
   'owner/profitability': ownerProfitability,
   automations,
+  'content-ideas': contentIdeas,
 };
 
 function normalizePath(pathname: string) {
@@ -81,13 +83,13 @@ function methodNotAllowed(module: RouteModule) {
 
 async function dispatch(request: NextRequest) {
   const path = normalizePath(new URL(request.url).pathname);
-  const module = routes[path];
-  if (!module) {
+  const routeModule = routes[path];
+  if (!routeModule) {
     return NextResponse.json({ error: 'API route not found' }, { status: 404 });
   }
 
-  const handler = module[request.method as keyof RouteModule];
-  if (!handler) return methodNotAllowed(module);
+  const handler = routeModule[request.method as keyof RouteModule];
+  if (!handler) return methodNotAllowed(routeModule);
   return handler(request);
 }
 
