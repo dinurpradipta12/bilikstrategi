@@ -150,14 +150,14 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   }, []);
 
   return (
-    <header className="hidden md:flex h-16 bg-[#FFFFFF] border-b border-[#E8E8EC] sticky top-0 z-20 items-center justify-between px-6">
+    <header className="hidden md:flex h-16 min-w-0 bg-[#FFFFFF] border-b border-[#E8E8EC] sticky top-0 z-20 items-center justify-between gap-3 px-3 lg:px-4 xl:px-6">
       {/* Left: Workspace Selector & Search */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-2 xl:gap-4">
         {/* Workspace Switcher */}
         <div className="relative">
           <button
             onClick={() => setWorkspaceDropdownOpen((open) => !open)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg text-xs font-medium text-[#24324A] cursor-pointer hover:bg-[#EEF2F7] transition-colors max-w-64"
+            className="flex max-w-40 items-center gap-2 rounded-lg border border-[#E8E8EC] bg-[#F7F7F8] px-3 py-1.5 text-xs font-medium text-[#24324A] transition-colors hover:bg-[#EEF2F7] lg:max-w-52 xl:max-w-64"
           >
             <div className="w-2 h-2 rounded-full bg-[#4F9D78] flex-shrink-0"></div>
             <span className="font-semibold truncate">{activeWorkspace.name}</span>
@@ -198,7 +198,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
         {/* Global Search Bar */}
         <button
           onClick={onOpenCommandMenu}
-          className="flex items-center gap-3 px-3 py-1.5 bg-[#F7F7F8] border border-[#E8E8EC] rounded-lg text-xs text-[#737680] hover:border-[#24324A] transition-colors w-64 md:w-80 justify-between"
+          className="hidden w-64 items-center justify-between gap-3 rounded-lg border border-[#E8E8EC] bg-[#F7F7F8] px-3 py-1.5 text-xs text-[#737680] transition-colors hover:border-[#24324A] xl:flex xl:w-80"
         >
           <div className="flex items-center gap-2">
             <Search className="w-3.5 h-3.5 text-[#737680]" />
@@ -212,17 +212,17 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
       </div>
 
       {/* Right: Quick Create, Notifications, Profile */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
         {/* Start SyncUp Voice/Video Call Button */}
-        <SyncUpButton variant="header" />
+        <div className="hidden lg:block"><SyncUpButton variant="header" /></div>
 
         {/* Quick Create Task */}
         <button
           onClick={onOpenCreateTask}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] transition-colors shadow-2xs"
+          className="flex items-center gap-1.5 rounded-lg bg-[#24324A] p-2 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#1A2536] lg:px-3.5 lg:py-1.5"
         >
           <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
-          <span>Create Task</span>
+          <span className="hidden lg:inline">Create Task</span>
         </button>
 
         {/* Notification Bell */}

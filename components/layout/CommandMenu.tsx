@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Search, PlusCircle, CheckSquare, Briefcase, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight, Target } from 'lucide-react';
+import { Search, PlusCircle, CheckSquare, Briefcase, Calculator, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight, Target } from 'lucide-react';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 
@@ -198,6 +198,14 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                 >
                   <FileText className="w-4 h-4 text-[#E6A23C] mr-3" />
                   <span>Buka Penawaran Harga</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
+                </button>}
+                {canSeePage('fee_calculator') && <button
+                  onClick={() => handleNavigate('/fee-calculator')}
+                  className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
+                >
+                  <Calculator className="w-4 h-4 text-[#4F9D78] mr-3" />
+                  <span>Buka Fee Calculator</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
                 {canSeePage('agreements') && <button

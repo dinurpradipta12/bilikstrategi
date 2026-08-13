@@ -10,6 +10,7 @@ export type PageAccessKey =
   | 'assets'
   | 'content_plan'
   | 'content_ideas'
+  | 'fee_calculator'
   | 'invoices'
   | 'quotes'
   | 'agreements'
@@ -39,6 +40,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'assets', label: 'Asset Management', href: '/assets' },
   { key: 'content_plan', label: 'Content Plan & Sheets', href: '/content-plan' },
   { key: 'content_ideas', label: 'Content Idea Bank', href: '/content-ideas' },
+  { key: 'fee_calculator', label: 'Fee Calculator', href: '/fee-calculator' },
   { key: 'invoices', label: 'Invoices', href: '/invoices' },
   { key: 'quotes', label: 'Penawaran Harga', href: '/quotes' },
   { key: 'agreements', label: 'Collaboration Agreement', href: '/agreements' },
@@ -63,6 +65,7 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   assets: true,
   content_plan: true,
   content_ideas: true,
+  fee_calculator: true,
   invoices: true,
   quotes: true,
   agreements: true,

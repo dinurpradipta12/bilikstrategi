@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BadgeCheck, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
+import { BadgeCheck, Calculator, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -77,6 +77,14 @@ export default function MobileBottomNav() {
       href: '/approvals',
       icon: BadgeCheck,
       activeColor: '#E6A23C',
+    },
+    {
+      id: 'fee-calculator',
+      accessKey: 'fee_calculator',
+      label: 'Fee',
+      href: '/fee-calculator',
+      icon: Calculator,
+      activeColor: '#62B58D',
     },
   ];
   const visibleNavItems = navItems.filter(
