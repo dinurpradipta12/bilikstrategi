@@ -32,8 +32,19 @@ export type FeePackageSetting = {
   markupPercent: number;
 };
 
+export type UnitPriceCategory = 'produksi' | 'add-on' | 'operasional' | 'lainnya';
+
+export type UnitPriceItem = {
+  id: string;
+  label: string;
+  category: UnitPriceCategory;
+  unit: string;
+  price: number;
+  description: string;
+};
+
 export type FeeCalculatorSettings = {
-  version: 1;
+  version: 2;
   livingCosts: LivingCostItem[];
   hoursPerDay: number;
   daysPerWeek: number;
@@ -42,6 +53,37 @@ export type FeeCalculatorSettings = {
   addOnItems: AddOnItem[];
   operationalItems: OperationalItem[];
   packages: FeePackageSetting[];
+  unitPrices: UnitPriceItem[];
+};
+
+export type CustomQuoteItem = {
+  id: string;
+  unitPriceId?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+export type CustomQuoteDraft = {
+  version: 1;
+  items: CustomQuoteItem[];
+  discountPercent: number;
+  taxPercent: number;
+  notes: string;
+};
+
+export type QuoteHandoff = {
+  source: 'fee-calculator';
+  createdAt: string;
+  items: Array<{
+    id: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  discountPercent: number;
+  taxPercent: number;
+  notes: string;
 };
 
 export type FeePackageResult = FeePackageSetting & {
@@ -67,10 +109,20 @@ export type FeeCalculation = {
   packages: FeePackageResult[];
 };
 
+export type CustomQuoteCalculation = {
+  subtotal: number;
+  discount: number;
+  taxable: number;
+  tax: number;
+  total: number;
+};
+
 export const FEE_CALCULATOR_STORAGE_KEY = 'bilik_fee_calculator_v1';
+export const FEE_CUSTOM_QUOTE_STORAGE_KEY = 'bilik_fee_custom_quote_v1';
+export const FEE_QUOTE_HANDOFF_STORAGE_KEY = 'bilik_fee_quote_handoff_v1';
 
 const DEFAULT_FEE_SETTINGS: FeeCalculatorSettings = {
-  version: 1,
+  version: 2,
   livingCosts: [
     { id: 'housing', label: 'Sewa / kos / cicilan rumah', description: 'Biaya tempat tinggal utama', amount: 0 },
     { id: 'food', label: 'Makan & minum', description: 'Estimasi makan 3× sehari × 30 hari', amount: 0 },
@@ -121,6 +173,20 @@ const DEFAULT_FEE_SETTINGS: FeeCalculatorSettings = {
     { id: 'growth', name: 'Growth', markupPercent: 20 },
     { id: 'scale', name: 'Scale', markupPercent: 40 },
   ],
+  unitPrices: [
+    { id: 'unit-static', label: 'Foto / Grafis (static post)', category: 'produksi', unit: 'konten', price: 150000, description: 'Harga satuan patokan untuk satu static post.' },
+    { id: 'unit-carousel', label: 'Carousel / Infografis', category: 'produksi', unit: 'konten', price: 250000, description: 'Harga satuan patokan untuk satu carousel.' },
+    { id: 'unit-short-video', label: 'Video / Reels pendek', category: 'produksi', unit: 'video', price: 400000, description: 'Video vertikal berdurasi kurang dari 60 detik.' },
+    { id: 'unit-long-video', label: 'Long-form video', category: 'produksi', unit: 'video', price: 750000, description: 'Video berdurasi lebih dari 60 detik.' },
+    { id: 'unit-caption', label: 'Copywriting caption', category: 'produksi', unit: 'caption', price: 75000, description: 'Copywriting caption tanpa produksi visual.' },
+    { id: 'unit-story', label: 'Story / ephemeral content', category: 'produksi', unit: 'konten', price: 75000, description: 'Harga satuan per story.' },
+    { id: 'unit-thumbnail', label: 'Thumbnail / cover design', category: 'produksi', unit: 'desain', price: 100000, description: 'Harga satuan per desain cover.' },
+    { id: 'unit-strategy', label: 'Strategy deck / content plan', category: 'add-on', unit: 'dokumen', price: 250000, description: 'Per dokumen atau periode bulanan.' },
+    { id: 'unit-report', label: 'Monthly report & analitik', category: 'add-on', unit: 'laporan', price: 200000, description: 'Laporan dan analisis performa bulanan.' },
+    { id: 'unit-meeting', label: 'Meeting klien', category: 'add-on', unit: 'sesi', price: 150000, description: 'Harga per sesi meeting.' },
+    { id: 'unit-brand-audit', label: 'Brand audit / riset kompetitor', category: 'add-on', unit: 'proyek', price: 350000, description: 'Audit awal untuk kebutuhan proyek.' },
+    { id: 'unit-consultation', label: 'Konsultasi non-retainer', category: 'add-on', unit: 'jam', price: 200000, description: 'Harga konsultasi per jam.' },
+  ],
 };
 
 function finiteNumber(value: unknown, fallback: number) {
@@ -132,20 +198,52 @@ function textValue(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-function mergeItems<T extends { id: string }>(
+function recordValue(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function savedArray(value: unknown) {
+  return Array.isArray(value) ? value.map(recordValue) : [];
+}
+
+function legacyItems<T extends { id: string }>(
   defaults: T[],
   value: unknown,
-  merge: (defaultItem: T, savedItem: Record<string, unknown>) => T,
+  normalize: (candidate: Record<string, unknown>, fallback: T, index: number) => T,
 ) {
-  const savedItems = Array.isArray(value) ? value : [];
-  return defaults.map((defaultItem) => {
-    const savedItem = savedItems.find(
-      (candidate) => candidate && typeof candidate === 'object' && (candidate as Record<string, unknown>).id === defaultItem.id,
-    );
-    return savedItem && typeof savedItem === 'object'
-      ? merge(defaultItem, savedItem as Record<string, unknown>)
-      : { ...defaultItem };
+  const saved = savedArray(value);
+  const merged = defaults.map((fallback, index) => {
+    const candidate = saved.find((item) => item.id === fallback.id) || {};
+    return normalize(candidate, fallback, index);
   });
+  const extra = saved.filter((item) => !defaults.some((fallback) => fallback.id === item.id));
+  return [...merged, ...extra.map((item, index) => normalize(item, defaults[0], defaults.length + index))];
+}
+
+function dynamicItems<T extends { id: string }>(
+  defaults: T[],
+  value: unknown,
+  isVersionTwo: boolean,
+  normalize: (candidate: Record<string, unknown>, fallback: T, index: number) => T,
+) {
+  if (!Array.isArray(value)) return defaults.map((item) => ({ ...item }));
+  if (!isVersionTwo) return legacyItems(defaults, value, normalize);
+  return savedArray(value).map((candidate, index) => normalize(candidate, defaults[index] || defaults[0], index));
+}
+
+function normalizeCategory(value: unknown, fallback: UnitPriceCategory): UnitPriceCategory {
+  return value === 'produksi' || value === 'add-on' || value === 'operasional' || value === 'lainnya'
+    ? value
+    : fallback;
+}
+
+export function createItemId(prefix = 'item') {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function createDefaultFeeSettings(): FeeCalculatorSettings {
@@ -156,6 +254,7 @@ export function createDefaultFeeSettings(): FeeCalculatorSettings {
     addOnItems: DEFAULT_FEE_SETTINGS.addOnItems.map((item) => ({ ...item })),
     operationalItems: DEFAULT_FEE_SETTINGS.operationalItems.map((item) => ({ ...item })),
     packages: DEFAULT_FEE_SETTINGS.packages.map((item) => ({ ...item })),
+    unitPrices: DEFAULT_FEE_SETTINGS.unitPrices.map((item) => ({ ...item })),
   };
 }
 
@@ -163,36 +262,91 @@ export function normalizeFeeSettings(value: unknown): FeeCalculatorSettings {
   const defaults = createDefaultFeeSettings();
   if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
   const saved = value as Record<string, unknown>;
+  const isVersionTwo = Number(saved.version) >= 2;
 
   return {
-    version: 1,
+    version: 2,
     hoursPerDay: finiteNumber(saved.hoursPerDay, defaults.hoursPerDay),
     daysPerWeek: finiteNumber(saved.daysPerWeek, defaults.daysPerWeek),
     profitMarginPercent: finiteNumber(saved.profitMarginPercent, defaults.profitMarginPercent),
-    livingCosts: mergeItems(defaults.livingCosts, saved.livingCosts, (item, candidate) => ({
-      ...item,
-      amount: finiteNumber(candidate.amount, item.amount),
+    livingCosts: dynamicItems(defaults.livingCosts, saved.livingCosts, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `living-${index}`),
+      label: textValue(candidate.label, fallback?.label || `Kebutuhan ${index + 1}`),
+      description: textValue(candidate.description, fallback?.description || ''),
+      amount: finiteNumber(candidate.amount, fallback?.amount || 0),
     })),
-    productionItems: mergeItems(defaults.productionItems, saved.productionItems, (item, candidate) => ({
-      ...item,
-      hoursPerItem: finiteNumber(candidate.hoursPerItem, item.hoursPerItem),
-      quantity: finiteNumber(candidate.quantity, item.quantity),
+    productionItems: dynamicItems(defaults.productionItems, saved.productionItems, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `production-${index}`),
+      label: textValue(candidate.label, fallback?.label || `Konten ${index + 1}`),
+      hoursPerItem: finiteNumber(candidate.hoursPerItem, fallback?.hoursPerItem || 0),
+      quantity: finiteNumber(candidate.quantity, fallback?.quantity || 0),
     })),
-    addOnItems: mergeItems(defaults.addOnItems, saved.addOnItems, (item, candidate) => ({
-      ...item,
-      price: finiteNumber(candidate.price, item.price),
-      quantity: finiteNumber(candidate.quantity, item.quantity),
+    addOnItems: dynamicItems(defaults.addOnItems, saved.addOnItems, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `addon-${index}`),
+      label: textValue(candidate.label, fallback?.label || `Add-on ${index + 1}`),
+      price: finiteNumber(candidate.price, fallback?.price || 0),
+      quantity: finiteNumber(candidate.quantity, fallback?.quantity || 0),
     })),
-    operationalItems: mergeItems(defaults.operationalItems, saved.operationalItems, (item, candidate) => ({
-      ...item,
-      amount: finiteNumber(candidate.amount, item.amount),
+    operationalItems: dynamicItems(defaults.operationalItems, saved.operationalItems, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `operational-${index}`),
+      label: textValue(candidate.label, fallback?.label || `Operasional ${index + 1}`),
+      description: textValue(candidate.description, fallback?.description || ''),
+      amount: finiteNumber(candidate.amount, fallback?.amount || 0),
     })),
-    packages: mergeItems(defaults.packages, saved.packages, (item, candidate) => ({
-      ...item,
-      name: textValue(candidate.name, item.name),
-      markupPercent: finiteNumber(candidate.markupPercent, item.markupPercent),
+    packages: dynamicItems(defaults.packages, saved.packages, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `package-${index}`),
+      name: textValue(candidate.name, fallback?.name || `Paket ${index + 1}`),
+      markupPercent: finiteNumber(candidate.markupPercent, fallback?.markupPercent || 0),
+    })).slice(0, 3),
+    unitPrices: dynamicItems(defaults.unitPrices, saved.unitPrices, isVersionTwo, (candidate, fallback, index) => ({
+      id: textValue(candidate.id, fallback?.id || `unit-${index}`),
+      label: textValue(candidate.label, fallback?.label || `Harga satuan ${index + 1}`),
+      category: normalizeCategory(candidate.category, fallback?.category || 'lainnya'),
+      unit: textValue(candidate.unit, fallback?.unit || 'item'),
+      price: finiteNumber(candidate.price, fallback?.price || 0),
+      description: textValue(candidate.description, fallback?.description || ''),
     })),
   };
+}
+
+export function createDefaultCustomQuote(): CustomQuoteDraft {
+  return {
+    version: 1,
+    items: [],
+    discountPercent: 0,
+    taxPercent: 0,
+    notes: 'Harga dan ruang lingkup dapat disesuaikan berdasarkan kebutuhan proyek.',
+  };
+}
+
+export function normalizeCustomQuote(value: unknown): CustomQuoteDraft {
+  const defaults = createDefaultCustomQuote();
+  const source = recordValue(value);
+  const items = savedArray(source.items).map((item, index) => ({
+    id: textValue(item.id, `custom-${index}`),
+    unitPriceId: typeof item.unitPriceId === 'string' ? item.unitPriceId : undefined,
+    description: textValue(item.description, `Item penawaran ${index + 1}`),
+    quantity: finiteNumber(item.quantity, 1),
+    unitPrice: finiteNumber(item.unitPrice, 0),
+  }));
+  return {
+    version: 1,
+    items,
+    discountPercent: finiteNumber(source.discountPercent, defaults.discountPercent),
+    taxPercent: finiteNumber(source.taxPercent, defaults.taxPercent),
+    notes: textValue(source.notes, defaults.notes),
+  };
+}
+
+export function calculateCustomQuote(draft: CustomQuoteDraft): CustomQuoteCalculation {
+  const subtotal = draft.items.reduce(
+    (total, item) => total + finiteNumber(item.quantity, 0) * finiteNumber(item.unitPrice, 0),
+    0,
+  );
+  const discount = subtotal * (finiteNumber(draft.discountPercent, 0) / 100);
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = taxable * (finiteNumber(draft.taxPercent, 0) / 100);
+  return { subtotal, discount, taxable, tax, total: taxable + tax };
 }
 
 export function calculateFee(settings: FeeCalculatorSettings): FeeCalculation {

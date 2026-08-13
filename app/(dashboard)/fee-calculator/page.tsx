@@ -1,30 +1,50 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  AlertTriangle,
+  ArrowRight,
+  BookOpenCheck,
   Calculator,
   CheckCircle2,
   CircleDollarSign,
-  Clock3,
+  FileSignature,
   Film,
   Info,
-  PackageCheck,
+  ListChecks,
+  Pencil,
+  Plus,
   Puzzle,
+  ReceiptText,
   RotateCcw,
-  Save,
+  Settings2,
   Sparkles,
-  TrendingUp,
-  WalletCards,
+  Trash2,
   Wrench,
+  X,
 } from 'lucide-react';
+import FeeSettingsModal, { type FeeSettingsSection } from '@/components/fee-calculator/FeeSettingsModal';
+import ModalPortal from '@/components/ui/ModalPortal';
 import {
   FEE_CALCULATOR_STORAGE_KEY,
+  FEE_CUSTOM_QUOTE_STORAGE_KEY,
+  FEE_QUOTE_HANDOFF_STORAGE_KEY,
+  calculateCustomQuote,
   calculateFee,
+  createDefaultCustomQuote,
   createDefaultFeeSettings,
+  createItemId,
+  normalizeCustomQuote,
   normalizeFeeSettings,
+  type CustomQuoteDraft,
+  type FeeCalculation,
   type FeeCalculatorSettings,
+  type QuoteHandoff,
+  type UnitPriceCategory,
+  type UnitPriceItem,
 } from '@/lib/fee-calculator';
+
+type PageTab = 'dashboard' | 'custom' | 'catalog';
 
 const currencyFormatter = new Intl.NumberFormat('id-ID', {
   style: 'currency',
@@ -32,33 +52,28 @@ const currencyFormatter = new Intl.NumberFormat('id-ID', {
   maximumFractionDigits: 0,
 });
 
-const numberFormatter = new Intl.NumberFormat('id-ID', {
-  maximumFractionDigits: 1,
-});
+const numberFormatter = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 });
+
+const inputClass = 'h-11 w-full min-w-0 rounded-xl border border-[#DDE2EA] bg-white px-3 text-sm font-semibold text-[#24324A] outline-none transition focus:border-[#7F91B0] focus:ring-2 focus:ring-[#DCE7F6] dark:border-[#3A424E] dark:bg-[#20242C] dark:text-[#F4F6FA] dark:focus:border-[#66758A] dark:focus:ring-[#334052]';
+
+const tabs: Array<{ id: PageTab; label: string; compactLabel: string; icon: typeof Calculator }> = [
+  { id: 'dashboard', label: 'Ringkasan Harga', compactLabel: 'Ringkasan', icon: Calculator },
+  { id: 'custom', label: 'Penawaran Custom', compactLabel: 'Custom', icon: FileSignature },
+  { id: 'catalog', label: 'Harga Satuan', compactLabel: 'Satuan', icon: BookOpenCheck },
+];
 
 const packageStyles = [
-  {
-    border: 'border-[#BFD3F5] dark:border-[#3B5476]',
-    top: 'bg-[#EAF2FF] dark:bg-[#29364A]',
-    icon: 'bg-[#D8E7FF] text-[#315F98] dark:bg-[#344967] dark:text-[#AFC9EE]',
-    accent: 'text-[#315F98] dark:text-[#AFC9EE]',
-    badge: 'bg-[#D8E7FF] text-[#315F98] dark:bg-[#344967] dark:text-[#AFC9EE]',
-  },
-  {
-    border: 'border-[#F4C1BA] dark:border-[#72443E]',
-    top: 'bg-[#FFF0ED] dark:bg-[#3B272B]',
-    icon: 'bg-[#FFDCD6] text-[#B64D43] dark:bg-[#543139] dark:text-[#FFAAA0]',
-    accent: 'text-[#B64D43] dark:text-[#FFAAA0]',
-    badge: 'bg-[#F26B5E] text-white',
-  },
-  {
-    border: 'border-[#D7C9F1] dark:border-[#574C78]',
-    top: 'bg-[#F2E9FA] dark:bg-[#32294C]',
-    icon: 'bg-[#E4D7F5] text-[#765096] dark:bg-[#493A68] dark:text-[#D1B8F1]',
-    accent: 'text-[#765096] dark:text-[#D1B8F1]',
-    badge: 'bg-[#E4D7F5] text-[#765096] dark:bg-[#493A68] dark:text-[#D1B8F1]',
-  },
+  { border: 'border-[#BFD3F5] dark:border-[#3B5476]', surface: 'bg-[#EAF2FF] dark:bg-[#29364A]', accent: 'text-[#315F98] dark:text-[#AFC9EE]' },
+  { border: 'border-[#F4C1BA] dark:border-[#72443E]', surface: 'bg-[#FFF0ED] dark:bg-[#3B272B]', accent: 'text-[#B64D43] dark:text-[#FFAAA0]' },
+  { border: 'border-[#D7C9F1] dark:border-[#574C78]', surface: 'bg-[#F2E9FA] dark:bg-[#32294C]', accent: 'text-[#765096] dark:text-[#D1B8F1]' },
 ];
+
+const categoryLabels: Record<UnitPriceCategory, string> = {
+  produksi: 'Produksi',
+  'add-on': 'Add-on',
+  operasional: 'Operasional',
+  lainnya: 'Lainnya',
+};
 
 function formatCurrency(value: number) {
   return currencyFormatter.format(Number.isFinite(value) ? value : 0);
@@ -68,380 +83,345 @@ function formatNumber(value: number) {
   return numberFormatter.format(Number.isFinite(value) ? value : 0);
 }
 
-function toNonNegativeNumber(value: string) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.max(0, number) : 0;
+function toNumber(value: string) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
 }
 
-function MoneyInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
+function SettingsButton({ section, onClick }: { section: string; onClick: () => void }) {
   return (
-    <div className="relative min-w-0">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-extrabold text-[#8A8E98] dark:text-[#98A2B3]">
-        Rp
-      </span>
-      <input
-        aria-label={label}
-        type="number"
-        min="0"
-        step="50000"
-        value={value}
-        onChange={(event) => onChange(toNonNegativeNumber(event.target.value))}
-        className="h-10 w-full min-w-0 rounded-xl border border-[#DDE2EA] bg-white pl-9 pr-3 text-right text-xs font-extrabold text-[#24324A] outline-none transition focus:border-[#7F91B0] focus:ring-2 focus:ring-[#DCE7F6] dark:border-[#303742] dark:bg-[#20242C] dark:text-[#F4F6FA] dark:focus:border-[#66758A] dark:focus:ring-[#334052]"
-      />
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-3 text-[11px] font-extrabold text-[#40536F] transition hover:border-[#24324A] hover:text-[#24324A] dark:border-[#3A424E] dark:bg-[#20242C] dark:text-[#C0C9D6] dark:hover:border-[#718096] dark:hover:text-white"
+      aria-label={`Atur ${section}`}
+    >
+      <Settings2 className="h-3.5 w-3.5" /> Atur
+    </button>
   );
 }
 
-function NumberInput({
-  label,
-  value,
-  onChange,
-  step = 1,
-  suffix,
-  max,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-  step?: number;
-  suffix?: string;
-  max?: number;
-}) {
-  return (
-    <div className="relative min-w-0">
-      <input
-        aria-label={label}
-        type="number"
-        min="0"
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(toNonNegativeNumber(event.target.value))}
-        className={`h-10 w-full min-w-0 rounded-xl border border-[#DDE2EA] bg-white px-3 text-right text-xs font-extrabold text-[#24324A] outline-none transition focus:border-[#7F91B0] focus:ring-2 focus:ring-[#DCE7F6] dark:border-[#303742] dark:bg-[#20242C] dark:text-[#F4F6FA] dark:focus:border-[#66758A] dark:focus:ring-[#334052] ${suffix ? 'pr-11' : ''}`}
-      />
-      {suffix && (
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#8A8E98] dark:text-[#98A2B3]">
-          {suffix}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function SectionTitle({
-  number,
+function SummaryCard({
   title,
   description,
+  value,
+  detail,
   icon: Icon,
-  colorClass,
+  iconClass,
+  section,
+  onOpen,
 }: {
-  number: string;
   title: string;
   description: string;
+  value: string;
+  detail: string;
   icon: typeof Calculator;
-  colorClass: string;
+  iconClass: string;
+  section: FeeSettingsSection;
+  onOpen: (section: FeeSettingsSection) => void;
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-[#ECEEF2] px-4 py-4 dark:border-[#303742] sm:px-5">
-      <div className={`mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-2xl ${colorClass}`}>
-        <Icon className="h-5 w-5" />
+    <article className="rounded-2xl border border-[#E1E5EB] bg-white p-4 shadow-sm dark:border-[#303742] dark:bg-[#20242C] sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${iconClass}`}><Icon className="h-5 w-5" /></div>
+        <SettingsButton section={title} onClick={() => onOpen(section)} />
       </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8A8E98] dark:text-[#98A2B3]">Bagian {number}</p>
-        <h2 className="mt-0.5 text-base font-black text-[#24324A] dark:text-[#F4F6FA] sm:text-lg">{title}</h2>
-        <p className="mt-1 text-xs leading-5 text-[#737680] dark:text-[#98A2B3]">{description}</p>
+      <h3 className="mt-4 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{title}</h3>
+      <p className="mt-1 min-h-8 text-[11px] leading-4 text-[#737680] dark:text-[#98A2B3]">{description}</p>
+      <div className="mt-4 border-t border-[#ECEEF2] pt-3 dark:border-[#303742]">
+        <p className="text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{value}</p>
+        <p className="mt-0.5 text-[10px] text-[#737680] dark:text-[#98A2B3]">{detail}</p>
       </div>
+    </article>
+  );
+}
+
+function DashboardTab({ calculation, settings, onOpen }: { calculation: FeeCalculation; settings: FeeCalculatorSettings; onOpen: (section: FeeSettingsSection) => void }) {
+  const selectedAddOns = settings.addOnItems.filter((item) => item.quantity > 0).length;
+  const operationalCount = settings.operationalItems.filter((item) => item.amount > 0).length;
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-3xl bg-[#24324A] p-4 text-white shadow-sm dark:bg-[#111822] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[#FFAAA0]"><Sparkles className="h-4 w-4" /><span className="text-[10px] font-extrabold uppercase tracking-[0.16em]">Hasil Otomatis</span></div>
+            <h2 className="mt-2 text-xl font-black sm:text-2xl">Tiga harga paket siap dibandingkan</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-white/65">Semua angka mengikuti rate, produksi, add-on, dan operasional yang diatur melalui tombol pengaturan.</p>
+          </div>
+          <SettingsButton section="tiga paket" onClick={() => onOpen('packages')} />
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {calculation.packages.map((item, index) => {
+            const style = packageStyles[index] || packageStyles[0];
+            return (
+              <div key={item.id} className={`rounded-2xl border p-4 ${style.border} ${style.surface}`}>
+                <div className="flex items-center justify-between gap-2"><p className={`text-sm font-black ${style.accent}`}>{item.name}</p><span className="rounded-full bg-white/70 px-2 py-1 text-[9px] font-extrabold text-[#536176] dark:bg-black/15 dark:text-[#C0C9D6]">+{formatNumber(item.markupPercent)}%</span></div>
+                <p className={`mt-4 text-xl font-black ${style.accent}`}>{formatCurrency(item.allInPrice)}</p>
+                <p className="mt-1 text-[10px] text-[#536176] dark:text-[#B9C5D5]">Termasuk operasional {formatCurrency(calculation.operationalTotal)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard title="Rate & Retainer" description="Kebutuhan bulanan, jam kerja, dan target margin." value={`${formatCurrency(calculation.recommendedHourlyRate)}/jam`} detail={`Retainer ${formatCurrency(calculation.retainerTotal)} · ${formatNumber(calculation.monthlyWorkHours)} jam`} icon={CircleDollarSign} iconClass="bg-[#EAF2FF] text-[#315F98] dark:bg-[#29364A] dark:text-[#AFC9EE]" section="rate" onOpen={onOpen} />
+        <SummaryCard title="Produksi Konten" description="Jam per konten dikalikan kuantitas dan rate rekomendasi." value={formatCurrency(calculation.productionTotal)} detail={`${formatNumber(calculation.contentCount)} konten · ${formatNumber(calculation.productionHours)} jam`} icon={Film} iconClass="bg-[#FFF0ED] text-[#B64D43] dark:bg-[#3B272B] dark:text-[#FFAAA0]" section="production" onOpen={onOpen} />
+        <SummaryCard title="Add-On" description="Deliverable tambahan di luar produksi utama." value={formatCurrency(calculation.addOnTotal)} detail={`${selectedAddOns} dari ${settings.addOnItems.length} komponen digunakan`} icon={Puzzle} iconClass="bg-[#F2E9FA] text-[#765096] dark:bg-[#32294C] dark:text-[#D1B8F1]" section="addons" onOpen={onOpen} />
+        <SummaryCard title="Operasional" description="Biaya pendukung yang dipisahkan dari fee jasa." value={formatCurrency(calculation.operationalTotal)} detail={`${operationalCount} komponen bernilai aktif`} icon={Wrench} iconClass="bg-[#FFF2DF] text-[#9B6514] dark:bg-[#3D321F] dark:text-[#F2C879]" section="operational" onOpen={onOpen} />
+      </div>
+
+      <section className="grid gap-4 rounded-2xl border border-[#DCE5F2] bg-[#F4F8FD] p-4 dark:border-[#3B4A5D] dark:bg-[#2A3443] md:grid-cols-4">
+        <div><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#AAB4C5]">Kebutuhan bulanan</p><p className="mt-1 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(calculation.livingCostTotal)}</p></div>
+        <div><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#AAB4C5]">Fee jasa dasar</p><p className="mt-1 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(calculation.baseServiceFee)}</p></div>
+        <div><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#AAB4C5]">Total all-in dasar</p><p className="mt-1 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(calculation.baseAllInPrice)}</p></div>
+        <div className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-[#39785D] dark:text-[#8DD0A9]" /><p className="text-[10px] leading-4 text-[#536176] dark:text-[#B9C5D5]">Formula 4 minggu per bulan tetap sama dengan worksheet awal.</p></div>
+      </section>
     </div>
+  );
+}
+
+function CustomQuoteTab({
+  quote,
+  setQuote,
+  settings,
+  onContinue,
+}: {
+  quote: CustomQuoteDraft;
+  setQuote: React.Dispatch<React.SetStateAction<CustomQuoteDraft>>;
+  settings: FeeCalculatorSettings;
+  onContinue: () => void;
+}) {
+  const [selectedUnitId, setSelectedUnitId] = useState(settings.unitPrices[0]?.id || '');
+  const calculation = useMemo(() => calculateCustomQuote(quote), [quote]);
+  const effectiveSelectedUnitId = settings.unitPrices.some((item) => item.id === selectedUnitId)
+    ? selectedUnitId
+    : settings.unitPrices[0]?.id || '';
+
+  const addFromCatalog = () => {
+    const unit = settings.unitPrices.find((item) => item.id === effectiveSelectedUnitId);
+    if (!unit) return;
+    setQuote((current) => ({
+      ...current,
+      items: [...current.items, { id: createItemId('quote'), unitPriceId: unit.id, description: unit.label, quantity: 1, unitPrice: unit.price }],
+    }));
+  };
+
+  const addManual = () => {
+    setQuote((current) => ({ ...current, items: [...current.items, { id: createItemId('quote'), description: 'Item custom baru', quantity: 1, unitPrice: 0 }] }));
+  };
+
+  return (
+    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="min-w-0 rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+        <div className="flex flex-col gap-3 border-b border-[#ECEEF2] p-4 dark:border-[#303742] sm:flex-row sm:items-end sm:justify-between sm:p-5">
+          <div><div className="flex items-center gap-2 text-[#F26B5E]"><ReceiptText className="h-4 w-4" /><span className="text-[10px] font-extrabold uppercase tracking-[0.15em]">Custom Calculator</span></div><h2 className="mt-1 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">Susun kebutuhan customer</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Pilih dari harga patokan atau tambahkan item manual.</p></div>
+          <button type="button" onClick={addManual} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#DDE2EA] px-3 text-xs font-extrabold text-[#40536F] hover:border-[#24324A] dark:border-[#3A424E] dark:text-[#C0C9D6] dark:hover:border-[#718096]"><Plus className="h-4 w-4" /> Item manual</button>
+        </div>
+
+        <div className="p-4 sm:p-5">
+          <div className="grid gap-2 rounded-2xl bg-[#F7F8FA] p-3 dark:bg-[#282D36] sm:grid-cols-[minmax(0,1fr)_auto]">
+            <label className="min-w-0"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Ambil dari harga satuan</span><select aria-label="Pilih harga satuan" value={effectiveSelectedUnitId} onChange={(event) => setSelectedUnitId(event.target.value)} className={inputClass}><option value="">Pilih item...</option>{settings.unitPrices.map((item) => <option key={item.id} value={item.id}>{item.label} · {formatCurrency(item.price)}/{item.unit}</option>)}</select></label>
+            <button type="button" onClick={addFromCatalog} disabled={!effectiveSelectedUnitId} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#F4F6FA] dark:text-[#171A20]"><Plus className="h-4 w-4" /> Tambahkan</button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {quote.items.map((item, index) => (
+              <div key={item.id} className="rounded-2xl border border-[#E7EAF0] bg-[#FAFAFB] p-3 dark:border-[#303742] dark:bg-[#282D36]">
+                <div className="flex items-center justify-between gap-3"><span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8A8E98] dark:text-[#98A2B3]">Item {index + 1}</span><button type="button" onClick={() => setQuote((current) => ({ ...current, items: current.items.filter((candidate) => candidate.id !== item.id) }))} aria-label={`Hapus ${item.description}`} className="rounded-lg p-1.5 text-[#D95858] hover:bg-[#FFF0ED] dark:text-[#FF9393] dark:hover:bg-[#3B272B]"><Trash2 className="h-4 w-4" /></button></div>
+                <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_100px_170px]">
+                  <label><span className="mb-1.5 block text-[10px] font-bold text-[#737680] dark:text-[#98A2B3]">Deskripsi</span><input aria-label={`Deskripsi item ${index + 1}`} value={item.description} onChange={(event) => setQuote((current) => ({ ...current, items: current.items.map((candidate) => candidate.id === item.id ? { ...candidate, description: event.target.value } : candidate) }))} className={inputClass} /></label>
+                  <label><span className="mb-1.5 block text-[10px] font-bold text-[#737680] dark:text-[#98A2B3]">Qty</span><input aria-label={`Kuantitas item ${index + 1}`} type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => setQuote((current) => ({ ...current, items: current.items.map((candidate) => candidate.id === item.id ? { ...candidate, quantity: toNumber(event.target.value) } : candidate) }))} className={`${inputClass} text-right`} /></label>
+                  <label><span className="mb-1.5 block text-[10px] font-bold text-[#737680] dark:text-[#98A2B3]">Harga satuan</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-extrabold text-[#8A8E98]">Rp</span><input aria-label={`Harga item ${index + 1}`} type="number" min="0" step="50000" value={item.unitPrice} onChange={(event) => setQuote((current) => ({ ...current, items: current.items.map((candidate) => candidate.id === item.id ? { ...candidate, unitPrice: toNumber(event.target.value) } : candidate) }))} className={`${inputClass} pl-9 text-right`} /></div></label>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-[#E7EAF0] pt-2 text-[10px] dark:border-[#3A424E]"><span className="text-[#737680] dark:text-[#98A2B3]">Subtotal item</span><span className="font-black text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(item.quantity * item.unitPrice)}</span></div>
+              </div>
+            ))}
+            {quote.items.length === 0 && <div className="rounded-2xl border border-dashed border-[#CBD3DE] px-4 py-10 text-center dark:border-[#4A5361]"><ListChecks className="mx-auto h-7 w-7 text-[#AAB5C5]" /><p className="mt-3 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">Belum ada item penawaran</p><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Pilih harga satuan di atas atau tambahkan item manual.</p></div>}
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Diskon</span><div className="relative"><input aria-label="Diskon penawaran" type="number" min="0" value={quote.discountPercent} onChange={(event) => setQuote((current) => ({ ...current, discountPercent: toNumber(event.target.value) }))} className={`${inputClass} pr-10 text-right`} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#8A8E98]">%</span></div></label>
+            <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Pajak</span><div className="relative"><input aria-label="Pajak penawaran" type="number" min="0" value={quote.taxPercent} onChange={(event) => setQuote((current) => ({ ...current, taxPercent: toNumber(event.target.value) }))} className={`${inputClass} pr-10 text-right`} /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-[#8A8E98]">%</span></div></label>
+            <label className="sm:col-span-2"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Keterangan penawaran</span><textarea aria-label="Keterangan penawaran custom" rows={3} value={quote.notes} onChange={(event) => setQuote((current) => ({ ...current, notes: event.target.value }))} className={`${inputClass} h-auto resize-y py-3 leading-5`} /></label>
+          </div>
+        </div>
+      </section>
+
+      <aside className="self-start rounded-3xl bg-[#24324A] p-5 text-white shadow-sm dark:bg-[#111822] xl:sticky xl:top-4">
+        <div className="flex items-center gap-2 text-[#FFAAA0]"><Calculator className="h-4 w-4" /><span className="text-[10px] font-extrabold uppercase tracking-[0.15em]">Ringkasan Penawaran</span></div>
+        <div className="mt-5 space-y-3 text-xs">
+          <div className="flex justify-between gap-4 text-white/65"><span>Subtotal</span><strong className="text-white">{formatCurrency(calculation.subtotal)}</strong></div>
+          <div className="flex justify-between gap-4 text-white/65"><span>Diskon ({formatNumber(quote.discountPercent)}%)</span><strong className="text-white">− {formatCurrency(calculation.discount)}</strong></div>
+          <div className="flex justify-between gap-4 text-white/65"><span>Pajak ({formatNumber(quote.taxPercent)}%)</span><strong className="text-white">{formatCurrency(calculation.tax)}</strong></div>
+        </div>
+        <div className="mt-5 border-t border-white/15 pt-4"><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/50">Total penawaran</p><p className="mt-2 text-2xl font-black text-[#82D5A8]">{formatCurrency(calculation.total)}</p></div>
+        <button type="button" onClick={onContinue} disabled={quote.items.length === 0} className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#F26B5E] px-4 text-xs font-extrabold text-white transition hover:bg-[#DD5C51] disabled:cursor-not-allowed disabled:opacity-45">Lanjut ke Penawaran Harga <ArrowRight className="h-4 w-4" /></button>
+        <div className="mt-4 flex items-start gap-2 rounded-xl bg-white/8 p-3 text-[10px] leading-4 text-white/65"><Info className="mt-0.5 h-3.5 w-3.5 flex-none" /><p>Item, diskon, pajak, dan total akan otomatis masuk ke template PDF. Di halaman berikutnya tinggal lengkapi penerima dan detail dokumen.</p></div>
+      </aside>
+    </div>
+  );
+}
+
+function CatalogTab({ settings, setSettings, onEdit }: { settings: FeeCalculatorSettings; setSettings: React.Dispatch<React.SetStateAction<FeeCalculatorSettings>>; onEdit: (item?: UnitPriceItem) => void }) {
+  const grouped = useMemo(() => Object.entries(categoryLabels).map(([category, label]) => ({ category: category as UnitPriceCategory, label, items: settings.unitPrices.filter((item) => item.category === category) })).filter((group) => group.items.length > 0), [settings.unitPrices]);
+
+  const remove = (item: UnitPriceItem) => {
+    if (!window.confirm(`Hapus harga satuan “${item.label}”?`)) return;
+    setSettings((current) => ({ ...current, unitPrices: current.unitPrices.filter((candidate) => candidate.id !== item.id) }));
+  };
+
+  return (
+    <section className="rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+      <div className="flex flex-col gap-3 border-b border-[#ECEEF2] p-4 dark:border-[#303742] sm:flex-row sm:items-end sm:justify-between sm:p-5">
+        <div><div className="flex items-center gap-2 text-[#F26B5E]"><BookOpenCheck className="h-4 w-4" /><span className="text-[10px] font-extrabold uppercase tracking-[0.15em]">Price Book</span></div><h2 className="mt-1 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">Patokan harga satuan</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-[#737680] dark:text-[#98A2B3]">Katalog ini menjadi sumber harga cepat saat menyusun penawaran custom.</p></div>
+        <button type="button" onClick={() => onEdit()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white dark:bg-[#F4F6FA] dark:text-[#171A20]"><Plus className="h-4 w-4" /> Tambah harga satuan</button>
+      </div>
+      <div className="space-y-6 p-4 sm:p-5">
+        {grouped.map((group) => (
+          <div key={group.category}>
+            <div className="mb-2 flex items-center gap-2"><span className="rounded-full bg-[#EEF2F7] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#40536F] dark:bg-[#2A3443] dark:text-[#B9C5D5]">{group.label}</span><span className="text-[10px] text-[#8A8E98] dark:text-[#98A2B3]">{group.items.length} item</span></div>
+            <div className="divide-y divide-[#E7EAF0] overflow-hidden rounded-2xl border border-[#E7EAF0] dark:divide-[#303742] dark:border-[#303742]">
+              {group.items.map((item) => (
+                <div key={item.id} className="grid gap-3 bg-[#FAFAFB] p-3 dark:bg-[#282D36] sm:grid-cols-[minmax(0,1fr)_170px_auto] sm:items-center sm:p-4">
+                  <div className="min-w-0"><p className="truncate text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{item.label}</p><p className="mt-1 text-[10px] leading-4 text-[#737680] dark:text-[#98A2B3]">{item.description || 'Tanpa keterangan'}</p></div>
+                  <div><p className="text-sm font-black text-[#39785D] dark:text-[#8DD0A9]">{formatCurrency(item.price)}</p><p className="text-[10px] text-[#737680] dark:text-[#98A2B3]">per {item.unit}</p></div>
+                  <div className="flex justify-end gap-1"><button type="button" onClick={() => onEdit(item)} aria-label={`Edit ${item.label}`} className="rounded-xl p-2 text-[#40536F] hover:bg-[#EEF2F7] dark:text-[#B9C5D5] dark:hover:bg-[#2A3443]"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => remove(item)} aria-label={`Hapus ${item.label}`} className="rounded-xl p-2 text-[#D95858] hover:bg-[#FFF0ED] dark:text-[#FF9393] dark:hover:bg-[#3B272B]"><Trash2 className="h-4 w-4" /></button></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {settings.unitPrices.length === 0 && <div className="rounded-2xl border border-dashed border-[#CBD3DE] p-10 text-center dark:border-[#4A5361]"><BookOpenCheck className="mx-auto h-7 w-7 text-[#AAB5C5]" /><p className="mt-3 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">Katalog masih kosong</p><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Tambahkan harga satuan pertama untuk mulai membuat penawaran custom.</p></div>}
+      </div>
+    </section>
+  );
+}
+
+function CatalogEditorModal({ item, onChange, onSave, onClose }: { item: UnitPriceItem; onChange: (item: UnitPriceItem) => void; onSave: () => void; onClose: () => void }) {
+  return (
+    <ModalPortal onClose={onClose}>
+      <form role="dialog" aria-modal="true" aria-labelledby="catalog-editor-title" onSubmit={(event) => { event.preventDefault(); onSave(); }} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl border border-[#E1E5EB] bg-white p-5 shadow-2xl dark:border-[#3A424E] dark:bg-[#20242C] sm:max-w-xl sm:rounded-3xl sm:p-6">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#F26B5E]">Harga Satuan</p><h2 id="catalog-editor-title" className="mt-1 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{item.id ? 'Edit item katalog' : 'Tambah item katalog'}</h2><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Harga ini akan tersedia pada kalkulator penawaran custom.</p></div><button type="button" onClick={onClose} aria-label="Tutup modal" className="rounded-xl p-2 text-[#737680] hover:bg-[#F2F4F7] dark:text-[#AAB4C5] dark:hover:bg-[#282D36]"><X className="h-5 w-5" /></button></div>
+        <div className="mt-6 space-y-4">
+          <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Nama layanan</span><input required autoFocus value={item.label} onChange={(event) => onChange({ ...item, label: event.target.value })} className={inputClass} placeholder="Contoh: Reels pendek" /></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Kategori</span><select value={item.category} onChange={(event) => onChange({ ...item, category: event.target.value as UnitPriceCategory })} className={inputClass}>{Object.entries(categoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Satuan</span><input required value={item.unit} onChange={(event) => onChange({ ...item, unit: event.target.value })} className={inputClass} placeholder="konten / sesi / jam" /></label>
+          </div>
+          <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Harga fix</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-extrabold text-[#8A8E98]">Rp</span><input type="number" min="0" step="50000" value={item.price} onChange={(event) => onChange({ ...item, price: toNumber(event.target.value) })} className={`${inputClass} pl-9 text-right`} /></div></label>
+          <label><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#98A2B3]">Keterangan</span><textarea rows={3} value={item.description} onChange={(event) => onChange({ ...item, description: event.target.value })} className={`${inputClass} h-auto resize-y py-3 leading-5`} placeholder="Scope singkat untuk membantu tim memilih harga" /></label>
+        </div>
+        <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680] dark:border-[#3A424E] dark:text-[#AAB4C5]">Batal</button><button type="button" onClick={onSave} disabled={!item.label.trim() || !item.unit.trim()} className="h-10 rounded-xl bg-[#24324A] px-5 text-xs font-extrabold text-white disabled:opacity-45 dark:bg-[#F4F6FA] dark:text-[#171A20]">Simpan harga</button></div>
+      </form>
+    </ModalPortal>
   );
 }
 
 export default function FeeCalculatorPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<PageTab>('dashboard');
   const [settings, setSettings] = useState<FeeCalculatorSettings>(() => createDefaultFeeSettings());
-  const [storageReady, setStorageReady] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        const saved = window.localStorage.getItem(FEE_CALCULATOR_STORAGE_KEY);
-        if (saved) setSettings(normalizeFeeSettings(JSON.parse(saved)));
-      } catch {
-        window.localStorage.removeItem(FEE_CALCULATOR_STORAGE_KEY);
-      }
-      setStorageReady(true);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    window.localStorage.setItem(FEE_CALCULATOR_STORAGE_KEY, JSON.stringify(settings));
-  }, [settings, storageReady]);
+  const [customQuote, setCustomQuote] = useState<CustomQuoteDraft>(() => createDefaultCustomQuote());
+  const [activeSettings, setActiveSettings] = useState<FeeSettingsSection | null>(null);
+  const [catalogEditor, setCatalogEditor] = useState<UnitPriceItem | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const calculation = useMemo(() => calculateFee(settings), [settings]);
 
-  const sanityChecks = [
-    {
-      label: 'Fee jasa minimum sudah menutup living cost',
-      detail: calculation.livingCostTotal > 0
-        ? `${formatCurrency(calculation.baseServiceFee)} dibanding ${formatCurrency(calculation.livingCostTotal)}`
-        : 'Isi living cost agar pengecekan dapat dilakukan.',
-      passed: calculation.livingCostTotal > 0 && calculation.baseServiceFee >= calculation.livingCostTotal,
-    },
-    {
-      label: 'Margin profit minimal 20%',
-      detail: `Margin saat ini ${formatNumber(settings.profitMarginPercent)}%.`,
-      passed: settings.profitMarginPercent >= 20,
-    },
-    {
-      label: 'Budget operasional dipisahkan dari fee jasa',
-      detail: `${formatCurrency(calculation.operationalTotal)} ditambahkan setelah fee jasa.`,
-      passed: true,
-    },
-    {
-      label: 'Jam produksi masih dalam kapasitas retainer',
-      detail: `${formatNumber(calculation.productionHours)} dari ${formatNumber(calculation.monthlyWorkHours)} jam per bulan.`,
-      passed: calculation.monthlyWorkHours > 0 && calculation.productionHours <= calculation.monthlyWorkHours,
-    },
-  ];
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const savedSettings = window.localStorage.getItem(FEE_CALCULATOR_STORAGE_KEY);
+      const savedQuote = window.localStorage.getItem(FEE_CUSTOM_QUOTE_STORAGE_KEY);
+      const restoredSettings = savedSettings ? normalizeFeeSettings(JSON.parse(savedSettings)) : null;
+      const restoredQuote = savedQuote ? normalizeCustomQuote(JSON.parse(savedQuote)) : null;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        if (restoredSettings) setSettings(restoredSettings);
+        if (restoredQuote) setCustomQuote(restoredQuote);
+        setMounted(true);
+      });
+    } catch (error) {
+      console.warn('[Fee Calculator] Local settings could not be restored:', error);
+      queueMicrotask(() => {
+        if (!cancelled) setMounted(true);
+      });
+    }
+    return () => { cancelled = true; };
+  }, []);
 
-  const resetCalculator = () => {
-    if (!window.confirm('Kembalikan semua nilai ke template awal dari worksheet?')) return;
+  useEffect(() => {
+    if (!mounted) return;
+    window.localStorage.setItem(FEE_CALCULATOR_STORAGE_KEY, JSON.stringify(settings));
+  }, [mounted, settings]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    window.localStorage.setItem(FEE_CUSTOM_QUOTE_STORAGE_KEY, JSON.stringify(customQuote));
+  }, [customQuote, mounted]);
+
+  const resetAll = () => {
+    if (!window.confirm('Kembalikan seluruh kalkulator dan katalog ke pengaturan awal?')) return;
     setSettings(createDefaultFeeSettings());
+    setCustomQuote(createDefaultCustomQuote());
+  };
+
+  const openCatalogEditor = (item?: UnitPriceItem) => {
+    setCatalogEditor(item ? { ...item } : { id: '', label: '', category: 'produksi', unit: 'item', price: 0, description: '' });
+  };
+
+  const saveCatalogEditor = () => {
+    if (!catalogEditor || !catalogEditor.label.trim() || !catalogEditor.unit.trim()) return;
+    const normalized = { ...catalogEditor, id: catalogEditor.id || createItemId('unit'), label: catalogEditor.label.trim(), unit: catalogEditor.unit.trim(), description: catalogEditor.description.trim() };
+    setSettings((current) => ({
+      ...current,
+      unitPrices: current.unitPrices.some((item) => item.id === normalized.id)
+        ? current.unitPrices.map((item) => item.id === normalized.id ? normalized : item)
+        : [...current.unitPrices, normalized],
+    }));
+    setCatalogEditor(null);
+  };
+
+  const continueToQuote = () => {
+    const handoff: QuoteHandoff = {
+      source: 'fee-calculator',
+      createdAt: new Date().toISOString(),
+      items: customQuote.items.map((item) => ({ id: item.id, description: item.description.trim() || 'Item penawaran', quantity: item.quantity, unitPrice: item.unitPrice })),
+      discountPercent: customQuote.discountPercent,
+      taxPercent: customQuote.taxPercent,
+      notes: customQuote.notes,
+    };
+    window.localStorage.setItem(FEE_QUOTE_HANDOFF_STORAGE_KEY, JSON.stringify(handoff));
+    router.push('/quotes?prefill=fee-calculator');
   };
 
   return (
-    <div className="min-w-0 space-y-6 pb-28 animate-fade-in md:pb-10">
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
-          <div className="mb-2 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#F26B5E]">
-            <Calculator className="h-4 w-4" /> Pricing Workspace
-          </div>
-          <h1 className="text-3xl font-black tracking-tight text-[#24324A] dark:text-[#F4F6FA] sm:text-4xl">Fee Calculator</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#737680] dark:text-[#98A2B3]">
-            Hitung rate sehat, produksi, add-on, dan budget operasional berdasarkan formula worksheet. Tiga harga paket berubah otomatis saat angka diperbarui.
-          </p>
+    <div className="min-w-0 space-y-5 pb-8 animate-fade-in">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[#F26B5E]"><Calculator className="h-5 w-5" /><span className="text-[11px] font-extrabold uppercase tracking-[0.16em]">Pricing Workspace</span></div>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-[#24324A] dark:text-[#F4F6FA] sm:text-3xl">Fee Calculator</h1>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-[#737680] dark:text-[#98A2B3]">Hitung paket, susun penawaran custom, dan kelola harga satuan tanpa memenuhi halaman dengan form panjang.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-4 text-[11px] font-bold text-[#737680] shadow-sm dark:border-[#303742] dark:bg-[#20242C] dark:text-[#AAB4C5]">
-            <Save className="h-4 w-4 text-[#4F9D78]" /> {storageReady ? 'Tersimpan otomatis di perangkat' : 'Menyiapkan kalkulator...'}
-          </div>
-          <button
-            type="button"
-            onClick={resetCalculator}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-4 text-xs font-extrabold text-[#24324A] shadow-sm transition hover:bg-[#F7F8FA] dark:border-[#303742] dark:bg-[#20242C] dark:text-[#F4F6FA] dark:hover:bg-[#282D36]"
-          >
-            <RotateCcw className="h-4 w-4 text-[#F26B5E]" /> Reset Template
-          </button>
-        </div>
-      </header>
+        <div className="flex items-center gap-2"><div className="hidden items-center gap-2 text-[10px] font-bold text-[#39785D] dark:text-[#8DD0A9] sm:flex"><CheckCircle2 className="h-4 w-4" /> Tersimpan otomatis</div><button type="button" onClick={resetAll} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-3 text-xs font-extrabold text-[#40536F] hover:border-[#24324A] dark:border-[#3A424E] dark:bg-[#20242C] dark:text-[#C0C9D6] dark:hover:border-[#718096]"><RotateCcw className="h-4 w-4" /> Reset</button></div>
+      </div>
 
-      {calculation.livingCostTotal === 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-[#F1D5A8] bg-[#FFF9ED] p-4 text-[#8A5B16] dark:border-[#66502C] dark:bg-[#3D321F] dark:text-[#F2C879]">
-          <Info className="mt-0.5 h-5 w-5 flex-none" />
-          <div>
-            <p className="text-sm font-extrabold">Mulai dari living cost bulanan</p>
-            <p className="mt-1 text-xs leading-5 opacity-90">Rate dan fee jasa masih nol sampai kebutuhan hidup di Bagian 1 diisi. Budget operasional awal Rp600.000 mengikuti worksheet.</p>
-          </div>
-        </div>
-      )}
-
-      <section aria-label="Tiga hasil paket" className="grid gap-3 lg:grid-cols-3">
-        {calculation.packages.map((feePackage, index) => {
-          const style = packageStyles[index] || packageStyles[0];
-          return (
-            <article key={feePackage.id} className={`overflow-hidden rounded-3xl border bg-white shadow-sm dark:bg-[#20242C] ${style.border}`}>
-              <div className={`flex items-center justify-between gap-3 px-5 py-4 ${style.top}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${style.icon}`}>
-                    {index === 0 ? <PackageCheck className="h-5 w-5" /> : index === 1 ? <TrendingUp className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#737680] dark:text-[#AAB4C5]">Paket {index + 1}</p>
-                    <h2 className="text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{feePackage.name}</h2>
-                  </div>
-                </div>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${style.badge}`}>
-                  +{formatNumber(feePackage.markupPercent)}%
-                </span>
-              </div>
-              <div className="p-5">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#8A8E98] dark:text-[#98A2B3]">Harga all-in / bulan</p>
-                <p className={`mt-1 break-words text-2xl font-black tracking-tight sm:text-3xl ${style.accent}`}>{formatCurrency(feePackage.allInPrice)}</p>
-                <div className="mt-4 space-y-2 border-t border-[#ECEEF2] pt-4 text-xs dark:border-[#303742]">
-                  <div className="flex items-center justify-between gap-3 text-[#737680] dark:text-[#AAB4C5]"><span>Fee jasa dasar</span><span className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(calculation.baseServiceFee)}</span></div>
-                  <div className="flex items-center justify-between gap-3 text-[#737680] dark:text-[#AAB4C5]"><span>Markup paket</span><span className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(feePackage.markupAmount)}</span></div>
-                  <div className="flex items-center justify-between gap-3 text-[#737680] dark:text-[#AAB4C5]"><span>Operasional</span><span className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{formatCurrency(calculation.operationalTotal)}</span></div>
-                </div>
-              </div>
-            </article>
-          );
+      <nav aria-label="Tab Fee Calculator" className="flex min-w-0 gap-2 overflow-x-auto rounded-2xl border border-[#E1E5EB] bg-white p-1.5 shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          const active = tab === item.id;
+          return <button key={item.id} type="button" onClick={() => setTab(item.id)} className={`inline-flex h-10 min-w-fit flex-1 items-center justify-center gap-2 rounded-xl px-3 text-xs font-extrabold transition ${active ? 'bg-[#24324A] text-white shadow-sm dark:bg-[#F4F6FA] dark:text-[#171A20]' : 'text-[#737680] hover:bg-[#F4F6F9] hover:text-[#24324A] dark:text-[#98A2B3] dark:hover:bg-[#282D36] dark:hover:text-white'}`}><Icon className="h-4 w-4" /><span className="hidden sm:inline">{item.label}</span><span className="sm:hidden">{item.compactLabel}</span></button>;
         })}
-      </section>
+      </nav>
 
-      <section aria-label="Ringkasan komponen harga" className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        {[
-          { label: 'Rate Rekomendasi', value: `${formatCurrency(calculation.recommendedHourlyRate)}/jam`, icon: Clock3, color: 'text-[#315F98]', bg: 'bg-[#EAF2FF] dark:bg-[#29364A]' },
-          { label: 'Retainer', value: formatCurrency(calculation.retainerTotal), icon: WalletCards, color: 'text-[#39785D]', bg: 'bg-[#E7F4ED] dark:bg-[#1E392C]' },
-          { label: 'Produksi', value: formatCurrency(calculation.productionTotal), icon: Film, color: 'text-[#B64D43]', bg: 'bg-[#FFF0ED] dark:bg-[#3B272B]' },
-          { label: 'Add-On', value: formatCurrency(calculation.addOnTotal), icon: Puzzle, color: 'text-[#765096]', bg: 'bg-[#F2E9FA] dark:bg-[#32294C]' },
-          { label: 'Operasional', value: formatCurrency(calculation.operationalTotal), icon: Wrench, color: 'text-[#9B6514]', bg: 'bg-[#FFF2DF] dark:bg-[#3D321F]' },
-        ].map((item) => (
-          <article key={item.label} className="rounded-2xl border border-[#E1E5EB] bg-white p-4 shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-            <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${item.bg}`}><item.icon className={`h-4 w-4 ${item.color}`} /></div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#8A8E98] dark:text-[#98A2B3]">{item.label}</p>
-            <p className="mt-1 break-words text-sm font-black text-[#24324A] dark:text-[#F4F6FA] sm:text-base">{item.value}</p>
-          </article>
-        ))}
-      </section>
+      {tab === 'dashboard' && <DashboardTab calculation={calculation} settings={settings} onOpen={setActiveSettings} />}
+      {tab === 'custom' && <CustomQuoteTab quote={customQuote} setQuote={setCustomQuote} settings={settings} onContinue={continueToQuote} />}
+      {tab === 'catalog' && <CatalogTab settings={settings} setSettings={setSettings} onEdit={openCatalogEditor} />}
 
-      <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-        <SectionTitle number="1" title="Rate & Retainer" description="Formula worksheet: living cost ÷ jam kerja bulanan, lalu ditambah target margin profit." icon={CircleDollarSign} colorClass="bg-[#EAF2FF] text-[#315F98] dark:bg-[#29364A] dark:text-[#AFC9EE]" />
-        <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]">
-          <div>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-xs font-black uppercase tracking-[0.12em] text-[#24324A] dark:text-[#F4F6FA]">Kebutuhan hidup bulanan</h3>
-              <span className="text-xs font-black text-[#315F98] dark:text-[#AFC9EE]">{formatCurrency(calculation.livingCostTotal)}</span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {settings.livingCosts.map((item) => (
-                <label key={item.id} className="rounded-2xl border border-[#E7EAF0] bg-[#FAFAFB] p-3 dark:border-[#303742] dark:bg-[#282D36]">
-                  <span className="block text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{item.label}</span>
-                  <span className="mb-2 mt-0.5 block min-h-4 text-[10px] leading-4 text-[#8A8E98] dark:text-[#98A2B3]">{item.description}</span>
-                  <MoneyInput
-                    label={item.label}
-                    value={item.amount}
-                    onChange={(amount) => setSettings((current) => ({
-                      ...current,
-                      livingCosts: current.livingCosts.map((candidate) => candidate.id === item.id ? { ...candidate, amount } : candidate),
-                    }))}
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-[#E7EAF0] bg-[#F7F8FA] p-4 dark:border-[#303742] dark:bg-[#282D36]">
-              <h3 className="text-xs font-black uppercase tracking-[0.12em] text-[#24324A] dark:text-[#F4F6FA]">Pengaturan jam & margin</h3>
-              <div className="mt-4 space-y-3">
-                <label className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3"><span className="text-xs font-bold text-[#626874] dark:text-[#AAB4C5]">Jam kerja / hari</span><NumberInput label="Jam kerja per hari" value={settings.hoursPerDay} step={0.5} max={24} suffix="jam" onChange={(hoursPerDay) => setSettings((current) => ({ ...current, hoursPerDay }))} /></label>
-                <label className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3"><span className="text-xs font-bold text-[#626874] dark:text-[#AAB4C5]">Hari kerja / minggu</span><NumberInput label="Hari kerja per minggu" value={settings.daysPerWeek} max={7} suffix="hari" onChange={(daysPerWeek) => setSettings((current) => ({ ...current, daysPerWeek }))} /></label>
-                <label className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3"><span className="text-xs font-bold text-[#626874] dark:text-[#AAB4C5]">Target margin profit</span><NumberInput label="Target margin profit" value={settings.profitMarginPercent} max={300} suffix="%" onChange={(profitMarginPercent) => setSettings((current) => ({ ...current, profitMarginPercent }))} /></label>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-[#24324A] p-4 text-white dark:bg-[#111822]">
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between gap-3 text-white/70"><span>Total jam / bulan</span><span className="font-extrabold text-white">{formatNumber(calculation.monthlyWorkHours)} jam</span></div>
-                <div className="flex justify-between gap-3 text-white/70"><span>Rate minimum</span><span className="font-extrabold text-white">{formatCurrency(calculation.minimumHourlyRate)}</span></div>
-                <div className="border-t border-white/10 pt-3"><p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/60">Rate rekomendasi</p><p className="mt-1 text-2xl font-black text-[#7FD0A6]">{formatCurrency(calculation.recommendedHourlyRate)}<span className="text-xs text-white/60">/jam</span></p></div>
-                <div className="flex justify-between gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-white/70"><span>Subtotal retainer</span><span className="font-black text-white">{formatCurrency(calculation.retainerTotal)}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-        <SectionTitle number="2" title="Produksi Konten" description="Setiap biaya dihitung dari jam produksi per konten × jumlah konten × rate rekomendasi." icon={Film} colorClass="bg-[#FFF0ED] text-[#B64D43] dark:bg-[#3B272B] dark:text-[#FFAAA0]" />
-        <div className="p-4 sm:p-5">
-          <div className="hidden grid-cols-[minmax(0,1fr)_130px_130px_170px] gap-3 px-3 pb-2 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#8A8E98] dark:text-[#98A2B3] lg:grid">
-            <span>Jenis konten</span><span className="text-right">Jam / konten</span><span className="text-right">Jumlah / bulan</span><span className="text-right">Total biaya</span>
-          </div>
-          <div className="space-y-2">
-            {settings.productionItems.map((item) => {
-              const total = item.hoursPerItem * item.quantity * calculation.recommendedHourlyRate;
-              return (
-                <div key={item.id} className="grid gap-3 rounded-2xl border border-[#E7EAF0] bg-[#FAFAFB] p-3 dark:border-[#303742] dark:bg-[#282D36] lg:grid-cols-[minmax(0,1fr)_130px_130px_170px] lg:items-center">
-                  <div><p className="text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{item.label}</p><p className="mt-0.5 text-[10px] text-[#8A8E98] dark:text-[#98A2B3] lg:hidden">Atur jam dan jumlah konten</p></div>
-                  <label><span className="mb-1 block text-[9px] font-bold uppercase text-[#8A8E98] dark:text-[#98A2B3] lg:hidden">Jam / konten</span><NumberInput label={`Jam produksi ${item.label}`} value={item.hoursPerItem} step={0.25} suffix="jam" onChange={(hoursPerItem) => setSettings((current) => ({ ...current, productionItems: current.productionItems.map((candidate) => candidate.id === item.id ? { ...candidate, hoursPerItem } : candidate) }))} /></label>
-                  <label><span className="mb-1 block text-[9px] font-bold uppercase text-[#8A8E98] dark:text-[#98A2B3] lg:hidden">Jumlah / bulan</span><NumberInput label={`Jumlah ${item.label}`} value={item.quantity} suffix="item" onChange={(quantity) => setSettings((current) => ({ ...current, productionItems: current.productionItems.map((candidate) => candidate.id === item.id ? { ...candidate, quantity } : candidate) }))} /></label>
-                  <div className="flex h-10 items-center justify-between rounded-xl bg-[#EEF8F3] px-3 text-xs dark:bg-[#1E392C] lg:justify-end"><span className="font-bold text-[#5E6470] dark:text-[#AAB4C5] lg:hidden">Total</span><span className="font-black text-[#39785D] dark:text-[#8DD0A9]">{formatCurrency(total)}</span></div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-[#F7F8FA] p-4 dark:bg-[#282D36]"><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#8A8E98] dark:text-[#98A2B3]">Total konten</p><p className="mt-1 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{formatNumber(calculation.contentCount)} konten</p></div>
-            <div className="rounded-2xl bg-[#F7F8FA] p-4 dark:bg-[#282D36]"><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#8A8E98] dark:text-[#98A2B3]">Beban produksi</p><p className="mt-1 text-lg font-black text-[#24324A] dark:text-[#F4F6FA]">{formatNumber(calculation.productionHours)} jam</p><p className="text-[10px] text-[#8A8E98] dark:text-[#98A2B3]">≈ {formatNumber(calculation.equivalentProductionDays)} hari kerja</p></div>
-            <div className="rounded-2xl bg-[#24324A] p-4 text-white dark:bg-[#111822]"><p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-white/60">Subtotal produksi</p><p className="mt-1 text-lg font-black text-white">{formatCurrency(calculation.productionTotal)}</p></div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-          <SectionTitle number="3" title="Add-On & Deliverable" description="Harga × kuantitas yang digunakan untuk klien ini." icon={Puzzle} colorClass="bg-[#F2E9FA] text-[#765096] dark:bg-[#32294C] dark:text-[#D1B8F1]" />
-          <div className="space-y-2 p-4 sm:p-5">
-            {settings.addOnItems.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-[#E7EAF0] bg-[#FAFAFB] p-3 dark:border-[#303742] dark:bg-[#282D36]">
-                <p className="text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{item.label}</p>
-                <div className="mt-2 grid grid-cols-[minmax(0,1fr)_90px] gap-2">
-                  <MoneyInput label={`Harga ${item.label}`} value={item.price} onChange={(price) => setSettings((current) => ({ ...current, addOnItems: current.addOnItems.map((candidate) => candidate.id === item.id ? { ...candidate, price } : candidate) }))} />
-                  <NumberInput label={`Kuantitas ${item.label}`} value={item.quantity} suffix="×" onChange={(quantity) => setSettings((current) => ({ ...current, addOnItems: current.addOnItems.map((candidate) => candidate.id === item.id ? { ...candidate, quantity } : candidate) }))} />
-                </div>
-                <div className="mt-2 flex justify-between gap-3 text-[10px] text-[#8A8E98] dark:text-[#98A2B3]"><span>Subtotal</span><span className="font-extrabold text-[#765096] dark:text-[#D1B8F1]">{formatCurrency(item.price * item.quantity)}</span></div>
-              </div>
-            ))}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#765096] px-4 py-3 text-white dark:bg-[#493A68]"><span className="text-xs font-extrabold uppercase tracking-[0.1em]">Total Add-On</span><span className="text-base font-black">{formatCurrency(calculation.addOnTotal)}</span></div>
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-          <SectionTitle number="4" title="Budget Operasional" description="Biaya pendukung wajib dipisahkan dari fee jasa dan idealnya ditanggung klien." icon={Wrench} colorClass="bg-[#FFF2DF] text-[#9B6514] dark:bg-[#3D321F] dark:text-[#F2C879]" />
-          <div className="space-y-2 p-4 sm:p-5">
-            {settings.operationalItems.map((item) => (
-              <label key={item.id} className="block rounded-2xl border border-[#E7EAF0] bg-[#FAFAFB] p-3 dark:border-[#303742] dark:bg-[#282D36]">
-                <div className="mb-2"><span className="block text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{item.label}</span><span className="mt-0.5 block text-[10px] leading-4 text-[#8A8E98] dark:text-[#98A2B3]">{item.description}</span></div>
-                <MoneyInput label={item.label} value={item.amount} onChange={(amount) => setSettings((current) => ({ ...current, operationalItems: current.operationalItems.map((candidate) => candidate.id === item.id ? { ...candidate, amount } : candidate) }))} />
-              </label>
-            ))}
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#E07A00] px-4 py-3 text-white dark:bg-[#9A5A0C]"><span className="text-xs font-extrabold uppercase tracking-[0.1em]">Total Operasional</span><span className="text-base font-black">{formatCurrency(calculation.operationalTotal)}</span></div>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-          <SectionTitle number="5" title="Pengaturan Tiga Paket" description="Markup diterapkan hanya pada fee jasa dasar; budget operasional tetap ditambahkan terpisah." icon={PackageCheck} colorClass="bg-[#E7F4ED] text-[#39785D] dark:bg-[#1E392C] dark:text-[#8DD0A9]" />
-          <div className="grid gap-3 p-4 sm:p-5 xl:grid-cols-3">
-            {settings.packages.map((item, index) => {
-              const style = packageStyles[index] || packageStyles[0];
-              return (
-                <div key={item.id} className={`rounded-2xl border p-4 ${style.border} ${style.top}`}>
-                  <label className="block"><span className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#AAB4C5]">Nama paket</span><input aria-label={`Nama paket ${index + 1}`} value={item.name} onChange={(event) => setSettings((current) => ({ ...current, packages: current.packages.map((candidate) => candidate.id === item.id ? { ...candidate, name: event.target.value } : candidate) }))} className="h-10 w-full rounded-xl border border-white/70 bg-white px-3 text-xs font-extrabold text-[#24324A] outline-none focus:border-[#7F91B0] dark:border-[#4A5361] dark:bg-[#20242C] dark:text-[#F4F6FA]" /></label>
-                  <label className="mt-3 block"><span className="mb-1.5 block text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#737680] dark:text-[#AAB4C5]">Markup fee jasa</span><NumberInput label={`Markup ${item.name}`} value={item.markupPercent} max={300} suffix="%" onChange={(markupPercent) => setSettings((current) => ({ ...current, packages: current.packages.map((candidate) => candidate.id === item.id ? { ...candidate, markupPercent } : candidate) }))} /></label>
-                  <p className={`mt-3 text-sm font-black ${style.accent}`}>{formatCurrency(calculation.packages[index]?.allInPrice || 0)}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-sm dark:border-[#303742] dark:bg-[#20242C]">
-          <div className="border-b border-[#ECEEF2] px-4 py-4 dark:border-[#303742] sm:px-5"><div className="flex items-center gap-2"><CheckCircle2 className="h-5 w-5 text-[#4F9D78]" /><h2 className="text-base font-black text-[#24324A] dark:text-[#F4F6FA]">Sanity Check Proposal</h2></div><p className="mt-1 text-xs text-[#737680] dark:text-[#98A2B3]">Pengecekan otomatis mengikuti dashboard worksheet.</p></div>
-          <div className="space-y-2 p-4 sm:p-5">
-            {sanityChecks.map((check) => (
-              <div key={check.label} className={`flex items-start gap-3 rounded-2xl border p-3 ${check.passed ? 'border-[#CDE7D9] bg-[#EEF8F3] dark:border-[#315D49] dark:bg-[#1E392C]' : 'border-[#F1D5A8] bg-[#FFF9ED] dark:border-[#66502C] dark:bg-[#3D321F]'}`}>
-                {check.passed ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-[#39785D] dark:text-[#8DD0A9]" /> : <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-[#A46D18] dark:text-[#F2C879]" />}
-                <div><p className="text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">{check.label}</p><p className="mt-0.5 text-[10px] leading-4 text-[#737680] dark:text-[#AAB4C5]">{check.detail}</p></div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-2xl border border-[#DCE5F2] bg-[#F4F8FD] p-4 text-xs leading-5 text-[#536176] dark:border-[#3B4A5D] dark:bg-[#2A3443] dark:text-[#B9C5D5]">
-        <Info className="mt-0.5 h-4 w-4 flex-none text-[#315F98] dark:text-[#AFC9EE]" />
-        <p><span className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Catatan formula:</span> satu bulan dihitung sebagai 4 minggu seperti worksheet. Harga paket = retainer + produksi + add-on + markup paket, kemudian budget operasional ditambahkan sebagai komponen terpisah.</p>
-      </div>
+      {activeSettings && <FeeSettingsModal section={activeSettings} settings={settings} calculation={calculation} onChange={setSettings} onClose={() => setActiveSettings(null)} />}
+      {catalogEditor && <CatalogEditorModal item={catalogEditor} onChange={setCatalogEditor} onSave={saveCatalogEditor} onClose={() => setCatalogEditor(null)} />}
     </div>
   );
 }

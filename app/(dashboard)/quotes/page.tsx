@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { EditorAccordion } from '@/components/ui/EditorAccordion';
+import {
+  FEE_QUOTE_HANDOFF_STORAGE_KEY,
+  type QuoteHandoff,
+} from '@/lib/fee-calculator';
 
 type QuoteItem = {
   id: string;
@@ -340,6 +344,34 @@ function writeLocalRecords(workspaceId: string, records: QuoteRecord[]) {
   localStorage.setItem(`${LOCAL_STORAGE_KEY}:${workspaceId}`, JSON.stringify(records));
 }
 
+function readFeeQuoteHandoff(): QuoteHandoff | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = JSON.parse(localStorage.getItem(FEE_QUOTE_HANDOFF_STORAGE_KEY) || 'null');
+    if (!raw || typeof raw !== 'object' || raw.source !== 'fee-calculator' || !Array.isArray(raw.items)) return null;
+    const items = raw.items.map((item: unknown, index: number) => {
+      const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      return {
+        id: toText(row.id, `fee-item-${index}-${Date.now()}`),
+        description: toText(row.description, `Item penawaran ${index + 1}`),
+        quantity: Math.max(0, toNumber(row.quantity, 1)),
+        unitPrice: Math.max(0, toNumber(row.unitPrice, 0)),
+      };
+    });
+    if (items.length === 0) return null;
+    return {
+      source: 'fee-calculator',
+      createdAt: toText(raw.createdAt, new Date().toISOString()),
+      items,
+      discountPercent: Math.max(0, toNumber(raw.discountPercent, 0)),
+      taxPercent: Math.max(0, toNumber(raw.taxPercent, 0)),
+      notes: toText(raw.notes, 'Harga dan ruang lingkup dapat disesuaikan berdasarkan kebutuhan proyek.'),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function compressImage(file: File, maxDimension = 1400, quality = 0.86) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -380,6 +412,8 @@ const inputClass =
 
 export default function QuotesPage() {
   const previewRef = useRef<HTMLDivElement>(null);
+  const selectedIdRef = useRef('');
+  const protectImportedDraftRef = useRef(false);
   const [mounted, setMounted] = useState(false);
   const [workspaceId, setWorkspaceId] = useState('bilik-strategi');
   const [records, setRecords] = useState<QuoteRecord[]>([]);
@@ -418,34 +452,50 @@ export default function QuotesPage() {
       const nextRecords = Array.isArray(data) ? data.map((item) => normalizeRecord(item, workspaceId)) : [];
       if (nextRecords.length > 0) {
         setRecords(nextRecords);
-        const selected = nextRecords.find((item) => item.id === selectedId) || nextRecords[0];
-        setSelectedId(selected.id);
-        setDraft(selected.data);
+        if (!protectImportedDraftRef.current) {
+          const selected = nextRecords.find((item) => item.id === selectedIdRef.current) || nextRecords[0];
+          selectedIdRef.current = selected.id;
+          setSelectedId(selected.id);
+          setDraft(selected.data);
+        }
         writeLocalRecords(workspaceId, nextRecords);
       } else if (localRecords.length > 0) {
         setRecords(localRecords);
-        setSelectedId(localRecords[0].id);
-        setDraft(localRecords[0].data);
+        if (!protectImportedDraftRef.current) {
+          const selected = localRecords.find((item) => item.id === selectedIdRef.current) || localRecords[0];
+          selectedIdRef.current = selected.id;
+          setSelectedId(selected.id);
+          setDraft(selected.data);
+        }
       } else {
         setRecords([]);
-        setSelectedId('');
+        if (!protectImportedDraftRef.current) {
+          selectedIdRef.current = '';
+          setSelectedId('');
+        }
       }
     } catch (error: any) {
       console.warn('[Quotes] Supabase load failed, using local recovery:', error?.message || error);
       setRecords(localRecords);
-      if (localRecords.length > 0) {
-        setSelectedId(localRecords[0].id);
-        setDraft(localRecords[0].data);
+      if (localRecords.length > 0 && !protectImportedDraftRef.current) {
+        const selected = localRecords.find((item) => item.id === selectedIdRef.current) || localRecords[0];
+        selectedIdRef.current = selected.id;
+        setSelectedId(selected.id);
+        setDraft(selected.data);
       }
     } finally {
       setLoading(false);
     }
-  }, [selectedId, workspaceId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     setMounted(true);
     setWorkspaceId(getWorkspaceId());
   }, []);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -479,6 +529,31 @@ export default function QuotesPage() {
         : current
     ));
   }, [mounted, records.length, selectedId]);
+
+  useEffect(() => {
+    if (!mounted || loading || protectImportedDraftRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('prefill') !== 'fee-calculator') return;
+
+    const handoff = readFeeQuoteHandoff();
+    if (!handoff) {
+      setMessage({ type: 'error', text: 'Draft dari Fee Calculator tidak ditemukan atau sudah digunakan.' });
+      return;
+    }
+
+    const imported = createDefaultQuote();
+    imported.items = handoff.items.map((item) => ({ ...item }));
+    imported.discountPercent = handoff.discountPercent;
+    imported.taxPercent = handoff.taxPercent;
+    imported.notes = handoff.notes;
+    protectImportedDraftRef.current = true;
+    selectedIdRef.current = '';
+    setSelectedId('');
+    setDraft(imported);
+    setMessage({ type: 'success', text: 'Rincian harga dari Fee Calculator sudah dimasukkan. Lengkapi penerima, lalu simpan atau export PDF.' });
+    localStorage.removeItem(FEE_QUOTE_HANDOFF_STORAGE_KEY);
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }, [loading, mounted]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -575,6 +650,8 @@ export default function QuotesPage() {
   };
 
   const startNewQuote = () => {
+    protectImportedDraftRef.current = true;
+    selectedIdRef.current = '';
     setSelectedId('');
     setDraft(createDefaultQuote());
     setMessage({ type: 'info', text: 'Draft penawaran baru siap diedit. Simpan untuk memasukkannya ke daftar.' });
@@ -604,6 +681,8 @@ export default function QuotesPage() {
 
       if (result.error) throw result.error;
       const savedRecord = normalizeRecord(result.data, workspaceId);
+      protectImportedDraftRef.current = false;
+      selectedIdRef.current = savedRecord.id;
       setRecords((current) => [savedRecord, ...current.filter((item) => item.id !== savedRecord.id && item.quote_number !== savedRecord.quote_number)]);
       setSelectedId(savedRecord.id);
       setDraft(savedRecord.data);
@@ -622,6 +701,8 @@ export default function QuotesPage() {
         workspaceId,
       );
       const nextRecords = [localRecord, ...records.filter((item) => item.id !== selectedRecord?.id && item.quote_number !== quoteNumber)];
+      protectImportedDraftRef.current = false;
+      selectedIdRef.current = localRecord.id;
       setRecords(nextRecords);
       setSelectedId(localRecord.id);
       setDraft(localRecord.data);
@@ -695,6 +776,8 @@ export default function QuotesPage() {
   };
 
   const selectRecord = (record: QuoteRecord) => {
+    protectImportedDraftRef.current = false;
+    selectedIdRef.current = record.id;
     setSelectedId(record.id);
     setDraft(record.data);
     setMessage(null);
