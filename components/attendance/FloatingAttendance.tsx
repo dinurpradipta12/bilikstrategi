@@ -662,10 +662,14 @@ export default function FloatingAttendance() {
           ) : (
             <Clock3 className={`h-5 w-5 md:h-6 md:w-6 ${error && !viewer ? 'text-[#D29232]' : 'text-[#D95346] dark:text-white'}`} />
           )}
-          {!session && !initializing && (
-            <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#FFF0ED] bg-[#4F9D78] md:bottom-1 md:right-1 md:h-3 md:w-3 dark:border-[#F26B5E]" />
-          )}
         </button>
+        {!session && !initializing && (
+          <span
+            aria-hidden="true"
+            data-floating-attendance-status-dot
+            className="pointer-events-none absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#FFF0ED] bg-[#4F9D78] shadow-sm md:h-3.5 md:w-3.5 dark:!border-[#20242C] dark:!bg-[#F4C95D]"
+          />
+        )}
       </div>
     </div>
   );
