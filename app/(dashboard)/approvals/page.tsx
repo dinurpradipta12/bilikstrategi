@@ -356,7 +356,7 @@ export default function ApprovalsPage() {
               const CategoryIcon = category.icon;
               const StatusIcon = status.icon;
               return (
-                <article key={request.id} className="p-4 transition hover:bg-[#FAFAFB] sm:p-5">
+                <article key={request.id} className="p-4 transition hover:bg-[#FAFAFB] dark:hover:bg-[#282D36] sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className="h-11 w-11 flex-none overflow-hidden rounded-2xl bg-gradient-to-br from-[#D8E5FF] to-[#F2DBEE] ring-1 ring-white">
