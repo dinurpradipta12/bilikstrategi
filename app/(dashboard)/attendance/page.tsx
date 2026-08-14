@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -9,7 +9,6 @@ import {
   Pause,
   Square,
   Calendar,
-  CheckCircle2,
   AlertCircle,
   Briefcase,
   FileText,
@@ -19,8 +18,6 @@ import {
   Sparkles,
   FileCheck2,
   UserX,
-  Stethoscope,
-  Umbrella,
   Send,
   X,
   ShieldCheck,
@@ -36,6 +33,11 @@ import {
   ChevronDown,
   ChevronUp,
   Target,
+  Eye,
+  Monitor,
+  MousePointer2,
+  Power,
+  WifiOff,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
@@ -44,6 +46,12 @@ import {
   type AttendanceSchedule,
   type WorkDaySchedule,
 } from '@/lib/attendance/schedule';
+import {
+  formatPresenceAge,
+  presenceStateRank,
+  resolvePresenceSnapshot,
+  type PresenceState,
+} from '@/lib/attendance/presence';
 
 export interface AttendanceRecord {
   id: string;
@@ -75,7 +83,126 @@ interface TeamMemberStatus {
   accumulatedSeconds?: number;
   project?: string;
   statusText?: string;
+  lastSeenAt?: string;
+  lastActivityAt?: string;
+  lastForegroundAt?: string;
+  currentPath?: string;
+  currentPageLabel?: string;
+  deviceType?: string;
+  appMode?: string;
 }
+
+interface AttendanceActivityEvent {
+  id: string;
+  event_type: 'page_view' | 'interaction' | 'forced_checkout';
+  page_path?: string;
+  page_label?: string;
+  device_type?: string;
+  app_mode?: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+interface ActiveSessionSnapshot {
+  user_name: string;
+  user_email?: string;
+  user_avatar?: string;
+  checkInTime: string;
+  checkInTimestamp: number;
+  isPaused?: boolean;
+  pausedAt?: string | null;
+  accumulatedSeconds?: number;
+  selectedProject: string;
+  notesInput: string;
+  lastSeenAt?: string;
+  lastActivityAt?: string;
+  lastForegroundAt?: string;
+  currentPath?: string;
+  currentPageLabel?: string;
+  deviceType?: string;
+  appMode?: string;
+}
+
+interface ClickUpProjectSummary {
+  name?: string;
+}
+
+interface ClickUpMemberSummary {
+  id: string | number;
+  username?: string;
+  email?: string;
+  role?: number;
+  profilePicture?: string;
+}
+
+interface PresenceStateApiRow {
+  user_email?: string;
+  user_name?: string;
+  session_check_in_timestamp?: number;
+  last_seen_at?: string;
+  last_activity_at?: string;
+  last_foreground_at?: string;
+  current_path?: string;
+  current_page_label?: string;
+  device_type?: string;
+  app_mode?: string;
+}
+
+const PRESENCE_VISUALS: Record<PresenceState, {
+  label: string;
+  badge: string;
+  card: string;
+  dot: string;
+}> = {
+  active: {
+    label: 'Aktif di app',
+    badge: 'border-[#4F9D78]/30 bg-[#4F9D78]/10 text-[#347A59] dark:text-[#72D6A5]',
+    card: 'border-[#4F9D78]/40 bg-white dark:border-[#4F9D78]/45 dark:bg-[#1C2522]',
+    dot: 'bg-[#4F9D78]',
+  },
+  idle: {
+    label: 'Idle',
+    badge: 'border-[#E6A23C]/35 bg-[#E6A23C]/10 text-[#A66A14] dark:text-[#F1BA64]',
+    card: 'border-[#E6A23C]/40 bg-[#FFFBF2] dark:border-[#E6A23C]/45 dark:bg-[#292319]',
+    dot: 'bg-[#E6A23C]',
+  },
+  away: {
+    label: 'Away dari app',
+    badge: 'border-[#D98A4E]/35 bg-[#D98A4E]/10 text-[#A45D26] dark:text-[#F0A56D]',
+    card: 'border-[#D98A4E]/35 bg-[#FFF8F2] dark:border-[#D98A4E]/40 dark:bg-[#2A211C]',
+    dot: 'bg-[#D98A4E]',
+  },
+  needs_review: {
+    label: 'Perlu dicek',
+    badge: 'border-[#D95858]/35 bg-[#D95858]/10 text-[#B13E3E] dark:text-[#FF8585]',
+    card: 'border-[#D95858]/40 bg-[#FFF6F6] dark:border-[#D95858]/45 dark:bg-[#2B1D20]',
+    dot: 'bg-[#D95858]',
+  },
+  critical: {
+    label: 'Idle kritis',
+    badge: 'border-[#D95858]/50 bg-[#D95858]/15 text-[#A92F2F] dark:text-[#FF7777]',
+    card: 'border-[#D95858]/55 bg-[#FFF0F0] dark:border-[#D95858]/60 dark:bg-[#321C20]',
+    dot: 'bg-[#D95858] animate-pulse',
+  },
+  paused: {
+    label: 'Presensi dijeda',
+    badge: 'border-[#7B68EE]/35 bg-[#7B68EE]/10 text-[#6654CF] dark:text-[#A99CFF]',
+    card: 'border-[#7B68EE]/35 bg-[#F8F6FF] dark:border-[#7B68EE]/40 dark:bg-[#211F2D]',
+    dot: 'bg-[#7B68EE]',
+  },
+  untracked: {
+    label: 'Belum terpantau',
+    badge: 'border-[#8A8E98]/30 bg-[#8A8E98]/10 text-[#666B75] dark:text-[#B4BBC7]',
+    card: 'border-[#D7DAE0] bg-[#FAFAFB] dark:border-[#3A414D] dark:bg-[#1D2128]',
+    dot: 'bg-[#8A8E98]',
+  },
+  offline: {
+    label: 'Belum check-in',
+    badge: 'border-[#D7DAE0] bg-[#F7F7F8] text-[#737680] dark:border-[#3A414D] dark:bg-[#20242C] dark:text-[#98A2B3]',
+    card: 'border-[#E8E8EC] bg-[#F7F7F8] opacity-80 dark:border-[#303742] dark:bg-[#1A1E25]',
+    dot: 'bg-[#737680]',
+  },
+};
 
 export default function AttendancePage() {
   const [currentUser, setCurrentUser] = useState<{
@@ -128,6 +255,20 @@ export default function AttendancePage() {
 
   // Live Team Active Presensi List (Admin View)
   const [teamStatusList, setTeamStatusList] = useState<TeamMemberStatus[]>([]);
+  const [presenceClock, setPresenceClock] = useState<number>(0);
+  const [expandedActivityMemberId, setExpandedActivityMemberId] = useState<string | null>(null);
+  const [memberActivity, setMemberActivity] = useState<Record<string, AttendanceActivityEvent[]>>({});
+  const [activityLoadingId, setActivityLoadingId] = useState<string | null>(null);
+  const [activityError, setActivityError] = useState<Record<string, string>>({});
+  const [forceCheckoutTarget, setForceCheckoutTarget] = useState<TeamMemberStatus | null>(null);
+  const [forceCheckoutReason, setForceCheckoutReason] = useState('Lupa checkout / sesi tidak lagi aktif.');
+  const [forceCheckoutAtLastActivity, setForceCheckoutAtLastActivity] = useState(false);
+  const [forceCheckoutSaving, setForceCheckoutSaving] = useState(false);
+  const [forceCheckoutError, setForceCheckoutError] = useState('');
+  const managerPresenceCacheRef = useRef<{
+    fetchedAt: number;
+    rows: PresenceStateApiRow[];
+  }>({ fetchedAt: 0, rows: [] });
 
   // Admin Features & Multi-User Attendance History Monitor
   const [allUsersHistory, setAllUsersHistory] = useState<AttendanceRecord[]>([]);
@@ -161,24 +302,31 @@ export default function AttendancePage() {
   const createAvatarUrl = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=24324A&color=fff`;
 
-  const buildMemberFromActiveSession = (active: any): TeamMemberStatus => {
+  const buildMemberFromActiveSession = (active: ActiveSessionSnapshot): TeamMemberStatus => {
     const name = active.user_name || 'User';
     const isCurrentUser = normalizeMemberKey(name) === normalizeMemberKey(currentUser.username);
 
     return {
       id: isCurrentUser ? currentUser.id : `active-${normalizeMemberKey(name) || Date.now()}`,
       name,
-      email: isCurrentUser ? currentUser.email : '',
+      email: active.user_email || (isCurrentUser ? currentUser.email : ''),
       role: isCurrentUser ? currentUser.role : 'Member',
       avatar: active.user_avatar || (isCurrentUser ? currentUser.avatar : createAvatarUrl(name)),
       isOnline: true,
       checkInTime: active.checkInTime,
       checkInTimestamp: active.checkInTimestamp,
       isPaused: active.isPaused === true,
-      pausedAt: active.pausedAt,
+      pausedAt: active.pausedAt || undefined,
       accumulatedSeconds: Number(active.accumulatedSeconds || 0),
       project: active.selectedProject || 'Bilik Strategi Workspace',
       statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
+      lastSeenAt: active.lastSeenAt,
+      lastActivityAt: active.lastActivityAt,
+      lastForegroundAt: active.lastForegroundAt,
+      currentPath: active.currentPath,
+      currentPageLabel: active.currentPageLabel,
+      deviceType: active.deviceType,
+      appMode: active.appMode,
     };
   };
 
@@ -196,6 +344,13 @@ export default function AttendancePage() {
     accumulatedSeconds: isCheckedIn ? accumulatedSeconds : 0,
     project: isCheckedIn ? selectedProject : undefined,
     statusText: isCheckedIn ? (isPaused ? 'Paused / Dijeda' : 'Online & Bekerja') : 'Belum Check-In',
+    lastSeenAt: undefined,
+    lastActivityAt: undefined,
+    lastForegroundAt: undefined,
+    currentPath: undefined,
+    currentPageLabel: undefined,
+    deviceType: undefined,
+    appMode: undefined,
   });
 
   const loadWorkSchedule = useCallback(async () => {
@@ -308,7 +463,10 @@ export default function AttendancePage() {
         if (projRes.ok) {
           const projData = await projRes.json();
           if (Array.isArray(projData.projects) && projData.projects.length > 0) {
-            setProjectsList(projData.projects.map((p: any) => p.name));
+            const projects = (projData.projects as ClickUpProjectSummary[])
+              .map((project) => project.name || '')
+              .filter(Boolean);
+            setProjectsList(projects);
           }
         }
 
@@ -317,10 +475,12 @@ export default function AttendancePage() {
 
         if (teamRes.ok) {
           const teamData = await teamRes.json();
-          const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
+          const clickUpMembers: ClickUpMemberSummary[] = Array.isArray(teamData.members)
+            ? teamData.members
+            : [];
 
           // Find current user in workspace members to resolve exact role
-          const matchedMember = clickUpMembers.find((m: any) => {
+          const matchedMember = clickUpMembers.find((m) => {
             const mName = (m.username || '').toLowerCase().trim();
             const uName = (activeUsername || '').toLowerCase().trim();
             const mEmail = (m.email || '').toLowerCase().trim();
@@ -335,15 +495,17 @@ export default function AttendancePage() {
             resolvedUserRole = matchedMember.role === 1 ? 'Owner' : matchedMember.role === 2 ? 'Admin' : 'Member';
           }
 
-          const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m: any) => {
+          const baseTeam: TeamMemberStatus[] = clickUpMembers.map((m) => {
+            const memberEmail = m.email || '';
+            const memberName = m.username || memberEmail.split('@')[0] || 'User';
             return {
               id: String(m.id),
-              name: m.username || m.email.split('@')[0],
-              email: m.email,
+              name: memberName,
+              email: memberEmail,
               role: m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member',
               avatar:
                 m.profilePicture ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(m.username || 'User')}&background=24324A&color=fff`,
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=24324A&color=fff`,
               isOnline: false,
               checkInTime: undefined,
               checkInTimestamp: undefined,
@@ -352,6 +514,13 @@ export default function AttendancePage() {
               accumulatedSeconds: 0,
               project: undefined,
               statusText: 'Belum Check-In',
+              lastSeenAt: undefined,
+              lastActivityAt: undefined,
+              lastForegroundAt: undefined,
+              currentPath: undefined,
+              currentPageLabel: undefined,
+              deviceType: undefined,
+              appMode: undefined,
             };
           });
 
@@ -568,6 +737,7 @@ export default function AttendancePage() {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
+      setPresenceClock(now.getTime());
       setCurrentTime(
         now.toLocaleTimeString('id-ID', {
           hour: '2-digit',
@@ -601,7 +771,7 @@ export default function AttendancePage() {
   const syncRealTimeTeamAttendance = async () => {
     try {
       // 1. Direct Supabase DB active_sessions fetch via REST API
-      let supabaseActiveList: any[] = [];
+      let supabaseActiveList: ActiveSessionSnapshot[] = [];
       let hasAuthoritativeServerSnapshot = false;
       try {
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
@@ -615,16 +785,16 @@ export default function AttendancePage() {
           hasAuthoritativeServerSnapshot = true;
           const restData = await restRes.json();
           if (Array.isArray(restData)) {
-            supabaseActiveList = restData.map((row: any) => ({
-              user_name: row.user_name,
-              user_avatar: row.user_avatar,
-              checkInTime: row.check_in_time,
+            supabaseActiveList = (restData as Array<Record<string, unknown>>).map((row) => ({
+              user_name: String(row.user_name || ''),
+              user_avatar: String(row.user_avatar || ''),
+              checkInTime: String(row.check_in_time || ''),
               checkInTimestamp: Number(row.check_in_timestamp),
               isPaused: row.is_paused === true,
-              pausedAt: row.paused_at || undefined,
+              pausedAt: row.paused_at ? String(row.paused_at) : undefined,
               accumulatedSeconds: Number(row.accumulated_seconds || 0),
-              selectedProject: row.selected_project,
-              notesInput: row.notes_input || '',
+              selectedProject: String(row.selected_project || 'Bilik Strategi Workspace'),
+              notesInput: String(row.notes_input || ''),
             }));
           }
         }
@@ -632,8 +802,52 @@ export default function AttendancePage() {
         // ignore
       }
 
+      if (checkIsAdminOrOwner(currentUser.email, currentUser.role)) {
+        try {
+          const cacheAge = Date.now() - managerPresenceCacheRef.current.fetchedAt;
+          if (cacheAge >= 10_000) {
+            const presenceResponse = await fetch('/api/attendance/presence?view=statuses', {
+              cache: 'no-store',
+            });
+            const presenceData = await presenceResponse.json().catch(() => ({}));
+            if (presenceResponse.ok && Array.isArray(presenceData.presences)) {
+              managerPresenceCacheRef.current = {
+                fetchedAt: Date.now(),
+                rows: presenceData.presences as PresenceStateApiRow[],
+              };
+            }
+          }
+          const presenceRows = managerPresenceCacheRef.current.rows;
+
+          for (const active of supabaseActiveList) {
+            const activeName = normalizeMemberKey(active.user_name);
+            const activeTimestamp = Number(active.checkInTimestamp || 0);
+            const presence = presenceRows.find((row) => {
+              const rowName = normalizeMemberKey(row.user_name);
+              const rowTimestamp = Number(row.session_check_in_timestamp || 0);
+              if (activeTimestamp > 0 && rowTimestamp > 0) {
+                return rowTimestamp === activeTimestamp;
+              }
+              return activeName.length > 0 && rowName === activeName;
+            });
+            if (!presence) continue;
+
+            active.user_email = presence.user_email || '';
+            active.lastSeenAt = presence.last_seen_at || '';
+            active.lastActivityAt = presence.last_activity_at || '';
+            active.lastForegroundAt = presence.last_foreground_at || '';
+            active.currentPath = presence.current_path || '';
+            active.currentPageLabel = presence.current_page_label || '';
+            active.deviceType = presence.device_type || '';
+            active.appMode = presence.app_mode || '';
+          }
+        } catch {
+          // Presence details are optional and manager-only.
+        }
+      }
+
       const currentNameClean = normalizeMemberKey(currentUser.username);
-      const currentActiveSession = supabaseActiveList.find((active: any) => {
+      const currentActiveSession = supabaseActiveList.find((active) => {
         const activeNameClean = normalizeMemberKey(active.user_name);
         return activeNameClean === currentNameClean ||
           (activeNameClean.length > 3 && currentNameClean.includes(activeNameClean)) ||
@@ -687,7 +901,7 @@ export default function AttendancePage() {
       setTeamStatusList((prev) => {
         const baseMembers = prev.length > 0 ? [...prev] : [buildCurrentUserMember()];
 
-        supabaseActiveList.forEach((active: any) => {
+        supabaseActiveList.forEach((active) => {
           const activeNameClean = normalizeMemberKey(active.user_name);
           const exists = baseMembers.some((m) => {
             const memberNameClean = normalizeMemberKey(m.name);
@@ -740,7 +954,7 @@ export default function AttendancePage() {
             };
           }
 
-          const active = supabaseActiveList.find((a: any) => {
+          const active = supabaseActiveList.find((a) => {
             const aNameClean = normalizeMemberKey(a.user_name);
             return (
               aNameClean === mNameClean ||
@@ -757,10 +971,18 @@ export default function AttendancePage() {
               checkInTime: active.checkInTime,
               checkInTimestamp: active.checkInTimestamp,
               isPaused: active.isPaused === true,
-              pausedAt: active.pausedAt,
+              pausedAt: active.pausedAt || undefined,
               accumulatedSeconds: Number(active.accumulatedSeconds || 0),
               project: active.selectedProject || 'Bilik Strategi Workspace',
               statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
+              email: active.user_email || m.email,
+              lastSeenAt: active.lastSeenAt,
+              lastActivityAt: active.lastActivityAt,
+              lastForegroundAt: active.lastForegroundAt,
+              currentPath: active.currentPath,
+              currentPageLabel: active.currentPageLabel,
+              deviceType: active.deviceType,
+              appMode: active.appMode,
             };
           }
 
@@ -773,8 +995,15 @@ export default function AttendancePage() {
             pausedAt: undefined,
             accumulatedSeconds: 0,
             project: undefined,
-              statusText: 'Belum Check-In',
-            };
+            statusText: 'Belum Check-In',
+            lastSeenAt: undefined,
+            lastActivityAt: undefined,
+            lastForegroundAt: undefined,
+            currentPath: undefined,
+            currentPageLabel: undefined,
+            deviceType: undefined,
+            appMode: undefined,
+          };
         });
       });
     } catch (err) {
@@ -830,100 +1059,112 @@ export default function AttendancePage() {
     };
   }, [currentUser.username, isCheckedIn]);
 
-  // Admin Quick Action: Toggle Check-In for any Team Member
-  const handleAdminToggleMemberCheckIn = async (member: TeamMemberStatus, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const now = new Date();
-    const startTimeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    const startTimestamp = now.getTime();
+  const toggleMemberActivity = async (member: TeamMemberStatus, event: React.MouseEvent) => {
+    event.stopPropagation();
 
-    if (!member.isOnline) {
-      const activeObj = {
-        user_name: member.name,
-        user_avatar: member.avatar,
-        checkInTime: startTimeStr,
-        checkInTimestamp: startTimestamp,
-        isPaused: false,
-        pausedAt: null,
-        accumulatedSeconds: 0,
-        selectedProject: 'Bilik Strategi Workspace',
-        notesInput: 'Check-In via Admin',
-      };
-
-      try {
-        const storeStr = localStorage.getItem('bilik_team_active_store');
-        const storeMap = storeStr ? JSON.parse(storeStr) : {};
-        storeMap[member.name.toLowerCase()] = activeObj;
-        localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
-      } catch {}
-
-      try {
-        await supabase.from('active_sessions').upsert({
-          user_name: member.name,
-          user_avatar: member.avatar,
-          check_in_time: startTimeStr,
-          check_in_timestamp: startTimestamp,
-          is_paused: false,
-          paused_at: null,
-          accumulated_seconds: 0,
-          selected_project: 'Bilik Strategi Workspace',
-          notes_input: 'Check-In via Admin',
-          updated_at: new Date().toISOString(),
-        });
-      } catch {}
-
-      fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'checkin',
-          user_name: member.name,
-          user_avatar: member.avatar,
-          selectedProject: 'Bilik Strategi Workspace',
-          notesInput: 'Check-In via Admin',
-          checkInTime: startTimeStr,
-          checkInTimestamp: startTimestamp,
-          isPaused: false,
-          pausedAt: null,
-          accumulatedSeconds: 0,
-        }),
-      }).catch(() => {});
-    } else {
-      try {
-        const storeStr = localStorage.getItem('bilik_team_active_store');
-        if (storeStr) {
-          const storeMap = JSON.parse(storeStr);
-          delete storeMap[member.name.toLowerCase()];
-          localStorage.setItem('bilik_team_active_store', JSON.stringify(storeMap));
-        }
-      } catch {}
-
-      try {
-        await supabase.from('active_sessions').delete().eq('user_name', member.name);
-      } catch {}
-
-      fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'checkout',
-          user_name: member.name,
-        }),
-      }).catch(() => {});
+    if (expandedActivityMemberId === member.id) {
+      setExpandedActivityMemberId(null);
+      return;
     }
 
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        const bc = new BroadcastChannel('bilik_attendance_channel');
-        bc.postMessage({ type: 'SYNC_ATTENDANCE' });
-        bc.close();
-      } catch {}
-    }
+    setExpandedActivityMemberId(member.id);
+    if (memberActivity[member.id]) return;
 
-    syncRealTimeTeamAttendance();
+    setActivityLoadingId(member.id);
+    setActivityError((previous) => ({ ...previous, [member.id]: '' }));
+    try {
+      const params = new URLSearchParams();
+      if (member.email) params.set('user_email', member.email);
+      params.set('user_name', member.name);
+      const response = await fetch(`/api/attendance/presence?${params.toString()}`, {
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal memuat aktivitas pengguna.');
+      if (data.storage_ready !== true) {
+        throw new Error('Timeline aktivitas belum aktif di server. Hubungi Owner untuk mengaktifkan penyimpanannya.');
+      }
+      setMemberActivity((previous) => ({
+        ...previous,
+        [member.id]: Array.isArray(data.events) ? data.events : [],
+      }));
+    } catch (error) {
+      setActivityError((previous) => ({
+        ...previous,
+        [member.id]: error instanceof Error ? error.message : 'Gagal memuat aktivitas pengguna.',
+      }));
+    } finally {
+      setActivityLoadingId(null);
+    }
   };
 
-  const persistLocalActiveAttendance = (activeObj: any) => {
+  const openForceCheckout = (member: TeamMemberStatus, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const presence = resolvePresenceSnapshot(member, Date.now());
+    setForceCheckoutTarget(member);
+    setForceCheckoutReason('Lupa checkout / sesi tidak lagi aktif.');
+    setForceCheckoutAtLastActivity(
+      Boolean(member.lastActivityAt) && ['needs_review', 'critical'].includes(presence.state),
+    );
+    setForceCheckoutError('');
+  };
+
+  const handleAdminForceCheckout = async () => {
+    if (!forceCheckoutTarget || forceCheckoutSaving) return;
+
+    setForceCheckoutSaving(true);
+    setForceCheckoutError('');
+    try {
+      const response = await fetch('/api/attendance/presence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'force_checkout',
+          target_email: forceCheckoutTarget.email,
+          target_user_name: forceCheckoutTarget.name,
+          reason: forceCheckoutReason,
+          checkout_at: forceCheckoutAtLastActivity ? 'last_activity' : 'now',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal menghentikan sesi presensi.');
+
+      try {
+        const stored = localStorage.getItem('bilik_team_active_store');
+        if (stored) {
+          const teamStore = JSON.parse(stored);
+          delete teamStore[forceCheckoutTarget.name.toLowerCase()];
+          localStorage.setItem('bilik_team_active_store', JSON.stringify(teamStore));
+        }
+      } catch {
+        // Server state remains authoritative.
+      }
+
+      setLastCheckOutNotice({
+        type: 'warning',
+        message: data.activity_storage_ready === false
+          ? `Sesi ${forceCheckoutTarget.name} berhasil dihentikan. Audit dasar tersimpan, tetapi timeline aktivitas server belum aktif.`
+          : `Sesi ${forceCheckoutTarget.name} berhasil dihentikan oleh admin dan masuk ke riwayat presensi.`,
+      });
+      setMemberActivity((previous) => {
+        const next = { ...previous };
+        delete next[forceCheckoutTarget.id];
+        return next;
+      });
+      setForceCheckoutTarget(null);
+      setExpandedActivityMemberId(null);
+      broadcastAttendanceSync();
+      await Promise.all([syncRealTimeTeamAttendance(), fetchAllUsersHistory()]);
+    } catch (error) {
+      setForceCheckoutError(
+        error instanceof Error ? error.message : 'Gagal menghentikan sesi presensi.',
+      );
+    } finally {
+      setForceCheckoutSaving(false);
+    }
+  };
+
+  const persistLocalActiveAttendance = (activeObj: ActiveSessionSnapshot) => {
     localStorage.setItem('bilik_active_attendance', JSON.stringify(activeObj));
 
     try {
@@ -948,7 +1189,10 @@ export default function AttendancePage() {
     }
   };
 
-  const syncAttendanceAction = async (action: 'pause' | 'resume', activeObj: any) => {
+  const syncAttendanceAction = async (
+    action: 'pause' | 'resume',
+    activeObj: ActiveSessionSnapshot,
+  ) => {
     const response = await fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1352,7 +1596,13 @@ export default function AttendancePage() {
   };
 
   // Compute active team count
-  const onlineCount = teamStatusList.filter((m) => m.isOnline).length;
+  const checkedInCount = teamStatusList.filter((m) => m.isOnline).length;
+  const activeNowCount = teamStatusList.filter(
+    (member) => resolvePresenceSnapshot(member, presenceClock).state === 'active',
+  ).length;
+  const reviewCount = teamStatusList.filter((member) =>
+    ['needs_review', 'critical'].includes(resolvePresenceSnapshot(member, presenceClock).state),
+  ).length;
   const isAdminOrOwner = checkIsAdminOrOwner(currentUser.email, currentUser.role);
   const currentDayIndex = new Date().getDay();
 
@@ -1779,127 +2029,214 @@ export default function AttendancePage() {
         </div>
 
         {/* Right: Live Team Active Check-Ins Side Panel (5 cols - Visible to All / Enhanced for Admin) */}
-        <div className="lg:col-span-5 bg-white border border-[#E8E8EC] rounded-2xl p-6 shadow-2xs space-y-5 flex flex-col justify-between">
+        <div className="lg:col-span-5 flex flex-col justify-between space-y-5 rounded-2xl border border-[#E8E8EC] bg-white p-4 shadow-2xs dark:border-[#303742] dark:bg-[#171A20] sm:p-6">
           <div className="space-y-4">
             {/* Panel Header */}
-            <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E8EC] pb-3 dark:border-[#303742]">
+              <div className="flex flex-wrap items-center gap-2">
                 <Users className="w-4 h-4 text-[#7B68EE]" />
-                <h3 className="text-sm font-extrabold text-[#24324A]">Live Presensi Tim</h3>
+                <h3 className="text-sm font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Live Presensi Tim</h3>
                 {isAdminOrOwner && (
-                  <span className="px-2 py-0.5 bg-[#24324A] text-white text-[9px] font-extrabold rounded-full flex items-center gap-1">
+                  <span className="flex items-center gap-1 rounded-full bg-[#24324A] px-2 py-0.5 text-[9px] font-extrabold text-white dark:bg-[#F26B5E]">
                     <ShieldCheck className="w-3 h-3 text-[#4F9D78]" /> Admin View
                   </span>
                 )}
               </div>
-              <span className="px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] rounded-full text-[11px] font-extrabold border border-[#4F9D78]/20">
-                {onlineCount} / {teamStatusList.length} Online
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {isAdminOrOwner && (
+                  <span className="rounded-full border border-[#4F9D78]/20 bg-[#4F9D78]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#4F9D78]">
+                    {activeNowCount} Aktif
+                  </span>
+                )}
+                <span className="rounded-full border border-[#7B68EE]/20 bg-[#7B68EE]/10 px-2.5 py-1 text-[10px] font-extrabold text-[#6654CF] dark:text-[#A99CFF]">
+                  {checkedInCount} Check-in
+                </span>
+              </div>
             </div>
 
-            <p className="text-[11px] text-[#737680]">
-              Daftar anggota tim yang sedang aktif bekerja beserta durasi online check-in secara real-time.
+            <p className="text-[11px] leading-5 text-[#737680] dark:text-[#98A2B3]">
+              {isAdminOrOwner
+                ? 'Check-in menunjukkan presensi aktif. Status Aktif, Idle, dan Away menunjukkan aktivitas di aplikasi Bilik Strategi secara terpisah.'
+                : 'Daftar anggota yang sedang check-in. Detail aktivitas aplikasi hanya tersedia untuk Admin dan Owner.'}
             </p>
 
             {/* Member Active Cards List - Online members always sorted to the top */}
-            <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
+            <div className="max-h-[680px] space-y-2.5 overflow-y-auto pr-1">
               {[...teamStatusList]
-                .sort((a, b) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0))
+                .sort((a, b) =>
+                  presenceStateRank(resolvePresenceSnapshot(a, presenceClock).state) -
+                  presenceStateRank(resolvePresenceSnapshot(b, presenceClock).state)
+                )
                 .map((m) => {
+                  const presence = resolvePresenceSnapshot(m, presenceClock);
+                  const visual = PRESENCE_VISUALS[presence.state];
                   let liveMemberDurationStr = '00:00:00';
                   if (m.isOnline && m.checkInTimestamp) {
                     const runningSeconds = m.isPaused
                       ? 0
-                      : Math.max(0, Math.floor((Date.now() - m.checkInTimestamp) / 1000));
+                      : Math.max(0, Math.floor(((presenceClock || m.checkInTimestamp) - m.checkInTimestamp) / 1000));
                     const sec = Number(m.accumulatedSeconds || 0) + runningSeconds;
                     liveMemberDurationStr = formatTimer(sec);
                   }
+                  const statusAge = presence.state === 'away'
+                    ? formatPresenceAge(presence.unseenMs)
+                    : formatPresenceAge(presence.inactiveMs);
+                  const statusLabel = !isAdminOrOwner && m.isOnline && !m.isPaused
+                    ? 'Sedang check-in'
+                    : ['idle', 'away', 'needs_review', 'critical'].includes(presence.state)
+                      ? `${visual.label} · ${statusAge}`
+                      : visual.label;
+                  const events = memberActivity[m.id] || [];
 
                 return (
                   <div
                     key={m.id}
-                    className={`p-3 rounded-xl border transition-all ${
-                      m.isOnline
-                        ? m.isPaused
-                          ? 'bg-[#FFFBF2] border-[#E6A23C]/40 shadow-xs'
-                          : 'bg-[#FFFFFF] border-[#4F9D78]/40 shadow-xs'
-                        : 'bg-[#F7F7F8] border-[#E8E8EC] opacity-80'
-                    }`}
+                    className={`rounded-xl border p-3 shadow-xs transition-all ${visual.card}`}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="relative flex-shrink-0">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={m.avatar}
                             alt={m.name}
-                            className={`w-9 h-9 rounded-full object-cover border ${
-                              m.isPaused ? 'border-[#E6A23C]' : m.isOnline ? 'border-[#4F9D78]' : 'border-[#E8E8EC]'
-                            }`}
+                            className="h-9 w-9 rounded-full border border-current object-cover"
                           />
                           <span
-                            className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                              m.isPaused ? 'bg-[#E6A23C]' : m.isOnline ? 'bg-[#4F9D78]' : 'bg-[#737680]'
-                            }`}
+                            className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-[#171A20] ${visual.dot}`}
                           />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <h4 className="text-xs font-bold text-[#24324A] truncate">{m.name}</h4>
-                            <span className="text-[9px] text-[#737680] font-semibold uppercase">{m.role}</span>
+                            <h4 className="truncate text-xs font-bold text-[#24324A] dark:text-[#F4F6FA]">{m.name}</h4>
+                            <span className="text-[9px] font-semibold uppercase text-[#737680] dark:text-[#98A2B3]">{m.role}</span>
                           </div>
-                          <p className="text-[10px] text-[#737680] truncate">
+                          <p className="truncate text-[10px] text-[#737680] dark:text-[#98A2B3]">
                             {m.isOnline
                               ? m.isPaused
                                 ? 'Dijeda sejak ' + (m.pausedAt
-                                  ? new Date(m.pausedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                                ? new Date(m.pausedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
                                   : '-')
-                                : 'Check-In ' + (m.checkInTime || '08:30') + ' WIB'
+                                : 'Check-in ' + (m.checkInTime || '08:30') + ' WITA'
                               : 'Belum Check-In'}
                           </p>
                         </div>
                       </div>
 
-                      {/* Online Status & Live Duration Badge */}
-                      <div className="text-right flex-shrink-0">
+                      <div className="flex flex-shrink-0 flex-col items-end gap-1.5 text-right">
+                        <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[9px] font-extrabold ${visual.badge}`}>
+                          {presence.state === 'away' ? <WifiOff className="h-3 w-3" /> : <span className={`h-1.5 w-1.5 rounded-full ${visual.dot}`} />}
+                          {statusLabel}
+                        </span>
                         {m.isOnline ? (
-                          <div>
-                            <span className={m.isPaused
-                              ? "inline-flex items-center gap-1 px-2.5 py-1 bg-[#E6A23C]/10 text-[#B87C24] rounded-lg font-mono font-extrabold text-xs border border-[#E6A23C]/30 shadow-2xs"
-                              : "inline-flex items-center gap-1 px-2.5 py-1 bg-[#4F9D78]/10 text-[#4F9D78] rounded-lg font-mono font-extrabold text-xs border border-[#4F9D78]/30 shadow-2xs"}>
-                              {m.isPaused
-                                ? <Pause className="w-3 h-3 fill-current" />
-                                : <span className="w-2 h-2 rounded-full bg-[#4F9D78] animate-ping" />}
+                          <div className="flex flex-col items-end">
+                            <span className="font-mono text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">
                               {liveMemberDurationStr}
                             </span>
-                            {m.isPaused && (
-                              <p className="text-[9px] font-extrabold text-[#B87C24] mt-1 uppercase">Paused / Dijeda</p>
-                            )}
-                            <p className="text-[10px] font-extrabold text-[#7B68EE] mt-1 truncate max-w-[130px]">
-                              {m.project || 'Bilik Strategi Workspace'}
-                            </p>
                           </div>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-[#F7F7F8] text-[#737680] rounded-lg font-bold text-[11px] border border-[#E8E8EC]">
-                            Offline
-                          </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
+
+                    {isAdminOrOwner && m.isOnline && (
+                      <div className="mt-3 grid gap-2 rounded-lg border border-black/5 bg-white/55 p-2.5 text-[10px] dark:border-white/5 dark:bg-black/10 sm:grid-cols-2">
+                        <div className="flex min-w-0 items-start gap-1.5 text-[#737680] dark:text-[#98A2B3]">
+                          <Monitor className="mt-0.5 h-3 w-3 flex-shrink-0 text-[#7B68EE]" />
+                          <span className="min-w-0">
+                            <span className="block font-bold text-[#24324A] dark:text-[#F4F6FA]">Posisi terakhir</span>
+                            <span className="block truncate">{m.currentPageLabel || m.currentPath || 'Menunggu data aktivitas'}</span>
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[#737680] dark:text-[#98A2B3]">
+                          <MousePointer2 className="mt-0.5 h-3 w-3 flex-shrink-0 text-[#E6A23C]" />
+                          <span>
+                            <span className="block font-bold text-[#24324A] dark:text-[#F4F6FA]">Aktivitas terakhir</span>
+                            <span className="block">
+                              {m.lastActivityAt ? `${formatPresenceAge(Math.max(0, presenceClock - Date.parse(m.lastActivityAt)))} lalu` : 'Belum terdeteksi'}
+                              {m.deviceType ? ` · ${m.appMode === 'pwa' ? 'PWA' : 'Browser'} ${m.deviceType}` : ''}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="min-w-0 sm:col-span-2">
+                          <span className="font-bold text-[#24324A] dark:text-[#F4F6FA]">Fokus:</span>{' '}
+                          <span className="text-[#737680] dark:text-[#98A2B3]">{m.project || 'Bilik Strategi Workspace'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {isAdminOrOwner && m.isOnline && (
+                      <div className="mt-2.5 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => void toggleMemberActivity(m, event)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D9DDE5] bg-white px-2.5 text-[10px] font-extrabold text-[#24324A] transition hover:bg-[#F3F5F8] dark:border-[#3A414D] dark:bg-[#20242C] dark:text-[#F4F6FA] dark:hover:bg-[#292F39]"
+                        >
+                          <Eye className="h-3 w-3" />
+                          {expandedActivityMemberId === m.id ? 'Tutup Aktivitas' : 'Lihat Aktivitas'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => openForceCheckout(m, event)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D95858]/30 bg-[#D95858]/10 px-2.5 text-[10px] font-extrabold text-[#B13E3E] transition hover:bg-[#D95858]/15 dark:text-[#FF8585]"
+                        >
+                          <Power className="h-3 w-3" /> Paksa Checkout
+                        </button>
+                      </div>
+                    )}
+
+                    {isAdminOrOwner && expandedActivityMemberId === m.id && (
+                      <div className="mt-3 rounded-xl border border-[#DDE2EA] bg-white p-3 dark:border-[#3A414D] dark:bg-[#20242C]">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#24324A] dark:text-[#F4F6FA]">Aktivitas di Bilik Strategi</p>
+                          <span className="text-[9px] text-[#8A8E98]">30 aktivitas terakhir</span>
+                        </div>
+                        {activityLoadingId === m.id ? (
+                          <div className="flex items-center gap-2 py-3 text-[10px] text-[#737680] dark:text-[#98A2B3]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Memuat aktivitas...</div>
+                        ) : activityError[m.id] ? (
+                          <p className="rounded-lg bg-[#D95858]/10 p-2 text-[10px] font-semibold text-[#B13E3E] dark:text-[#FF8585]">{activityError[m.id]}</p>
+                        ) : events.length === 0 ? (
+                          <p className="py-3 text-[10px] text-[#737680] dark:text-[#98A2B3]">Belum ada perpindahan halaman atau interaksi yang tercatat.</p>
+                        ) : (
+                          <div className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                            {events.map((activityEvent) => (
+                              <div key={activityEvent.id} className="flex items-start justify-between gap-3 rounded-lg bg-[#F7F7F8] px-2.5 py-2 dark:bg-[#171A20]">
+                                <div className="min-w-0">
+                                  <p className="truncate text-[10px] font-bold text-[#24324A] dark:text-[#F4F6FA]">
+                                    {activityEvent.event_type === 'page_view'
+                                      ? `Membuka ${activityEvent.page_label || activityEvent.page_path || 'halaman'}`
+                                      : activityEvent.event_type === 'forced_checkout'
+                                        ? 'Checkout paksa oleh admin'
+                                        : `Aktif di ${activityEvent.page_label || activityEvent.page_path || 'aplikasi'}`}
+                                  </p>
+                                  <p className="truncate text-[9px] text-[#8A8E98]">
+                                    {[activityEvent.app_mode === 'pwa' ? 'PWA' : 'Browser', activityEvent.device_type].filter(Boolean).join(' · ')}
+                                  </p>
+                                </div>
+                                <time className="flex-shrink-0 text-[9px] font-semibold text-[#737680] dark:text-[#98A2B3]">
+                                  {new Date(activityEvent.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                </time>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <p className="mt-2 text-[9px] leading-4 text-[#8A8E98]">Hanya Admin/Owner yang dapat melihat timeline ini. Isi ketikan, screenshot, dan aktivitas di aplikasi lain tidak direkam.</p>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div className="p-3 bg-[#EEF2F7] rounded-xl border border-[#E8E8EC] text-[11px] text-[#24324A]">
-            <p className="font-bold flex items-center gap-1">
+          {isAdminOrOwner && <div className="rounded-xl border border-[#E8E8EC] bg-[#EEF2F7] p-3 text-[11px] text-[#24324A] dark:border-[#303742] dark:bg-[#20242C] dark:text-[#F4F6FA]">
+            <p className="flex items-center gap-1 font-bold">
               <Activity className="w-3.5 h-3.5 text-[#4F9D78]" /> Real-Time Monitoring:
             </p>
-            <p className="text-[#737680]">
-              Durasi online seluruh tim berjalan otomatis setiap detik untuk pemantauan presensi yang akurat.
+            <p className="mt-1 text-[#737680] dark:text-[#98A2B3]">
+              Idle mulai 5 menit, Away saat heartbeat aplikasi terputus, peringatan setelah 2 jam, dan status kritis setelah 4 jam.
             </p>
-          </div>
+            {reviewCount > 0 && <p className="mt-1 font-extrabold text-[#D95858]">{reviewCount} anggota perlu diverifikasi oleh admin.</p>}
+          </div>}
         </div>
       </div>
 
@@ -2138,6 +2475,105 @@ export default function AttendancePage() {
           );
         })()}
       </div>
+
+      {/* Admin force-checkout confirmation with a durable audit reason. */}
+      {forceCheckoutTarget && createPortal(
+        <div data-mobile-modal className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-0 backdrop-blur-xs animate-fade-in sm:items-center sm:p-4">
+          <div data-mobile-modal-panel className="relative max-h-[92svh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-[#E8E8EC] bg-white p-5 shadow-2xl dark:border-[#303742] dark:bg-[#171A20] sm:rounded-2xl sm:p-6">
+            <button
+              type="button"
+              onClick={() => setForceCheckoutTarget(null)}
+              disabled={forceCheckoutSaving}
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-[#737680] hover:bg-[#F2F4F7] hover:text-[#24324A] disabled:opacity-50 dark:hover:bg-[#252A33] dark:hover:text-white"
+              aria-label="Tutup konfirmasi checkout paksa"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-start gap-3 border-b border-[#E8E8EC] pb-4 pr-8 dark:border-[#303742]">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-[#D95858]/25 bg-[#D95858]/10 text-[#D95858]">
+                <Power className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#D95858]">Kontrol Admin</p>
+                <h3 className="mt-0.5 text-base font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Paksa checkout {forceCheckoutTarget.name}?</h3>
+                <p className="mt-1 text-xs leading-5 text-[#737680] dark:text-[#98A2B3]">
+                  Sesi akan dihentikan pada semua perangkat dan tetap dibuatkan riwayat presensi dengan nama admin serta alasannya.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setForceCheckoutAtLastActivity(false)}
+                className={`rounded-xl border p-3 text-left transition ${!forceCheckoutAtLastActivity
+                  ? 'border-[#24324A] bg-[#EEF2F7] dark:border-[#F26B5E] dark:bg-[#2A2528]'
+                  : 'border-[#E8E8EC] bg-white dark:border-[#303742] dark:bg-[#20242C]'}`}
+              >
+                <span className="block text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Checkout sekarang</span>
+                <span className="mt-1 block text-[10px] leading-4 text-[#737680] dark:text-[#98A2B3]">Seluruh durasi hingga tindakan admin tetap dihitung.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => forceCheckoutTarget.lastActivityAt && setForceCheckoutAtLastActivity(true)}
+                disabled={!forceCheckoutTarget.lastActivityAt}
+                className={`rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${forceCheckoutAtLastActivity
+                  ? 'border-[#24324A] bg-[#EEF2F7] dark:border-[#F26B5E] dark:bg-[#2A2528]'
+                  : 'border-[#E8E8EC] bg-white dark:border-[#303742] dark:bg-[#20242C]'}`}
+              >
+                <span className="block text-xs font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Aktivitas app terakhir</span>
+                <span className="mt-1 block text-[10px] leading-4 text-[#737680] dark:text-[#98A2B3]">
+                  {forceCheckoutTarget.lastActivityAt
+                    ? `${formatPresenceAge(Math.max(0, presenceClock - Date.parse(forceCheckoutTarget.lastActivityAt)))} lalu`
+                    : 'Belum ada heartbeat aktivitas.'}
+                </span>
+              </button>
+            </div>
+
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#737680] dark:text-[#98A2B3]">Alasan checkout paksa</span>
+              <textarea
+                value={forceCheckoutReason}
+                onChange={(event) => setForceCheckoutReason(event.target.value)}
+                rows={3}
+                maxLength={320}
+                placeholder="Contoh: User lupa checkout dan sudah dikonfirmasi melalui WhatsApp."
+                className="w-full resize-none rounded-xl border border-[#DDE2EA] bg-white p-3 text-xs font-medium text-[#24324A] outline-none focus:border-[#D95858] dark:border-[#3A414D] dark:bg-[#20242C] dark:text-[#F4F6FA]"
+              />
+            </label>
+
+            <div className="mt-3 rounded-xl border border-[#E6A23C]/25 bg-[#E6A23C]/10 p-3 text-[10px] leading-4 text-[#8A641F] dark:text-[#F1BA64]">
+              Tidak ada aktivitas di app bukan bukti pasti tidak bekerja. Verifikasi dulu kemungkinan meeting, produksi lapangan, atau pekerjaan di aplikasi lain.
+            </div>
+
+            {forceCheckoutError && (
+              <p className="mt-3 rounded-xl bg-[#D95858]/10 p-3 text-xs font-semibold text-[#B13E3E] dark:text-[#FF8585]">{forceCheckoutError}</p>
+            )}
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setForceCheckoutTarget(null)}
+                disabled={forceCheckoutSaving}
+                className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680] disabled:opacity-50 dark:border-[#3A414D] dark:text-[#CBD2DC]"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAdminForceCheckout()}
+                disabled={forceCheckoutSaving || !forceCheckoutReason.trim()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#D95858] px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#C74747] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {forceCheckoutSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+                Hentikan Sesi & Simpan Riwayat
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Modal Form Pengajuan Izin / Sakit / Cuti */}
       {showLeaveModal && createPortal(
