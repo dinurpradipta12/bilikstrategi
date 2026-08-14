@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSuperuserEmail, normalizeIdentityEmail } from '@/lib/auth/app-role';
+import { setClickUpSessionCookie } from '@/lib/auth/clickup-session';
 
 export const runtime = 'edge';
 
@@ -17,28 +18,33 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const origin = new URL(req.url).origin;
     const clientId = process.env.NEXT_PUBLIC_CLICKUP_CLIENT_ID || process.env.CLICKUP_CLIENT_ID;
     const clientSecret = process.env.CLICKUP_CLIENT_SECRET;
-    const redirectUri = process.env.CLICKUP_REDIRECT_URI || `${origin}/api/auth/clickup/callback`;
 
     const response = NextResponse.redirect(new URL('/dashboard', req.url));
 
     // If queryName/email was provided in login request
     if (queryName) {
-      response.cookies.set('clickup_user_name', queryName, { path: '/' });
-      if (normalizedQueryEmail) response.cookies.set('clickup_user_email', normalizedQueryEmail, { path: '/' });
-      if (queryRole || isSuperuserEmail(normalizedQueryEmail)) {
-        response.cookies.set('clickup_user_role', isSuperuserEmail(normalizedQueryEmail) ? 'owner' : queryRole!, { path: '/' });
+      setClickUpSessionCookie(response, req, 'clickup_user_name', queryName);
+      if (normalizedQueryEmail) {
+        setClickUpSessionCookie(response, req, 'clickup_user_email', normalizedQueryEmail);
       }
-      if (queryAvatar) response.cookies.set('clickup_user_avatar', queryAvatar, { path: '/' });
-      response.cookies.set('clickup_logged_in', 'true', { path: '/' });
+      if (queryRole || isSuperuserEmail(normalizedQueryEmail)) {
+        setClickUpSessionCookie(
+          response,
+          req,
+          'clickup_user_role',
+          isSuperuserEmail(normalizedQueryEmail) ? 'owner' : queryRole!,
+        );
+      }
+      if (queryAvatar) setClickUpSessionCookie(response, req, 'clickup_user_avatar', queryAvatar);
+      setClickUpSessionCookie(response, req, 'clickup_logged_in', 'true');
       return response;
     }
 
     if (!clientId || !clientSecret || clientId === 'dummy-client-id') {
       // Set logged in session cookie
-      response.cookies.set('clickup_logged_in', 'true', { path: '/' });
+      setClickUpSessionCookie(response, req, 'clickup_logged_in', 'true');
       return response;
     }
 
@@ -63,18 +69,20 @@ export async function GET(req: NextRequest) {
       });
       const userData = userRes.ok ? await userRes.json() : null;
 
-      response.cookies.set('clickup_access_token', accessToken, { path: '/', httpOnly: true });
-      response.cookies.set('clickup_logged_in', 'true', { path: '/' });
+      setClickUpSessionCookie(response, req, 'clickup_access_token', accessToken);
+      setClickUpSessionCookie(response, req, 'clickup_logged_in', 'true');
       if (userData?.user) {
+        const userId = String(userData.user.id || '');
         const username = userData.user.username;
         const email = normalizeIdentityEmail(userData.user.email);
         const role = isSuperuserEmail(email) ? 'owner' : userData.user.role === 1 ? 'owner' : userData.user.role === 2 ? 'admin' : 'member';
         const avatar = userData.user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`;
 
-        response.cookies.set('clickup_user_name', username, { path: '/' });
-        response.cookies.set('clickup_user_email', email, { path: '/' });
-        response.cookies.set('clickup_user_role', role, { path: '/' });
-        response.cookies.set('clickup_user_avatar', avatar, { path: '/' });
+        if (userId) setClickUpSessionCookie(response, req, 'clickup_user_id', userId);
+        setClickUpSessionCookie(response, req, 'clickup_user_name', username);
+        setClickUpSessionCookie(response, req, 'clickup_user_email', email);
+        setClickUpSessionCookie(response, req, 'clickup_user_role', role);
+        setClickUpSessionCookie(response, req, 'clickup_user_avatar', avatar);
       }
       return response;
     }

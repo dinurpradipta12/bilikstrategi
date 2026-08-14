@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { refreshClickUpSessionCookies } from '@/lib/auth/clickup-session';
 
 export const config = {
   matcher: [
@@ -30,8 +31,8 @@ export function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = '/projects';
     url.searchParams.set('projectId', projectDetailMatch[1]);
-    return NextResponse.rewrite(url);
+    return refreshClickUpSessionCookies(req, NextResponse.rewrite(url));
   }
 
-  return NextResponse.next();
+  return refreshClickUpSessionCookies(req, NextResponse.next());
 }
