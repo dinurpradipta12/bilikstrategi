@@ -137,6 +137,35 @@ async function readPresenceStates(workspaceId: string) {
   return { rows: await responseRows(response) as PresenceStateRow[], storageReady: true };
 }
 
+async function readExistingForcedCheckout(
+  userEmail: string,
+  userName: string,
+  date: string,
+  checkInTime: string,
+) {
+  const identityFilter = userEmail
+    ? `user_email=eq.${encodeURIComponent(userEmail)}`
+    : userName
+      ? `user_name=eq.${encodeURIComponent(userName)}`
+      : '';
+  if (!identityFilter || !date || !checkInTime) {
+    return { record: null as ActiveSessionRow | null, storageReady: false };
+  }
+
+  const response = await supabaseAdminFetch(
+    `attendance_logs?select=*&checkout_source=eq.admin&date=eq.${encodeURIComponent(date)}` +
+      `&check_in_time=eq.${encodeURIComponent(checkInTime)}&${identityFilter}` +
+      '&order=created_at.desc&limit=1',
+  );
+  if (!response.ok) return { record: null as ActiveSessionRow | null, storageReady: false };
+
+  const rows = await responseRows(response);
+  return {
+    record: (rows[0] || null) as ActiveSessionRow | null,
+    storageReady: true,
+  };
+}
+
 function sessionMatchesIdentity(row: ActiveSessionRow, email: string, name: string) {
   const rowEmail = emailValue(row.user_email);
   if (rowEmail && email && rowEmail === email) return true;
@@ -418,31 +447,47 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
     inactivity_seconds: inactivitySeconds,
   };
 
-  let historyResponse = await supabaseAdminFetch('attendance_logs', {
-    method: 'POST',
-    headers: { Prefer: 'return=minimal' },
-    body: JSON.stringify(extendedRecord),
-  });
-  const extendedStorageReady = historyResponse.ok;
+  const existingCheckout = await readExistingForcedCheckout(
+    targetUserEmail,
+    targetUserName,
+    local.date,
+    baseRecord.check_in_time,
+  );
+  let storedRecord: ActiveSessionRow = existingCheckout.record || extendedRecord;
+  let extendedStorageReady = existingCheckout.storageReady;
+  let historyCreatedThisRequest = false;
 
-  if (!historyResponse.ok) {
-    historyResponse = await supabaseAdminFetch('attendance_logs', {
+  if (!existingCheckout.record) {
+    let historyResponse = await supabaseAdminFetch('attendance_logs', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify(baseRecord),
+      body: JSON.stringify(extendedRecord),
     });
-  }
+    extendedStorageReady = historyResponse.ok;
 
-  if (!historyResponse.ok) {
-    return noStoreJson({ error: 'Riwayat checkout gagal disimpan; sesi tidak dihapus.' }, 502);
+    if (!historyResponse.ok) {
+      historyResponse = await supabaseAdminFetch('attendance_logs', {
+        method: 'POST',
+        headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify(baseRecord),
+      });
+    }
+
+    if (!historyResponse.ok) {
+      return noStoreJson({ error: 'Riwayat checkout gagal disimpan; sesi tidak dihapus.' }, 502);
+    }
+    historyCreatedThisRequest = true;
+    storedRecord = extendedStorageReady ? extendedRecord : baseRecord;
   }
 
   const activeSessionFilter = sessionFilter(session);
   if (!activeSessionFilter) {
-    await supabaseAdminFetch(
-      `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
-      { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
-    ).catch(() => null);
+    if (historyCreatedThisRequest) {
+      await supabaseAdminFetch(
+        `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
+        { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
+      ).catch(() => null);
+    }
     return noStoreJson({ error: 'Identitas sesi aktif tidak lengkap; checkout dibatalkan.' }, 409);
   }
   const deleteResponse = await supabaseAdminFetch(
@@ -453,10 +498,12 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
   if (!deleteResponse.ok || deletedSessions.length === 0) {
     // Do not leave a false checkout record behind when Supabase accepted the
     // DELETE request but its filter did not match an active session.
-    await supabaseAdminFetch(
-      `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
-      { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
-    ).catch(() => null);
+    if (historyCreatedThisRequest) {
+      await supabaseAdminFetch(
+        `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
+        { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
+      ).catch(() => null);
+    }
     return noStoreJson({
       error: 'Sesi aktif tidak berhasil dihapus dari Supabase. Silakan muat ulang lalu coba lagi.',
     }, 502);
@@ -487,7 +534,7 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
 
   return noStoreJson({
     success: true,
-    record: extendedRecord,
+    record: storedRecord,
     activity_storage_ready: extendedStorageReady && eventStored,
   });
 }
