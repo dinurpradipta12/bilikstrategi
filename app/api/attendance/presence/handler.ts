@@ -154,8 +154,21 @@ function sessionMatchesIdentity(row: ActiveSessionRow, email: string, name: stri
 
 function sessionFilter(row: ActiveSessionRow) {
   const email = emailValue(row.user_email);
-  if (email) return `user_email=eq.${encodeURIComponent(email)}`;
-  return `user_name=ilike.${encodeURIComponent(text(row.user_name, 180))}`;
+  const rawUserName = String(row.user_name || '').slice(0, 180);
+  const checkInTimestamp = Number(row.check_in_timestamp || 0);
+  const filters: string[] = [];
+
+  if (email) filters.push(`user_email=eq.${encodeURIComponent(email)}`);
+
+  // Keep the value exactly as stored in Supabase. ClickUp usernames can contain
+  // trailing whitespace; trimming it here makes PostgREST successfully delete
+  // zero rows while still returning a 204 response.
+  if (rawUserName) filters.push(`user_name=eq.${encodeURIComponent(rawUserName)}`);
+  if (Number.isFinite(checkInTimestamp) && checkInTimestamp > 0) {
+    filters.push(`check_in_timestamp=eq.${checkInTimestamp}`);
+  }
+
+  return filters.join('&');
 }
 
 function presenceMatchesSession(presence: PresenceStateRow, session: ActiveSessionRow) {
@@ -424,6 +437,31 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
     return noStoreJson({ error: 'Riwayat checkout gagal disimpan; sesi tidak dihapus.' }, 502);
   }
 
+  const activeSessionFilter = sessionFilter(session);
+  if (!activeSessionFilter) {
+    await supabaseAdminFetch(
+      `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
+      { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
+    ).catch(() => null);
+    return noStoreJson({ error: 'Identitas sesi aktif tidak lengkap; checkout dibatalkan.' }, 409);
+  }
+  const deleteResponse = await supabaseAdminFetch(
+    `active_sessions?${activeSessionFilter}`,
+    { method: 'DELETE', headers: { Prefer: 'return=representation' } },
+  );
+  const deletedSessions = deleteResponse.ok ? await responseRows(deleteResponse) : [];
+  if (!deleteResponse.ok || deletedSessions.length === 0) {
+    // Do not leave a false checkout record behind when Supabase accepted the
+    // DELETE request but its filter did not match an active session.
+    await supabaseAdminFetch(
+      `attendance_logs?id=eq.${encodeURIComponent(recordId)}`,
+      { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
+    ).catch(() => null);
+    return noStoreJson({
+      error: 'Sesi aktif tidak berhasil dihapus dari Supabase. Silakan muat ulang lalu coba lagi.',
+    }, 502);
+  }
+
   const eventStored = await insertActivityEvent({
     workspace_id: context.workspaceId,
     user_email: targetUserEmail || 'unknown',
@@ -445,13 +483,6 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
     created_at: new Date(now).toISOString(),
   });
 
-  const deleteResponse = await supabaseAdminFetch(
-    `active_sessions?${sessionFilter(session)}`,
-    { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
-  );
-  if (!deleteResponse.ok) {
-    return noStoreJson({ error: 'Riwayat tersimpan, tetapi sesi aktif gagal dihentikan.' }, 502);
-  }
   await deletePresenceState(targetUserEmail || emailValue(presenceState.user_email)).catch(() => false);
 
   return noStoreJson({

@@ -1151,6 +1151,29 @@ export default function AttendancePage() {
         delete next[forceCheckoutTarget.id];
         return next;
       });
+      setTeamStatusList((previous) => previous.map((member) => (
+        member.id === forceCheckoutTarget.id
+          ? {
+              ...member,
+              isOnline: false,
+              checkInTime: undefined,
+              checkInTimestamp: undefined,
+              isPaused: false,
+              pausedAt: undefined,
+              accumulatedSeconds: 0,
+              project: undefined,
+              statusText: 'Belum Check-In',
+              lastSeenAt: undefined,
+              lastActivityAt: undefined,
+              lastForegroundAt: undefined,
+              currentPath: undefined,
+              currentPageLabel: undefined,
+              deviceType: undefined,
+              appMode: undefined,
+            }
+          : member
+      )));
+      managerPresenceCacheRef.current = { fetchedAt: 0, rows: [] };
       setForceCheckoutTarget(null);
       setExpandedActivityMemberId(null);
       broadcastAttendanceSync();
