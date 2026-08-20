@@ -45,7 +45,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try { var t = localStorage.getItem('bilik_theme') === 'dark' ? 'dark' : 'light'; var s = localStorage.getItem('bilik_ui_style') === 'legacy' ? 'legacy' : 'm3'; document.documentElement.classList.toggle('dark', t === 'dark'); document.documentElement.dataset.theme = t; document.documentElement.dataset.uiStyle = s; document.documentElement.style.colorScheme = t; } catch (_) { document.documentElement.dataset.uiStyle = 'm3'; }`,
+            __html: `try { var t = localStorage.getItem('bilik_theme') === 'dark' ? 'dark' : 'light'; localStorage.removeItem('bilik_ui_style'); document.documentElement.classList.toggle('dark', t === 'dark'); document.documentElement.dataset.theme = t; document.documentElement.dataset.uiStyle = 'm3'; document.documentElement.style.colorScheme = t; } catch (_) { document.documentElement.dataset.uiStyle = 'm3'; }`,
           }}
         />
       </head>

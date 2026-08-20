@@ -7,7 +7,6 @@ import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react'
 import SyncUpButton from '@/components/syncup/SyncUpButton';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
 import ThemeToggle from '@/components/theme/ThemeToggle';
-import UiStyleToggle from '@/components/theme/UiStyleToggle';
 import { useNotifications } from '@/components/notifications/NotificationProvider';
 
 interface HeaderProps {
@@ -281,9 +280,6 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
 
         {/* Light / dark mode switch */}
         <ThemeToggle />
-
-        {/* One-click Material 3 / original UI switch */}
-        <UiStyleToggle />
 
         {/* Profile Menu Dropdown */}
         <div className="relative">

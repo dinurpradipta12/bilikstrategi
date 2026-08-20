@@ -345,7 +345,7 @@ html.dark [class~='hover:text-[#202124]']:hover {
 
 /* Standard modals sit one visual level above regular cards in dark mode.
    The brighter surface, defined edge, and layered shadow prevent dialogs from
-   blending into the dimmed page behind them. Keep this after the legacy color
+   blending into the dimmed page behind them. Keep this after the base color
    mappings so modal elevation wins over generic bg-white/border overrides. */
 html.dark [data-mobile-modal],
 html.dark [data-modal-overlay] {
@@ -724,9 +724,8 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 /* ─── Material 3 soft visual layer ──────────────────────────
-   The original UI rules above remain untouched as the legacy backup.
-   Every rule below is scoped to data-ui-style="m3", so the UI switch can
-   restore the exact original presentation without reloading the page. */
+   Material 3 is the application's permanent visual system. The data
+   attribute keeps the semantic layer explicit and prevents selector leakage. */
 html[data-ui-style='m3'] {
   --m3-ref-blue: #95B1EE;
   --m3-ref-sky: #97C2EC;
@@ -1211,12 +1210,6 @@ html[data-ui-style='m3'] nav[data-mobile-bottom-nav] a {
 html[data-ui-style='m3'] nav[data-mobile-bottom-nav] a:hover,
 html[data-ui-style='m3'] nav[data-mobile-bottom-nav] a[class~='bg-white/10'] {
   color: #FFFFFF !important;
-}
-
-html[data-ui-style='m3'] [data-ui-style-toggle] {
-  background-color: var(--m3-tertiary-container) !important;
-  border-color: color-mix(in srgb, var(--m3-tertiary) 30%, transparent) !important;
-  color: var(--m3-on-tertiary-container) !important;
 }
 
 html[data-ui-style='m3'] h1,

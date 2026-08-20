@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { BadgeCheck, Calculator, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
-import UiStyleToggle from '@/components/theme/UiStyleToggle';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
@@ -94,9 +93,8 @@ export default function MobileBottomNav() {
 
   return (
     <>
-      <div className="fixed bottom-[6.25rem] left-5 z-[95] flex gap-2 md:hidden pointer-events-auto">
+      <div className="fixed bottom-[6.25rem] left-5 z-[95] md:hidden pointer-events-auto">
         <ThemeToggle compact />
-        <UiStyleToggle compact />
       </div>
       <div className="fixed bottom-4 left-4 right-4 z-[90] md:hidden pointer-events-auto">
         <nav
