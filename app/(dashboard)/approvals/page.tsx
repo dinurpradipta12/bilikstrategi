@@ -11,10 +11,12 @@ import {
   CircleAlert,
   Clock3,
   Compass,
+  ExternalLink,
   FileCheck2,
   FileText,
   Inbox,
   Loader2,
+  MessageSquareText,
   Pencil,
   Plus,
   RefreshCw,
@@ -41,15 +43,15 @@ import type {
 type ApprovalTypeMeta = { label: string; icon: typeof BadgeCheck; color: string };
 
 const TYPE_META: Record<ApprovalRequestType, ApprovalTypeMeta> = {
-  daily_activity: { label: 'Daily Activity', icon: FileCheck2, color: 'bg-[#E7F4ED] text-[#39785D]' },
-  script: { label: 'Approval Script', icon: FileText, color: 'bg-[#E6F1FF] text-[#356AA0]' },
-  strategy: { label: 'Approval Strategy', icon: Compass, color: 'bg-[#EEE9FF] text-[#6557A5]' },
-  deliverable: { label: 'Approval Deliverable', icon: BadgeCheck, color: 'bg-[#E3F4F1] text-[#33766D]' },
-  work_other: { label: 'Approval Pekerjaan Lainnya', icon: BriefcaseBusiness, color: 'bg-[#FFF0DF] text-[#9B6429]' },
-  leave: { label: 'Cuti / Izin', icon: CalendarClock, color: 'bg-[#FFF1DB] text-[#9B6514]' },
-  overtime: { label: 'Lembur', icon: Clock3, color: 'bg-[#E9ECFF] text-[#5B61AD]' },
-  kpi: { label: 'KPI / OKR', icon: TimerReset, color: 'bg-[#F2E9FA] text-[#7A4D9D]' },
-  general: { label: 'Operasional Lainnya', icon: Settings2, color: 'bg-[#EEF2F7] text-[#566176]' },
+  daily_activity: { label: 'Daily Activity', icon: FileCheck2, color: 'bg-[#E7F4ED] text-[#39785D] dark:bg-[#1E392C] dark:text-[#8DD0A9]' },
+  script: { label: 'Approval Script', icon: FileText, color: 'bg-[#E6F1FF] text-[#356AA0] dark:bg-[#29364A] dark:text-[#AFC9EE]' },
+  strategy: { label: 'Approval Strategy', icon: Compass, color: 'bg-[#EEE9FF] text-[#6557A5] dark:bg-[#32294C] dark:text-[#D1B8F1]' },
+  deliverable: { label: 'Approval Deliverable', icon: BadgeCheck, color: 'bg-[#E3F4F1] text-[#33766D] dark:bg-[#1E3938] dark:text-[#91D6CC]' },
+  work_other: { label: 'Approval Pekerjaan Lainnya', icon: BriefcaseBusiness, color: 'bg-[#FFF0DF] text-[#9B6429] dark:bg-[#3D321F] dark:text-[#F2C879]' },
+  leave: { label: 'Cuti / Izin', icon: CalendarClock, color: 'bg-[#FFF1DB] text-[#9B6514] dark:bg-[#3D321F] dark:text-[#F2C879]' },
+  overtime: { label: 'Lembur', icon: Clock3, color: 'bg-[#E9ECFF] text-[#5B61AD] dark:bg-[#2E3151] dark:text-[#BEC2FF]' },
+  kpi: { label: 'KPI / OKR', icon: TimerReset, color: 'bg-[#F2E9FA] text-[#7A4D9D] dark:bg-[#32294C] dark:text-[#D1B8F1]' },
+  general: { label: 'Operasional Lainnya', icon: Settings2, color: 'bg-[#EEF2F7] text-[#566176] dark:bg-[#2A3443] dark:text-[#C0C9D6]' },
 };
 
 const TYPE_ENTRIES = Object.entries(TYPE_META) as Array<[ApprovalRequestType, ApprovalTypeMeta]>;
@@ -59,13 +61,13 @@ const CATEGORY_META: Record<ApprovalRequestCategory, { label: string; descriptio
     label: 'Approval Pekerjaan',
     description: 'Script, strategy, deliverable, atau output pekerjaan lainnya.',
     icon: BriefcaseBusiness,
-    color: 'bg-[#EAF2FF] text-[#3F679C]',
+    color: 'bg-[#EAF2FF] text-[#3F679C] dark:bg-[#29364A] dark:text-[#AFC9EE]',
   },
   operational: {
     label: 'Approval Operasional',
     description: 'Cuti, lembur, KPI/OKR, dan kebutuhan operasional lainnya.',
     icon: Settings2,
-    color: 'bg-[#FFF2DF] text-[#956325]',
+    color: 'bg-[#FFF2DF] text-[#956325] dark:bg-[#3D321F] dark:text-[#F2C879]',
   },
 };
 
@@ -74,11 +76,11 @@ function categoryFor(requestType: ApprovalRequestType): ApprovalRequestCategory 
 }
 
 const STATUS_META: Record<ApprovalStatus, { label: string; color: string; icon: typeof Check }> = {
-  pending: { label: 'Menunggu', color: 'bg-[#FFF1DB] text-[#9B6514]', icon: Clock3 },
-  approved: { label: 'Disetujui', color: 'bg-[#E7F4ED] text-[#39785D]', icon: CheckCircle2 },
-  revision: { label: 'Perlu Revisi', color: 'bg-[#E9ECFF] text-[#5B61AD]', icon: RotateCcw },
-  rejected: { label: 'Ditolak', color: 'bg-[#FDE9E7] text-[#B14E46]', icon: XCircle },
-  cancelled: { label: 'Dibatalkan', color: 'bg-[#EEF2F7] text-[#737680]', icon: X },
+  pending: { label: 'Menunggu', color: 'bg-[#FFF1DB] text-[#9B6514] dark:bg-[#3D321F] dark:text-[#F2C879]', icon: Clock3 },
+  approved: { label: 'Disetujui', color: 'bg-[#E7F4ED] text-[#39785D] dark:bg-[#1E392C] dark:text-[#8DD0A9]', icon: CheckCircle2 },
+  revision: { label: 'Perlu Revisi', color: 'bg-[#E9ECFF] text-[#5B61AD] dark:bg-[#2E3151] dark:text-[#BEC2FF]', icon: RotateCcw },
+  rejected: { label: 'Ditolak', color: 'bg-[#FDE9E7] text-[#B14E46] dark:bg-[#3B272B] dark:text-[#FFAAA0]', icon: XCircle },
+  cancelled: { label: 'Dibatalkan', color: 'bg-[#EEF2F7] text-[#737680] dark:bg-[#2A3443] dark:text-[#C0C9D6]', icon: X },
 };
 
 const initialBootstrap: ApprovalBootstrap = {
@@ -116,6 +118,220 @@ function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]).join('').toUpperCase() || 'U';
 }
 
+function LinkifiedText({ text }: { text: string }) {
+  const nodes: React.ReactNode[] = [];
+  const urlPattern = /https?:\/\/[^\s]+/gi;
+  let cursor = 0;
+
+  for (const match of text.matchAll(urlPattern)) {
+    const start = match.index ?? 0;
+    const rawUrl = match[0];
+    const href = rawUrl.replace(/[),.;!?]+$/g, '');
+    const trailingPunctuation = rawUrl.slice(href.length);
+
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    nodes.push(
+      <a
+        key={`${href}-${start}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Buka tautan di tab baru"
+        onClick={(event) => event.stopPropagation()}
+        className="inline-flex max-w-full items-center gap-1 break-all font-bold text-[#3F679C] underline decoration-[#95B1EE] decoration-2 underline-offset-2 transition hover:text-[#24324A] dark:text-[#AFC9EE] dark:hover:text-white"
+      >
+        <span>{href}</span>
+        <ExternalLink className="h-3 w-3 flex-none" />
+      </a>
+    );
+    if (trailingPunctuation) nodes.push(trailingPunctuation);
+    cursor = start + rawUrl.length;
+  }
+
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return <>{nodes.length > 0 ? nodes : text}</>;
+}
+
+type ApprovalDetailModalProps = {
+  request: ApprovalRequest;
+  canManage: boolean;
+  canEdit: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onReview: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+};
+
+function ApprovalDetailModal({
+  request,
+  canManage,
+  canEdit,
+  saving,
+  onClose,
+  onReview,
+  onEdit,
+  onDelete,
+}: ApprovalDetailModalProps) {
+  const type = TYPE_META[request.request_type] || TYPE_META.general;
+  const category = CATEGORY_META[categoryFor(request.request_type)];
+  const status = STATUS_META[request.status] || STATUS_META.pending;
+  const TypeIcon = type.icon;
+  const CategoryIcon = category.icon;
+  const StatusIcon = status.icon;
+  const hasReviewDetails = Boolean(request.reviewer_name || request.reviewer_email || request.reviewed_at || request.reviewer_note.trim());
+
+  return (
+    <ModalPortal onClose={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approval-detail-title"
+        className="flex max-h-[92svh] w-full min-w-0 flex-col overflow-hidden rounded-t-[28px] border border-[#E1E5EB] bg-white shadow-2xl dark:border-[#3A424E] dark:bg-[#20242C] sm:max-w-3xl sm:rounded-[28px]"
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-[#E8E8EC] px-5 py-5 dark:border-[#303742] sm:px-6">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${category.color}`}>
+                <CategoryIcon className="h-3 w-3" />{category.label}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${type.color}`}>
+                <TypeIcon className="h-3 w-3" />{type.label}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${status.color}`}>
+                <StatusIcon className="h-3 w-3" />{status.label}
+              </span>
+            </div>
+            <h2 id="approval-detail-title" className="mt-3 break-words text-xl font-black leading-tight text-[#24324A] dark:text-[#F4F6FA] sm:text-2xl">
+              {request.title}
+            </h2>
+            <p className="mt-2 text-xs text-[#737680] dark:text-[#98A2B3]">Detail lengkap permintaan dan hasil evaluasi approval.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-2xl text-[#737680] transition hover:bg-[#F2F4F7] dark:text-[#B9C3D0] dark:hover:bg-[#282D36]"
+            aria-label="Tutup detail approval"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+
+        <div className="min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+          <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.55fr)_minmax(220px,0.8fr)]">
+            <section className="min-w-0 rounded-2xl border border-[#E5E8ED] bg-[#F8F9FB] p-4 dark:border-[#3A424E] dark:bg-[#171D27] sm:p-5">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680] dark:text-[#98A2B3]">Detail permintaan</p>
+              <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[#4F5663] dark:text-[#D1D6DF]">
+                {request.description ? <LinkifiedText text={request.description} /> : 'Tidak ada detail tambahan.'}
+              </div>
+              {request.metadata?.progress !== undefined && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#EAF2FF] px-3 py-1.5 text-[11px] font-extrabold text-[#3F679C] dark:bg-[#29364A] dark:text-[#AFC9EE]">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Progress {String(request.metadata.progress)}%
+                </div>
+              )}
+              {(request.source_type || request.source_id) && (
+                <div className="mt-5 border-t border-[#E1E5EB] pt-4 text-[11px] leading-5 text-[#737680] dark:border-[#303742] dark:text-[#98A2B3]">
+                  <p className="font-extrabold uppercase tracking-[0.12em]">Sumber terhubung</p>
+                  <p className="mt-1 break-all">{request.source_type || 'Sumber aplikasi'}{request.source_id ? ` · ${request.source_id}` : ''}</p>
+                </div>
+              )}
+            </section>
+
+            <aside className="min-w-0 space-y-3">
+              <section className="rounded-2xl border border-[#E5E8ED] bg-white p-4 dark:border-[#3A424E] dark:bg-[#20242C]">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#737680] dark:text-[#98A2B3]">Diajukan oleh</p>
+                <div className="mt-3 flex min-w-0 items-center gap-3">
+                  <div className="h-11 w-11 flex-none overflow-hidden rounded-2xl bg-gradient-to-br from-[#D8E5FF] to-[#F2DBEE] ring-1 ring-white/80 dark:ring-[#4B5565]">
+                    {request.requested_by_avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={request.requested_by_avatar} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-xs font-black text-[#40506B]">{initials(request.requested_by_name)}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">{request.requested_by_name}</p>
+                    <a href={`mailto:${request.requested_by_email}`} className="mt-0.5 block truncate text-[11px] font-semibold text-[#3F679C] hover:underline dark:text-[#AFC9EE]">
+                      {request.requested_by_email}
+                    </a>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-[#E5E8ED] bg-white p-4 text-[11px] dark:border-[#3A424E] dark:bg-[#20242C]">
+                <div className="flex items-start gap-2 text-[#737680] dark:text-[#AAB4C5]">
+                  <CalendarClock className="mt-0.5 h-4 w-4 flex-none" />
+                  <div><p className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Diajukan</p><p className="mt-0.5">{formatDate(request.submitted_at)}</p></div>
+                </div>
+                <div className="mt-3 flex items-start gap-2 border-t border-[#ECEEF2] pt-3 text-[#737680] dark:border-[#303742] dark:text-[#AAB4C5]">
+                  <RefreshCw className="mt-0.5 h-4 w-4 flex-none" />
+                  <div><p className="font-extrabold text-[#24324A] dark:text-[#F4F6FA]">Terakhir diperbarui</p><p className="mt-0.5">{formatDate(request.updated_at)}</p></div>
+                </div>
+              </section>
+            </aside>
+          </div>
+
+          <section className="mt-5 rounded-2xl border border-[#DCE5F2] bg-[#F4F8FD] p-4 dark:border-[#3B4A5D] dark:bg-[#243042] sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-none items-center justify-center rounded-2xl bg-[#EAF2FF] text-[#3F679C] dark:bg-[#29364A] dark:text-[#AFC9EE]">
+                <MessageSquareText className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5E6470] dark:text-[#AAB4C5]">Catatan evaluasi</p>
+                    <h3 className="mt-1 text-sm font-black text-[#24324A] dark:text-[#F4F6FA]">
+                      {hasReviewDetails ? `Evaluasi oleh ${request.reviewer_name || request.reviewer_email || 'reviewer'}` : 'Belum ada evaluasi'}
+                    </h3>
+                  </div>
+                  {request.reviewed_at && <span className="text-[10px] font-semibold text-[#737680] dark:text-[#AAB4C5]">{formatDate(request.reviewed_at)}</span>}
+                </div>
+                <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-[#4F5663] dark:text-[#D1D6DF]">
+                  {request.reviewer_note.trim() ? (
+                    <LinkifiedText text={request.reviewer_note} />
+                  ) : request.status === 'pending' ? (
+                    'Approval ini belum ditinjau, sehingga belum ada catatan evaluasi.'
+                  ) : (
+                    `Keputusan “${status.label}” disimpan tanpa catatan evaluasi tambahan.`
+                  )}
+                </div>
+                {request.reviewer_email && (
+                  <a href={`mailto:${request.reviewer_email}`} className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[#3F679C] hover:underline dark:text-[#AFC9EE]">
+                    {request.reviewer_email}
+                  </a>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer className="flex flex-col-reverse gap-2 border-t border-[#E8E8EC] bg-white px-5 py-4 dark:border-[#303742] dark:bg-[#20242C] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <button type="button" onClick={onClose} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#626874] transition hover:bg-[#F7F8FA] dark:border-[#3A424E] dark:text-[#D1D6DF] dark:hover:bg-[#282D36]">
+            Tutup
+          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {canManage && (
+              <button type="button" disabled={saving} onClick={onDelete} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#F0C7C4] bg-white px-4 text-xs font-extrabold text-[#B14E46] transition hover:bg-[#FFF0ED] disabled:opacity-50 dark:border-[#633D3A] dark:bg-[#20242C] dark:text-[#FFAAA0] dark:hover:bg-[#3B272B]">
+                <Trash2 className="h-4 w-4" /> Hapus
+              </button>
+            )}
+            {canEdit && (
+              <button type="button" disabled={saving} onClick={onEdit} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-4 text-xs font-extrabold text-[#40536F] transition hover:bg-[#F7F8FA] disabled:opacity-50 dark:border-[#3A424E] dark:bg-[#20242C] dark:text-[#C9D5E5] dark:hover:bg-[#282D36]">
+                <Pencil className="h-4 w-4" /> Edit
+              </button>
+            )}
+            {canManage && request.status === 'pending' && (
+              <button type="button" disabled={saving} onClick={onReview} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white transition hover:bg-[#31415E] disabled:opacity-50">
+                <BadgeCheck className="h-4 w-4" /> Tinjau Approval
+              </button>
+            )}
+          </div>
+        </footer>
+      </section>
+    </ModalPortal>
+  );
+}
+
 export default function ApprovalsPage() {
   const deletedRequestIds = useRef(new Set<string>());
   const [data, setData] = useState<ApprovalBootstrap>(initialBootstrap);
@@ -130,6 +346,7 @@ export default function ApprovalsPage() {
   const [editingRequest, setEditingRequest] = useState<ApprovalRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ApprovalRequest | null>(null);
   const [selected, setSelected] = useState<ApprovalRequest | null>(null);
+  const [detailRequestId, setDetailRequestId] = useState<string | null>(null);
   const [reviewStatus, setReviewStatus] = useState<'approved' | 'revision' | 'rejected'>('approved');
   const [reviewNote, setReviewNote] = useState('');
   const [form, setForm] = useState({ ...emptyRequestForm });
@@ -156,9 +373,12 @@ export default function ApprovalsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(true), 5000);
-    return () => window.clearInterval(timer);
+    const initialLoadTimer = window.setTimeout(() => void load(), 0);
+    const refreshTimer = window.setInterval(() => void load(true), 5000);
+    return () => {
+      window.clearTimeout(initialLoadTimer);
+      window.clearInterval(refreshTimer);
+    };
   }, [load]);
 
   const stats = useMemo(() => ({
@@ -181,6 +401,10 @@ export default function ApprovalsPage() {
         .some((value) => String(value || '').toLowerCase().includes(needle));
     });
   }, [categoryFilter, data.requests, query, statusFilter, typeFilter]);
+
+  const detailRequest = detailRequestId
+    ? data.requests.find((request) => request.id === detailRequestId) || null
+    : null;
 
   const formCategory = categoryFor(form.request_type);
   const isSourceLinkedEdit = Boolean(editingRequest?.source_type && editingRequest?.source_id);
@@ -235,6 +459,7 @@ export default function ApprovalsPage() {
   }
 
   function openEditRequest(request: ApprovalRequest) {
+    setDetailRequestId(null);
     setEditingRequest(request);
     setForm({
       request_type: request.request_type,
@@ -242,6 +467,13 @@ export default function ApprovalsPage() {
       description: request.description,
     });
     setShowSubmit(true);
+  }
+
+  function openReviewRequest(request: ApprovalRequest) {
+    setDetailRequestId(null);
+    setSelected(request);
+    setReviewStatus('approved');
+    setReviewNote('');
   }
 
   function closeRequestForm() {
@@ -265,7 +497,10 @@ export default function ApprovalsPage() {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
     const result = await mutate('DELETE', undefined, `/api/approvals?id=${encodeURIComponent(targetId)}`);
-    if (result?.deleted?.id === targetId) setDeleteTarget(null);
+    if (result?.deleted?.id === targetId) {
+      setDeleteTarget(null);
+      setDetailRequestId((current) => current === targetId ? null : current);
+    }
   }
 
   async function reviewRequest(event: React.FormEvent) {
@@ -431,7 +666,12 @@ export default function ApprovalsPage() {
               const isOwnRequest = request.requested_by_email === data.viewer.email;
               const canEdit = data.viewer.can_manage || (isOwnRequest && ['pending', 'revision'].includes(request.status));
               return (
-                <article key={request.id} data-approval-row={request.id} className="p-4 transition hover:bg-[#FAFAFB] dark:hover:bg-[#282D36] sm:p-5">
+                <article
+                  key={request.id}
+                  data-approval-row={request.id}
+                  onClick={() => setDetailRequestId(request.id)}
+                  className="cursor-pointer p-4 transition hover:bg-[#FAFAFB] dark:hover:bg-[#282D36] sm:p-5"
+                >
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className="h-11 w-11 flex-none overflow-hidden rounded-2xl bg-gradient-to-br from-[#D8E5FF] to-[#F2DBEE] ring-1 ring-white">
@@ -448,8 +688,25 @@ export default function ApprovalsPage() {
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${type.color}`}><TypeIcon className="h-3 w-3" />{type.label}</span>
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${status.color}`}><StatusIcon className="h-3 w-3" />{status.label}</span>
                         </div>
-                        <h3 className="mt-2 text-sm font-black text-[#24324A] sm:text-base">{request.title}</h3>
-                        {request.description && <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#737680]">{request.description}</p>}
+                        <h3 className="mt-2 text-sm font-black text-[#24324A] dark:text-[#F4F6FA] sm:text-base">
+                          <button
+                            type="button"
+                            data-approval-detail-trigger={request.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setDetailRequestId(request.id);
+                            }}
+                            className="rounded-sm text-left outline-none transition hover:text-[#3F679C] focus-visible:ring-2 focus-visible:ring-[#7F91B0] focus-visible:ring-offset-2 dark:hover:text-[#AFC9EE] dark:focus-visible:ring-offset-[#20242C]"
+                            aria-label={`Lihat detail approval ${request.title}`}
+                          >
+                            {request.title}
+                          </button>
+                        </h3>
+                        {request.description && (
+                          <p className="mt-1 line-clamp-2 break-words text-xs leading-5 text-[#737680] dark:text-[#AAB4C5]">
+                            <LinkifiedText text={request.description} />
+                          </p>
+                        )}
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-semibold text-[#8A8E98]">
                           <span className="inline-flex items-center gap-1.5"><UserRound className="h-3.5 w-3.5" />{request.requested_by_name}</span>
                           <span>{formatDate(request.submitted_at)}</span>
@@ -457,24 +714,25 @@ export default function ApprovalsPage() {
                         </div>
                         {request.reviewer_note && (
                           <div className="mt-3 rounded-xl border border-[#E5E8ED] bg-[#F7F8FA] px-3 py-2 text-xs leading-5 text-[#5E6470]">
-                            <span className="font-extrabold text-[#24324A]">Catatan {request.reviewer_name || 'reviewer'}:</span> {request.reviewer_note}
+                            <span className="font-extrabold text-[#24324A]">Catatan {request.reviewer_name || 'reviewer'}:</span>{' '}
+                            <LinkifiedText text={request.reviewer_note} />
                           </div>
                         )}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end">
                       {data.viewer.can_manage && request.status === 'pending' && (
-                        <button type="button" onClick={() => { setSelected(request); setReviewStatus('approved'); setReviewNote(''); }} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#24324A] px-3 text-[11px] font-extrabold text-white hover:bg-[#31415E]">
+                        <button type="button" onClick={(event) => { event.stopPropagation(); openReviewRequest(request); }} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#24324A] px-3 text-[11px] font-extrabold text-white hover:bg-[#31415E]">
                           <BadgeCheck className="h-4 w-4" /> Tinjau
                         </button>
                       )}
                       {!data.viewer.can_manage && request.status === 'revision' && (
-                        <button type="button" disabled={saving} onClick={() => void post({ action: 'resubmit', id: request.id, title: request.title, description: request.description })} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#5B61AD] px-3 text-[11px] font-extrabold text-white">
+                        <button type="button" disabled={saving} onClick={(event) => { event.stopPropagation(); void post({ action: 'resubmit', id: request.id, title: request.title, description: request.description }); }} className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#5B61AD] px-3 text-[11px] font-extrabold text-white">
                           <Send className="h-3.5 w-3.5" /> Kirim Ulang
                         </button>
                       )}
                       {!data.viewer.can_manage && ['pending', 'revision'].includes(request.status) && (
-                        <button type="button" disabled={saving} onClick={() => { if (window.confirm('Batalkan permintaan ini?')) void post({ action: 'cancel', id: request.id }); }} className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#E4E7EC] bg-white px-3 text-[11px] font-extrabold text-[#737680] hover:bg-[#F7F7F8]">
+                        <button type="button" disabled={saving} onClick={(event) => { event.stopPropagation(); if (window.confirm('Batalkan permintaan ini?')) void post({ action: 'cancel', id: request.id }); }} className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#E4E7EC] bg-white px-3 text-[11px] font-extrabold text-[#737680] hover:bg-[#F7F7F8]">
                           <X className="h-3.5 w-3.5" /> Batalkan
                         </button>
                       )}
@@ -482,7 +740,7 @@ export default function ApprovalsPage() {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={() => openEditRequest(request)}
+                          onClick={(event) => { event.stopPropagation(); openEditRequest(request); }}
                           aria-label={`Edit approval ${request.title}`}
                           className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-3 text-[11px] font-extrabold text-[#40536F] transition hover:border-[#7F91B0] hover:bg-[#F7F8FA] disabled:opacity-50"
                         >
@@ -493,7 +751,7 @@ export default function ApprovalsPage() {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={() => { setError(''); setDeleteTarget(request); }}
+                          onClick={(event) => { event.stopPropagation(); setError(''); setDeleteTarget(request); }}
                           aria-label={`Hapus approval ${request.title}`}
                           className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#F0C7C4] bg-white px-3 text-[11px] font-extrabold text-[#B14E46] transition hover:bg-[#FFF0ED] disabled:opacity-50"
                         >
@@ -508,6 +766,26 @@ export default function ApprovalsPage() {
           </div>
         )}
       </section>
+
+      {detailRequest && (
+        <ApprovalDetailModal
+          request={detailRequest}
+          canManage={data.viewer.can_manage}
+          canEdit={data.viewer.can_manage || (
+            detailRequest.requested_by_email === data.viewer.email
+            && ['pending', 'revision'].includes(detailRequest.status)
+          )}
+          saving={saving}
+          onClose={() => setDetailRequestId(null)}
+          onReview={() => openReviewRequest(detailRequest)}
+          onEdit={() => openEditRequest(detailRequest)}
+          onDelete={() => {
+            setError('');
+            setDetailRequestId(null);
+            setDeleteTarget(detailRequest);
+          }}
+        />
+      )}
 
       {showSubmit && (
         <ModalPortal onClose={closeRequestForm}>
