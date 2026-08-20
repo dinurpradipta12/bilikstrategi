@@ -856,7 +856,7 @@ export default function InvoicesPage() {
         <section className="min-w-0 rounded-xl border border-[#E8E8EC] bg-[#EEF2F7] p-3 shadow-sm">
           <div className="mb-3 flex items-center justify-between px-1"><div><h2 className="text-sm font-extrabold text-[#24324A]">Preview A4</h2><p className="text-[11px] text-[#737680]">Ukuran siap cetak 210 x 297 mm.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#4F9D78]"><Check className="mr-1 inline h-3 w-3" /> Live preview</span></div>
           <div className="overflow-x-auto rounded-lg border border-[#D7DEE8] bg-[#DDE4ED] p-3">
-            <div ref={previewRef} className="invoice-print-target mx-auto min-h-[1123px] w-[794px] overflow-hidden bg-white shadow-xl" style={previewStyle}>
+            <div ref={previewRef} data-document-preview className="invoice-print-target mx-auto min-h-[1123px] w-[794px] overflow-hidden shadow-xl" style={previewStyle}>
               <div className="flex min-h-[1123px] flex-col p-[64px]" style={{ color: draft.textColor }}>
               <div className="flex items-start justify-between gap-8 border-b-2 pb-8" style={{ borderColor: draft.accentColor }}>
                 <div className="flex min-w-0 items-start gap-2">

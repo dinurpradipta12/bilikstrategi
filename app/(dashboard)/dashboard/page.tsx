@@ -110,6 +110,11 @@ export default function DashboardPage() {
         offline: '#24324A',
       };
 
+  const chartTooltipCursor = {
+    fill: isDark ? 'rgba(180, 200, 255, 0.08)' : 'rgba(54, 76, 132, 0.06)',
+    stroke: isDark ? 'rgba(180, 200, 255, 0.18)' : 'rgba(54, 76, 132, 0.12)',
+  };
+
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedAssignee, setSelectedAssignee] = useState('all');
 
@@ -788,7 +793,10 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
                 <XAxis dataKey="name" stroke={chartPalette.axis} fontSize={11} />
                 <YAxis stroke={chartPalette.axis} fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                <Tooltip
+                  cursor={chartTooltipCursor}
+                  contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }}
+                />
                 <Bar dataKey="Created" fill={chartPalette.created} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Completed" fill={chartPalette.completed} radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -824,7 +832,10 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                  <Tooltip
+                    cursor={chartTooltipCursor}
+                    contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }}
+                  />
                   <Legend iconSize={8} layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', color: chartPalette.axis }} />
                 </PieChart>
               </ResponsiveContainer>
@@ -853,7 +864,7 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
                   <XAxis type="number" stroke={chartPalette.axis} fontSize={11} />
                   <YAxis dataKey="name" type="category" stroke={chartPalette.axis} fontSize={11} width={80} />
-                  <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                  <Tooltip cursor={chartTooltipCursor} contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
                   <Bar dataKey="HoursTracked" fill={chartPalette.hours} radius={[0, 4, 4, 0]} name="Jam Terpakai" />
                   <Bar dataKey="Capacity" fill={chartPalette.capacity} radius={[0, 4, 4, 0]} name="Kapasitas Max" />
                 </BarChart>
@@ -879,7 +890,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke={chartPalette.grid} />
                 <XAxis dataKey="month" stroke={chartPalette.axis} fontSize={11} />
                 <YAxis stroke={chartPalette.axis} fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
+                <Tooltip cursor={chartTooltipCursor} contentStyle={{ backgroundColor: chartPalette.tooltipBackground, borderColor: chartPalette.tooltipBorder, color: chartPalette.axis, borderRadius: '8px', fontSize: '12px' }} />
                 <Area type="monotone" dataKey="Progress" stroke={chartPalette.progressStroke} fill={chartPalette.progressFill} fillOpacity={isDark ? 0.72 : 1} strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>

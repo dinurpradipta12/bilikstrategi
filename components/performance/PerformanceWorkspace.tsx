@@ -956,20 +956,20 @@ function MemberWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sav
   return (
     <>
       <section className={`${panelClass} mb-5 overflow-hidden`}>
-        <div className="performance-profile-gradient px-4 py-5 text-[#24324A] sm:px-6 sm:py-6" style={{ backgroundImage: theme.gradient }}>
+        <div data-performance-profile className="performance-profile-gradient px-4 py-5 text-[#24324A] sm:px-6 sm:py-6" style={{ backgroundImage: theme.gradient }}>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={avatarFor(profile)} alt={profile.display_name} className="h-16 w-16 rounded-2xl border-2 border-white/60 object-cover shadow-sm sm:h-20 sm:w-20" />
-              <div className="min-w-0">
-                <div className="mb-1 flex flex-wrap items-center gap-2"><h2 className="truncate text-xl font-black sm:text-2xl">{profile.display_name}</h2><span className="rounded-lg border border-white/40 bg-white/45 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#24324A]">{data.viewer.app_role}</span></div>
+              <div data-performance-profile-identity className="min-w-0">
+                <div className="mb-1 flex flex-wrap items-center gap-2"><h2 className="truncate text-xl font-black sm:text-2xl">{profile.display_name}</h2><span data-performance-profile-badge className="rounded-lg border border-white/40 bg-white/45 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#24324A]">{data.viewer.app_role}</span></div>
                 <p className="text-sm font-bold text-[#24324A]/85">{profile.role_title}</p>
                 <p className="mt-1 flex items-center gap-1.5 text-[11px] text-[#24324A]/65"><Users className="h-3.5 w-3.5" /> {profile.division}</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:min-w-64">
-              <div className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Progress Hari Ini</span><strong className="mt-1 block text-2xl font-black">{todayProgress}%</strong></div>
-              <div className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Nilai Terakhir</span><strong className="mt-1 block text-2xl font-black">{review ? Math.round(review.overall_score) : '-'}</strong></div>
+              <div data-performance-profile-stat className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Progress Hari Ini</span><strong className="mt-1 block text-2xl font-black">{todayProgress}%</strong></div>
+              <div data-performance-profile-stat className="rounded-2xl border border-white/35 bg-white/40 px-4 py-3"><span className="text-[9px] font-bold uppercase tracking-wider text-[#24324A]/60">Nilai Terakhir</span><strong className="mt-1 block text-2xl font-black">{review ? Math.round(review.overall_score) : '-'}</strong></div>
             </div>
           </div>
         </div>

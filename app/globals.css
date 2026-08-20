@@ -568,13 +568,6 @@ html.dark .floating-chat-icon {
   color: #FF8B80 !important;
 }
 
-/* Flat profile gradients stay light in both themes, so their ink must remain
-   navy instead of inheriting the global dark-surface text conversion. */
-html.dark .performance-profile-gradient,
-html.dark .performance-profile-gradient * {
-  color: #24324A !important;
-}
-
 html.dark ::-webkit-scrollbar-thumb {
   background: #4A5362;
 }
@@ -1414,6 +1407,86 @@ html[data-ui-style='m3'] [data-calendar-tone='coral'] {
   background-color: var(--m3-error-container) !important;
   border-color: color-mix(in srgb, var(--m3-error) 45%, transparent) !important;
   color: var(--m3-on-error-container) !important;
+}
+
+/* Documents stay faithful to their user-selected print palette even while the
+   surrounding editor uses the dark application theme. */
+html[data-ui-style='m3'].dark [data-document-preview] {
+  color-scheme: light;
+  isolation: isolate;
+}
+
+/* Large calculator results use a low-emphasis surface; each package keeps a
+   distinct semantic tone without becoming a bright slab in dark mode. */
+html[data-ui-style='m3'].dark [data-fee-result-panel] {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--m3-primary-container) 36%, var(--m3-surface-container-lowest)),
+      var(--m3-surface-container-high)
+    ) !important;
+  border: 1px solid var(--m3-outline-variant);
+  color: var(--m3-on-surface) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='primary'] {
+  background-color: color-mix(in srgb, var(--m3-primary-container) 66%, var(--m3-surface-container-lowest)) !important;
+  border-color: color-mix(in srgb, var(--m3-primary) 38%, var(--m3-outline-variant)) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='primary'] [data-fee-package-accent] {
+  color: var(--m3-primary) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='error'] {
+  background-color: color-mix(in srgb, var(--m3-error-container) 46%, var(--m3-surface-container-lowest)) !important;
+  border-color: color-mix(in srgb, var(--m3-error) 38%, var(--m3-outline-variant)) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='error'] [data-fee-package-accent] {
+  color: var(--m3-error) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='secondary'] {
+  background-color: color-mix(in srgb, var(--m3-secondary-container) 62%, var(--m3-surface-container-lowest)) !important;
+  border-color: color-mix(in srgb, var(--m3-secondary) 38%, var(--m3-outline-variant)) !important;
+}
+
+html[data-ui-style='m3'].dark [data-fee-package-tone='secondary'] [data-fee-package-accent] {
+  color: var(--m3-secondary) !important;
+}
+
+/* Profile gradients remain expressive in light mode, then shift to calm M3
+   tonal surfaces in dark mode so the header does not flash as a pastel panel. */
+html[data-ui-style='m3'].dark [data-performance-profile] {
+  background-image:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--m3-primary-container) 72%, var(--m3-surface-container-lowest)) 0%,
+      color-mix(in srgb, var(--m3-secondary-container) 58%, var(--m3-surface-container)) 55%,
+      color-mix(in srgb, var(--m3-success-container) 42%, var(--m3-surface-container-lowest)) 100%
+    ) !important;
+  color: var(--m3-on-surface) !important;
+}
+
+html[data-ui-style='m3'].dark [data-performance-profile-identity] :is(h2, p, svg) {
+  color: var(--m3-on-surface) !important;
+}
+
+html[data-ui-style='m3'].dark [data-performance-profile-badge] {
+  background-color: color-mix(in srgb, var(--m3-primary) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--m3-primary) 42%, transparent) !important;
+  color: var(--m3-primary) !important;
+}
+
+html[data-ui-style='m3'].dark [data-performance-profile-stat] {
+  background-color: color-mix(in srgb, var(--m3-surface-container-lowest) 74%, transparent) !important;
+  border-color: var(--m3-outline-variant) !important;
+  color: var(--m3-on-surface) !important;
+}
+
+html[data-ui-style='m3'].dark [data-performance-profile-stat] :is(span, strong) {
+  color: var(--m3-on-surface) !important;
 }
 
 @media (min-width: 768px) and (max-width: 899px) {

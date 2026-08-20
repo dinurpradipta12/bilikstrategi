@@ -142,7 +142,7 @@ function DashboardTab({ calculation, settings, onOpen }: { calculation: FeeCalcu
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl bg-[#24324A] p-4 text-white shadow-sm dark:bg-[#111822] sm:p-5">
+      <section data-fee-result-panel className="rounded-3xl bg-[#24324A] p-4 text-white shadow-sm dark:bg-[#111822] sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[#FFAAA0]"><Sparkles className="h-4 w-4" /><span className="text-[10px] font-extrabold uppercase tracking-[0.16em]">Hasil Otomatis</span></div>
@@ -155,9 +155,13 @@ function DashboardTab({ calculation, settings, onOpen }: { calculation: FeeCalcu
           {calculation.packages.map((item, index) => {
             const style = packageStyles[index] || packageStyles[0];
             return (
-              <div key={item.id} className={`rounded-2xl border p-4 ${style.border} ${style.surface}`}>
-                <div className="flex items-center justify-between gap-2"><p className={`text-sm font-black ${style.accent}`}>{item.name}</p><span className="rounded-full bg-white/70 px-2 py-1 text-[9px] font-extrabold text-[#536176] dark:bg-black/15 dark:text-[#C0C9D6]">+{formatNumber(item.markupPercent)}%</span></div>
-                <p className={`mt-4 text-xl font-black ${style.accent}`}>{formatCurrency(item.allInPrice)}</p>
+              <div
+                key={item.id}
+                data-fee-package-tone={index === 0 ? 'primary' : index === 1 ? 'error' : 'secondary'}
+                className={`rounded-2xl border p-4 ${style.border} ${style.surface}`}
+              >
+                <div className="flex items-center justify-between gap-2"><p data-fee-package-accent className={`text-sm font-black ${style.accent}`}>{item.name}</p><span className="rounded-full bg-white/70 px-2 py-1 text-[9px] font-extrabold text-[#536176] dark:bg-black/15 dark:text-[#C0C9D6]">+{formatNumber(item.markupPercent)}%</span></div>
+                <p data-fee-package-accent className={`mt-4 text-xl font-black ${style.accent}`}>{formatCurrency(item.allInPrice)}</p>
                 <p className="mt-1 text-[10px] text-[#536176] dark:text-[#B9C5D5]">Termasuk operasional {formatCurrency(calculation.operationalTotal)}</p>
               </div>
             );
