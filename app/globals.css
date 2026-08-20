@@ -1188,6 +1188,10 @@ html[data-ui-style='m3'] [data-app-shell] > :not([class~='fixed']) {
   z-index: 1;
 }
 
+html[data-ui-style='m3'] [data-app-shell] > [data-sidebar-layer] {
+  z-index: 2;
+}
+
 html[data-ui-style='m3'] aside.fixed,
 html[data-ui-style='m3'] header.sticky {
   background-color: color-mix(in srgb, var(--m3-surface-container-lowest) 91%, transparent) !important;
