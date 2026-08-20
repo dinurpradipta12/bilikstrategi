@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck,
   BriefcaseBusiness,
@@ -15,6 +15,7 @@ import {
   FileText,
   Inbox,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -22,6 +23,7 @@ import {
   Send,
   Settings2,
   TimerReset,
+  Trash2,
   UserRound,
   X,
   XCircle,
@@ -85,6 +87,19 @@ const initialBootstrap: ApprovalBootstrap = {
   requests: [],
 };
 
+const emptyRequestForm = {
+  request_type: 'script' as ApprovalRequestType,
+  title: '',
+  description: '',
+};
+
+type ApprovalMutationPayload = {
+  success?: boolean;
+  request?: ApprovalRequest;
+  deleted?: Pick<ApprovalRequest, 'id' | 'title' | 'requested_by_email'>;
+  error?: string;
+};
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
@@ -102,6 +117,7 @@ function initials(name: string) {
 }
 
 export default function ApprovalsPage() {
+  const deletedRequestIds = useRef(new Set<string>());
   const [data, setData] = useState<ApprovalBootstrap>(initialBootstrap);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -111,10 +127,12 @@ export default function ApprovalsPage() {
   const [typeFilter, setTypeFilter] = useState<'all' | ApprovalRequestType>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | ApprovalRequestCategory>('all');
   const [showSubmit, setShowSubmit] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<ApprovalRequest | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ApprovalRequest | null>(null);
   const [selected, setSelected] = useState<ApprovalRequest | null>(null);
   const [reviewStatus, setReviewStatus] = useState<'approved' | 'revision' | 'rejected'>('approved');
   const [reviewNote, setReviewNote] = useState('');
-  const [form, setForm] = useState({ request_type: 'script' as ApprovalRequestType, title: '', description: '' });
+  const [form, setForm] = useState({ ...emptyRequestForm });
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -125,7 +143,9 @@ export default function ApprovalsPage() {
       setData({
         storage_ready: payload.storage_ready !== false,
         viewer: payload.viewer || initialBootstrap.viewer,
-        requests: Array.isArray(payload.requests) ? payload.requests : [],
+        requests: Array.isArray(payload.requests)
+          ? payload.requests.filter((request: ApprovalRequest) => !deletedRequestIds.current.has(request.id))
+          : [],
       });
       setError(payload.error || '');
     } catch (loadError) {
@@ -163,36 +183,89 @@ export default function ApprovalsPage() {
   }, [categoryFilter, data.requests, query, statusFilter, typeFilter]);
 
   const formCategory = categoryFor(form.request_type);
-  const formTypeOptions = TYPE_ENTRIES.filter(([value]) => value !== 'daily_activity' && categoryFor(value) === formCategory);
+  const isSourceLinkedEdit = Boolean(editingRequest?.source_type && editingRequest?.source_id);
+  const hasStorageConfigError = /SUPABASE_SERVICE_ROLE_KEY|service_role|token anon/i.test(error);
+  const formTypeOptions = TYPE_ENTRIES.filter(([value]) =>
+    categoryFor(value) === formCategory && (value !== 'daily_activity' || editingRequest?.request_type === 'daily_activity')
+  );
 
-  async function post(body: Record<string, unknown>) {
+  async function mutate(
+    method: 'POST' | 'PATCH' | 'DELETE',
+    body?: Record<string, unknown>,
+    url = '/api/approvals'
+  ): Promise<ApprovalMutationPayload | null> {
     setSaving(true);
     setError('');
     try {
-      const response = await fetch('/api/approvals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      const response = await fetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
       });
-      const payload = await response.json().catch(() => ({}));
+      const payload = await response.json().catch(() => ({})) as ApprovalMutationPayload;
       if (!response.ok) throw new Error(payload.error || 'Permintaan gagal diproses.');
+
+      if (method === 'DELETE') {
+        if (!payload.deleted?.id) throw new Error('Database tidak mengonfirmasi approval yang terhapus.');
+        deletedRequestIds.current.add(payload.deleted.id);
+        setData((current) => ({
+          ...current,
+          requests: current.requests.filter((request) => request.id !== payload.deleted?.id),
+        }));
+      }
+
       await load(true);
-      return true;
+      return payload;
     } catch (postError) {
       setError(postError instanceof Error ? postError.message : 'Permintaan gagal diproses.');
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
   }
 
+  async function post(body: Record<string, unknown>) {
+    return Boolean(await mutate('POST', body));
+  }
+
+  function openCreateRequest() {
+    setEditingRequest(null);
+    setForm({ ...emptyRequestForm });
+    setShowSubmit(true);
+  }
+
+  function openEditRequest(request: ApprovalRequest) {
+    setEditingRequest(request);
+    setForm({
+      request_type: request.request_type,
+      title: request.title,
+      description: request.description,
+    });
+    setShowSubmit(true);
+  }
+
+  function closeRequestForm() {
+    setShowSubmit(false);
+    setEditingRequest(null);
+    setForm({ ...emptyRequestForm });
+  }
+
   async function submitRequest(event: React.FormEvent) {
     event.preventDefault();
     if (!form.title.trim()) return;
-    if (await post({ action: 'submit', ...form })) {
-      setForm({ request_type: 'script', title: '', description: '' });
-      setShowSubmit(false);
+    const result = editingRequest
+      ? await mutate('PATCH', { id: editingRequest.id, ...form })
+      : await mutate('POST', { action: 'submit', ...form });
+    if (result) {
+      closeRequestForm();
     }
+  }
+
+  async function deleteRequest() {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.id;
+    const result = await mutate('DELETE', undefined, `/api/approvals?id=${encodeURIComponent(targetId)}`);
+    if (result?.deleted?.id === targetId) setDeleteTarget(null);
   }
 
   async function reviewRequest(event: React.FormEvent) {
@@ -229,7 +302,7 @@ export default function ApprovalsPage() {
           </button>
           <button
             type="button"
-            onClick={() => setShowSubmit(true)}
+            onClick={openCreateRequest}
             disabled={!data.storage_ready}
             className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#31415E] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -242,7 +315,7 @@ export default function ApprovalsPage() {
         <div className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${data.storage_ready ? 'border-[#F3C9C5] bg-[#FFF5F3] text-[#9A453E]' : 'border-[#F2D6A4] bg-[#FFF9ED] text-[#8A5B16]'}`}>
           <CircleAlert className="mt-0.5 h-5 w-5 flex-none" />
           <div>
-            <p className="font-extrabold">{data.storage_ready ? 'Approval Center belum dapat dimuat' : 'Database Approval Center belum aktif'}</p>
+            <p className="font-extrabold">{data.storage_ready ? 'Approval Center belum dapat dimuat' : hasStorageConfigError ? 'Konfigurasi server Approval Center belum valid' : 'Database Approval Center belum aktif'}</p>
             <p className="mt-1 text-xs leading-5 opacity-80">{error}</p>
           </div>
         </div>
@@ -355,8 +428,10 @@ export default function ApprovalsPage() {
               const TypeIcon = type.icon;
               const CategoryIcon = category.icon;
               const StatusIcon = status.icon;
+              const isOwnRequest = request.requested_by_email === data.viewer.email;
+              const canEdit = data.viewer.can_manage || (isOwnRequest && ['pending', 'revision'].includes(request.status));
               return (
-                <article key={request.id} className="p-4 transition hover:bg-[#FAFAFB] dark:hover:bg-[#282D36] sm:p-5">
+                <article key={request.id} data-approval-row={request.id} className="p-4 transition hover:bg-[#FAFAFB] dark:hover:bg-[#282D36] sm:p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                     <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className="h-11 w-11 flex-none overflow-hidden rounded-2xl bg-gradient-to-br from-[#D8E5FF] to-[#F2DBEE] ring-1 ring-white">
@@ -403,6 +478,28 @@ export default function ApprovalsPage() {
                           <X className="h-3.5 w-3.5" /> Batalkan
                         </button>
                       )}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => openEditRequest(request)}
+                          aria-label={`Edit approval ${request.title}`}
+                          className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#DDE2EA] bg-white px-3 text-[11px] font-extrabold text-[#40536F] transition hover:border-[#7F91B0] hover:bg-[#F7F8FA] disabled:opacity-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Edit
+                        </button>
+                      )}
+                      {data.viewer.can_manage && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => { setError(''); setDeleteTarget(request); }}
+                          aria-label={`Hapus approval ${request.title}`}
+                          className="inline-flex h-9 items-center gap-2 rounded-xl border border-[#F0C7C4] bg-white px-3 text-[11px] font-extrabold text-[#B14E46] transition hover:bg-[#FFF0ED] disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Hapus
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -413,11 +510,11 @@ export default function ApprovalsPage() {
       </section>
 
       {showSubmit && (
-        <ModalPortal onClose={() => setShowSubmit(false)}>
+        <ModalPortal onClose={closeRequestForm}>
           <form role="dialog" aria-modal="true" onSubmit={submitRequest} className="max-h-[92svh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-xl sm:rounded-3xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
-              <div><h2 className="text-lg font-black text-[#24324A]">Buat Permintaan Approval</h2><p className="mt-1 text-xs text-[#737680]">Pilih approval pekerjaan atau kebutuhan operasional.</p></div>
-              <button type="button" onClick={() => setShowSubmit(false)} className="rounded-xl p-2 text-[#737680] hover:bg-[#F2F4F7]"><X className="h-5 w-5" /></button>
+              <div><h2 className="text-lg font-black text-[#24324A]">{editingRequest ? 'Edit Approval' : 'Buat Permintaan Approval'}</h2><p className="mt-1 text-xs text-[#737680]">{editingRequest ? 'Perbarui tipe, judul, atau detail approval yang tersimpan.' : 'Pilih approval pekerjaan atau kebutuhan operasional.'}</p></div>
+              <button type="button" onClick={closeRequestForm} className="rounded-xl p-2 text-[#737680] hover:bg-[#F2F4F7]" aria-label="Tutup formulir approval"><X className="h-5 w-5" /></button>
             </div>
             <div className="mt-6 space-y-4">
               <div>
@@ -432,8 +529,9 @@ export default function ApprovalsPage() {
                         key={categoryValue}
                         type="button"
                         aria-pressed={active}
+                        disabled={isSourceLinkedEdit}
                         onClick={() => setForm((current) => ({ ...current, request_type: categoryValue === 'work' ? 'script' : 'leave' }))}
-                        className={`rounded-2xl border p-3 text-left transition ${active ? 'border-[#24324A] bg-[#F4F7FB] ring-1 ring-[#24324A]' : 'border-[#DDE2EA] bg-white hover:bg-[#F8F9FB]'}`}
+                        className={`rounded-2xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${active ? 'border-[#24324A] bg-[#F4F7FB] ring-1 ring-[#24324A]' : 'border-[#DDE2EA] bg-white hover:bg-[#F8F9FB]'}`}
                       >
                         <span className="flex items-center gap-2 text-xs font-black text-[#24324A]"><CategoryIcon className="h-4 w-4" />{category.label}</span>
                         <span className="mt-1.5 block text-[10px] leading-4 text-[#737680]">{category.description}</span>
@@ -442,11 +540,12 @@ export default function ApprovalsPage() {
                   })}
                 </div>
               </div>
-              <label className="block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Tipe Approval</span><select value={form.request_type} onChange={(event) => setForm((current) => ({ ...current, request_type: event.target.value as ApprovalRequestType }))} className="h-11 w-full rounded-xl border border-[#DDE2EA] bg-white px-3 text-sm text-[#24324A] outline-none focus:border-[#7F91B0]">{formTypeOptions.map(([value, meta]) => <option key={value} value={value}>{meta.label}</option>)}</select></label>
+              <label className="block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Tipe Approval</span><select disabled={isSourceLinkedEdit} value={form.request_type} onChange={(event) => setForm((current) => ({ ...current, request_type: event.target.value as ApprovalRequestType }))} className="h-11 w-full rounded-xl border border-[#DDE2EA] bg-white px-3 text-sm text-[#24324A] outline-none focus:border-[#7F91B0] disabled:cursor-not-allowed disabled:opacity-60">{formTypeOptions.map(([value, meta]) => <option key={value} value={value}>{meta.label}</option>)}</select></label>
+              {isSourceLinkedEdit && <p className="rounded-xl border border-[#DCE5F2] bg-[#F4F8FD] px-3 py-2 text-[11px] leading-5 text-[#566176]">Approval otomatis tetap terhubung ke sumbernya, sehingga kategori dan tipe tidak dapat diubah. Judul serta detail tetap dapat diedit.</p>}
               <label className="block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Judul</span><input required maxLength={300} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder={formCategory === 'work' ? 'Contoh: Approval script campaign Agustus' : 'Contoh: Izin tidak masuk 14 Agustus'} className="h-11 w-full rounded-xl border border-[#DDE2EA] px-3 text-sm text-[#24324A] outline-none focus:border-[#7F91B0]" /></label>
               <label className="block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Detail</span><textarea rows={5} maxLength={5000} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder={formCategory === 'work' ? 'Cantumkan project/client, link dokumen, output, serta bagian yang perlu disetujui.' : 'Jelaskan kebutuhan, tanggal, durasi, dan konteks operasional yang perlu ditinjau.'} className="w-full resize-y rounded-xl border border-[#DDE2EA] p-3 text-sm leading-6 text-[#24324A] outline-none focus:border-[#7F91B0]" /></label>
             </div>
-            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowSubmit(false)} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680]">Batal</button><button type="submit" disabled={saving || !form.title.trim()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Kirim Approval</button></div>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={closeRequestForm} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680]">Batal</button><button type="submit" disabled={saving || !form.title.trim()} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingRequest ? <Pencil className="h-4 w-4" /> : <Send className="h-4 w-4" />} {editingRequest ? 'Simpan Perubahan' : 'Kirim Approval'}</button></div>
           </form>
         </ModalPortal>
       )}
@@ -460,6 +559,30 @@ export default function ApprovalsPage() {
             <label className="mt-5 block"><span className="mb-1.5 block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#737680]">Catatan Reviewer</span><textarea rows={4} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder={reviewStatus === 'revision' ? 'Tuliskan bagian yang perlu diperbaiki...' : 'Tambahkan catatan bila diperlukan.'} className="w-full resize-y rounded-xl border border-[#DDE2EA] p-3 text-sm leading-6 text-[#24324A] outline-none focus:border-[#7F91B0]" /></label>
             <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setSelected(null)} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#737680]">Batal</button><button type="submit" disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#24324A] px-4 text-xs font-extrabold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />} Simpan Keputusan</button></div>
           </form>
+        </ModalPortal>
+      )}
+
+      {deleteTarget && (
+        <ModalPortal onClose={() => { if (!saving) setDeleteTarget(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-approval-title" className="w-full rounded-t-3xl bg-white p-5 shadow-2xl sm:max-w-md sm:rounded-3xl sm:p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-[#FFF0ED] text-[#B14E46]"><Trash2 className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <h2 id="delete-approval-title" className="text-lg font-black text-[#24324A]">Hapus approval secara permanen?</h2>
+                <p className="mt-2 text-xs leading-5 text-[#626874]">Approval <span className="font-extrabold text-[#24324A]">“{deleteTarget.title}”</span> akan dihapus langsung dari database.</p>
+              </div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-[#F0C7C4] bg-[#FFF5F3] p-4 text-xs leading-5 text-[#9A453E]">
+              Tindakan ini tidak dapat dibatalkan. Record yang sudah dihapus tidak akan muncul kembali setelah halaman di-refresh.
+            </div>
+            {error && <p className="mt-3 text-xs font-semibold text-[#B14E46]">{error}</p>}
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" disabled={saving} onClick={() => setDeleteTarget(null)} className="h-10 rounded-xl border border-[#DDE2EA] px-4 text-xs font-extrabold text-[#626874] disabled:opacity-50">Batal</button>
+              <button type="button" disabled={saving} onClick={() => void deleteRequest()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#B14E46] px-4 text-xs font-extrabold text-white disabled:opacity-50">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Ya, Hapus Permanen
+              </button>
+            </div>
+          </section>
         </ModalPortal>
       )}
     </div>

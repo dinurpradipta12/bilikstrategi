@@ -55,7 +55,12 @@ async function adminJson(path: string, init: RequestInit = {}) {
 
 function storageUnavailable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '');
-  return /app_approval_requests|schema cache|relation .* does not exist|service_role/i.test(message);
+  return /schema cache|relation .*app_approval_requests.*does not exist|could not find .*app_approval_requests/i.test(message);
+}
+
+function storagePermissionUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /permission denied|invalid api key|invalid jwt|jwt expired/i.test(message);
 }
 
 export async function GET(req: NextRequest) {
@@ -88,6 +93,14 @@ export async function GET(req: NextRequest) {
         viewer: { email: context.identity.email, name: context.identity.name, role: context.appRole, can_manage: context.canManage },
         requests: [],
         error: 'Migration Approval Center belum dijalankan.',
+      });
+    }
+    if (storagePermissionUnavailable(error)) {
+      return json({
+        storage_ready: false,
+        viewer: { email: context.identity.email, name: context.identity.name, role: context.appRole, can_manage: context.canManage },
+        requests: [],
+        error: 'SUPABASE_SERVICE_ROLE_KEY harus menggunakan token service_role yang memiliki akses ke app_approval_requests, bukan token anon.',
       });
     }
     return json({ error: error instanceof Error ? error.message : 'Gagal memuat approval.' }, { status: 500 });
@@ -266,6 +279,93 @@ export async function POST(req: NextRequest) {
     return json({ error: 'Aksi approval tidak dikenali.' }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Gagal memproses approval.';
+    const status = /app_approval_requests|schema cache|relation .* does not exist/i.test(message) ? 503 : 400;
+    return json({ error: message }, { status });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const context = await getServerWorkspaceContext(req);
+  if (!context.identity.email) return json({ error: 'Sesi pengguna tidak memiliki identitas email.' }, { status: 401 });
+  if (!isSupabaseAdminConfigured()) return json({ error: 'SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di server.' }, { status: 503 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = cleanText(body.id, '', 80);
+    const title = cleanText(body.title, '', 300);
+    if (!id) throw new Error('ID approval tidak ditemukan.');
+    if (!title) throw new Error('Judul permintaan wajib diisi.');
+
+    const workspace = encodeURIComponent(context.workspaceId);
+    const ownership = context.canManage ? '' : `&requested_by_email=eq.${encodeURIComponent(context.identity.email)}&status=in.(pending,revision)`;
+    const existingRows = await adminJson(
+      `app_approval_requests?select=*&id=eq.${encodeURIComponent(id)}&workspace_id=eq.${workspace}${ownership}&limit=1`
+    );
+    const existing = Array.isArray(existingRows) ? existingRows[0] : existingRows;
+    if (!existing) return json({ error: 'Approval tidak ditemukan atau tidak dapat diedit.' }, { status: 404 });
+
+    const requestedType: ApprovalRequestType = APPROVAL_REQUEST_TYPES.includes(body.request_type)
+      ? body.request_type
+      : existing.request_type;
+    const requestType: ApprovalRequestType = existing.source_type && existing.source_id
+      ? existing.request_type
+      : requestedType;
+    const requestCategory = APPROVAL_CATEGORY_BY_TYPE[requestType];
+    const saved = await adminJson(
+      `app_approval_requests?id=eq.${encodeURIComponent(id)}&workspace_id=eq.${workspace}${ownership}`,
+      {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          request_type: requestType,
+          title,
+          description: cleanText(body.description, '', 5000),
+          metadata: {
+            ...(existing.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+              ? existing.metadata
+              : {}),
+            approval_category: requestCategory,
+          },
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    );
+    const approval = Array.isArray(saved) ? saved[0] : saved;
+    if (!approval?.id) return json({ error: 'Approval gagal diperbarui di database.' }, { status: 409 });
+    return json({ success: true, request: approval });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal memperbarui approval.';
+    const status = /app_approval_requests|schema cache|relation .* does not exist/i.test(message) ? 503 : 400;
+    return json({ error: message }, { status });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const context = await getServerWorkspaceContext(req);
+  if (!context.identity.email) return json({ error: 'Sesi pengguna tidak memiliki identitas email.' }, { status: 401 });
+  if (!context.canManage) return json({ error: 'Hanya Owner atau Admin yang dapat menghapus approval secara permanen.' }, { status: 403 });
+  if (!isSupabaseAdminConfigured()) return json({ error: 'SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di server.' }, { status: 503 });
+
+  try {
+    const id = cleanText(new URL(req.url).searchParams.get('id'), '', 80);
+    if (!id) throw new Error('ID approval tidak ditemukan.');
+
+    const workspace = encodeURIComponent(context.workspaceId);
+    const deletedRows = await adminJson(
+      `app_approval_requests?id=eq.${encodeURIComponent(id)}&workspace_id=eq.${workspace}&select=id,title,requested_by_email`,
+      {
+        method: 'DELETE',
+        headers: { Prefer: 'return=representation' },
+      }
+    );
+    const deleted = Array.isArray(deletedRows) ? deletedRows[0] : deletedRows;
+    if (!deleted?.id) {
+      return json({ error: 'Approval tidak ditemukan atau tidak terhapus dari database.' }, { status: 404 });
+    }
+
+    return json({ success: true, deleted });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Gagal menghapus approval.';
     const status = /app_approval_requests|schema cache|relation .* does not exist/i.test(message) ? 503 : 400;
     return json({ error: message }, { status });
   }
