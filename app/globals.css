@@ -751,6 +751,14 @@ html[data-ui-style='m3'] {
   --m3-on-error: #FFFFFF;
   --m3-error-container: #FFDADD;
   --m3-on-error-container: #5A0A17;
+  --m3-success: #356D53;
+  --m3-on-success: #FFFFFF;
+  --m3-success-container: #D9F1E3;
+  --m3-on-success-container: #173D2A;
+  --m3-warning: #76590D;
+  --m3-on-warning: #FFFFFF;
+  --m3-warning-container: #FCE9B6;
+  --m3-on-warning-container: #4B3500;
   --m3-surface: #FFFDF7;
   --m3-surface-dim: #D9D9E0;
   --m3-surface-bright: #FFFDF7;
@@ -797,8 +805,8 @@ html[data-ui-style='m3'] {
   --accent-coral: var(--m3-secondary);
   --soft-coral: var(--m3-primary-container);
   --soft-navy: var(--m3-secondary-container);
-  --success: #61701A;
-  --warning: #85640E;
+  --success: var(--m3-success);
+  --warning: var(--m3-warning);
   --danger: var(--m3-error);
   --modal-surface: var(--m3-surface-container-lowest);
   --modal-border: var(--m3-outline-variant);
@@ -822,6 +830,14 @@ html[data-ui-style='m3'].dark {
   --m3-on-error: #68001B;
   --m3-error-container: #8D2630;
   --m3-on-error-container: #FFDADD;
+  --m3-success: #9CD5B2;
+  --m3-on-success: #0E3822;
+  --m3-success-container: #244936;
+  --m3-on-success-container: #C6F2D5;
+  --m3-warning: #E8C46E;
+  --m3-on-warning: #3F2F00;
+  --m3-warning-container: #574619;
+  --m3-on-warning-container: #FFE7A3;
   --m3-surface: #111722;
   --m3-surface-dim: #111722;
   --m3-surface-bright: #373D49;
@@ -840,8 +856,8 @@ html[data-ui-style='m3'].dark {
   --m3-elevation-2: 0 5px 18px rgb(0 0 0 / 28%);
   --m3-elevation-3: 0 14px 38px rgb(0 0 0 / 38%);
   --bg-main: #111722;
-  --success: #CBD97C;
-  --warning: #E8C36C;
+  --success: var(--m3-success);
+  --warning: var(--m3-warning);
   --modal-backdrop: rgb(3 7 14 / 72%);
 }
 
@@ -929,9 +945,13 @@ html[data-ui-style='m3'] :is(
   color: var(--m3-on-secondary) !important;
 }
 
-html[data-ui-style='m3'] [class~='bg-[#FFF0ED]'],
 html[data-ui-style='m3'] [class~='bg-[#FFF5F3]'],
-html[data-ui-style='m3'] [class~='bg-[#FDE9E7]'],
+html[data-ui-style='m3'] [class~='bg-[#FDE9E7]'] {
+  background-color: var(--m3-error-container) !important;
+}
+
+html[data-ui-style='m3'] [class~='bg-[#FFF0ED]'],
+html[data-ui-style='m3'] [class~='bg-[#E6F1FF]'],
 html[data-ui-style='m3'] [class~='bg-[#EAF2FF]'],
 html[data-ui-style='m3'] [class~='bg-[#E8F0FA]'],
 html[data-ui-style='m3'] [class~='bg-[#EAF1FB]'] {
@@ -940,10 +960,11 @@ html[data-ui-style='m3'] [class~='bg-[#EAF1FB]'] {
 
 html[data-ui-style='m3'] [class~='bg-[#EEF8F3]'],
 html[data-ui-style='m3'] [class~='bg-[#E7F4ED]'],
+html[data-ui-style='m3'] [class~='bg-[#E3F4F1]'],
 html[data-ui-style='m3'] [class~='bg-[#E3F8E9]'],
 html[data-ui-style='m3'] [class~='bg-[#E6F4ED]'],
 html[data-ui-style='m3'] [class~='bg-[#EEF8F2]'] {
-  background-color: var(--m3-tertiary-container) !important;
+  background-color: var(--m3-success-container) !important;
 }
 
 html[data-ui-style='m3'] [class~='bg-[#FEF3D6]'],
@@ -952,7 +973,25 @@ html[data-ui-style='m3'] [class~='bg-[#FFF1DB]'],
 html[data-ui-style='m3'] [class~='bg-[#FFF2DF]'],
 html[data-ui-style='m3'] [class~='bg-[#FFF8E7]'],
 html[data-ui-style='m3'] [class~='bg-[#FFF9ED]'] {
-  background-color: color-mix(in srgb, var(--m3-tertiary-container) 74%, var(--m3-surface)) !important;
+  background-color: var(--m3-warning-container) !important;
+}
+
+html[data-ui-style='m3'] [class~='bg-[#EEE9FF]'],
+html[data-ui-style='m3'] [class~='bg-[#E9ECFF]'],
+html[data-ui-style='m3'] [class~='bg-[#F2E9FA]'] {
+  background-color: var(--m3-secondary-container) !important;
+}
+
+html[data-ui-style='m3'] [class~='bg-[#FFF0ED]']:is(
+  [class~='text-[#D95858]'],
+  [class~='text-[#D95346]'],
+  [class~='text-[#C22929]'],
+  [class~='text-[#B5473D]'],
+  [class~='text-[#9A453E]'],
+  [class~='text-[#B14E46]'],
+  [class~='text-[#B34F45]']
+) {
+  background-color: var(--m3-error-container) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#202124]'],
@@ -963,41 +1002,138 @@ html[data-ui-style='m3'] [class~='text-[#24324A]'] {
 html[data-ui-style='m3'] [class~='text-[#737680]'],
 html[data-ui-style='m3'] [class~='text-[#8C9BAE]'],
 html[data-ui-style='m3'] [class~='text-[#8A8E98]'],
-html[data-ui-style='m3'] [class~='text-[#98A2B3]'] {
+html[data-ui-style='m3'] [class~='text-[#98A2B3]'],
+html[data-ui-style='m3'] [class~='text-[#5E6470]'],
+html[data-ui-style='m3'] [class~='text-[#626874]'],
+html[data-ui-style='m3'] [class~='text-[#6E7380]'],
+html[data-ui-style='m3'] [class~='text-[#7B808B]'],
+html[data-ui-style='m3'] [class~='text-[#566176]'],
+html[data-ui-style='m3'] [class~='text-[#566B8D]'],
+html[data-ui-style='m3'] [class~='text-[#9A9DA5]'],
+html[data-ui-style='m3'] [class~='text-[#9A9DA6]'] {
   color: var(--m3-on-surface-variant) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#F26B5E]'],
 html[data-ui-style='m3'] [class~='text-[#3B82F6]'],
 html[data-ui-style='m3'] [class~='text-[#1D4ED8]'],
-html[data-ui-style='m3'] [class~='text-[#2563EB]'] {
+html[data-ui-style='m3'] [class~='text-[#2563EB]'],
+html[data-ui-style='m3'] [class~='text-[#315988]'],
+html[data-ui-style='m3'] [class~='text-[#315F98]'],
+html[data-ui-style='m3'] [class~='text-[#356AA0]'] {
   color: var(--m3-primary) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#7B68EE]'],
 html[data-ui-style='m3'] [class~='text-[#6C5CE7]'],
 html[data-ui-style='m3'] [class~='text-[#6852ED]'],
-html[data-ui-style='m3'] [class~='text-[#6929C4]'] {
+html[data-ui-style='m3'] [class~='text-[#6929C4]'],
+html[data-ui-style='m3'] [class~='text-[#5B61AD]'],
+html[data-ui-style='m3'] [class~='text-[#6557A5]'],
+html[data-ui-style='m3'] [class~='text-[#765096]'],
+html[data-ui-style='m3'] [class~='text-[#795099]'],
+html[data-ui-style='m3'] [class~='text-[#7A4D9D]'] {
   color: var(--m3-secondary) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#4F9D78]'],
 html[data-ui-style='m3'] [class~='text-[#10B981]'],
 html[data-ui-style='m3'] [class~='text-[#317A58]'],
-html[data-ui-style='m3'] [class~='text-[#3D8362]'] {
+html[data-ui-style='m3'] [class~='text-[#3D8362]'],
+html[data-ui-style='m3'] [class~='text-[#347256]'],
+html[data-ui-style='m3'] [class~='text-[#356D53]'],
+html[data-ui-style='m3'] [class~='text-[#39785D]'] {
   color: var(--success) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#D95858]'],
 html[data-ui-style='m3'] [class~='text-[#D95346]'],
 html[data-ui-style='m3'] [class~='text-[#C22929]'],
-html[data-ui-style='m3'] [class~='text-[#B5473D]'] {
+html[data-ui-style='m3'] [class~='text-[#B5473D]'],
+html[data-ui-style='m3'] [class~='text-[#9A453E]'],
+html[data-ui-style='m3'] [class~='text-[#B14E46]'],
+html[data-ui-style='m3'] [class~='text-[#B34F45]'] {
   color: var(--m3-error) !important;
 }
 
 html[data-ui-style='m3'] [class~='text-[#E6A23C]'],
-html[data-ui-style='m3'] [class~='text-[#D97706]'] {
+html[data-ui-style='m3'] [class~='text-[#D97706]'],
+html[data-ui-style='m3'] [class~='text-[#8A5B16]'],
+html[data-ui-style='m3'] [class~='text-[#8B5C21]'],
+html[data-ui-style='m3'] [class~='text-[#9B6514]'] {
   color: var(--warning) !important;
+}
+
+/* Dark themes use tonal containers for broad filled surfaces. Mapping legacy
+   navy fills directly to the light dark-theme primary made large panels glare. */
+html[data-ui-style='m3'].dark :is(
+  [class~='bg-[#24324A]'],
+  [class~='bg-[#1A2536]'],
+  [class~='bg-[#141C2B]'],
+  [class~='bg-[#F26B5E]'],
+  [class~='bg-[#3B82F6]']
+) {
+  background-color: var(--m3-primary-container) !important;
+  color: var(--m3-on-primary-container) !important;
+}
+
+html[data-ui-style='m3'].dark [class~='bg-[#24324A]/95'] {
+  background-color: color-mix(in srgb, var(--m3-primary-container) 94%, transparent) !important;
+}
+
+html[data-ui-style='m3'].dark :is(
+  [class~='bg-[#7B68EE]'],
+  [class~='bg-[#6C5CE7]'],
+  [class~='bg-[#6852ED]'],
+  [class~='bg-[#6655D2]']
+) {
+  background-color: var(--m3-secondary-container) !important;
+  color: var(--m3-on-secondary-container) !important;
+}
+
+html[data-ui-style='m3'].dark :is(
+  [class~='bg-[#24324A]'],
+  [class~='bg-[#1A2536]'],
+  [class~='bg-[#141C2B]'],
+  [class~='bg-[#F26B5E]'],
+  [class~='bg-[#3B82F6]']
+) :is([class~='text-white'], [class~='text-[#F26B5E]'], [class~='text-[#3B82F6]']) {
+  color: var(--m3-on-primary-container) !important;
+}
+
+html[data-ui-style='m3'].dark :is(
+  [class~='bg-[#7B68EE]'],
+  [class~='bg-[#6C5CE7]'],
+  [class~='bg-[#6852ED]'],
+  [class~='bg-[#6655D2]']
+) [class~='text-white'] {
+  color: var(--m3-on-secondary-container) !important;
+}
+
+/* Filled controls and compact icon containers keep one readable on-color even
+   when the legacy component supplied a separate accent class to its icon. */
+html[data-ui-style='m3'] :where(button, a)[class*='bg-['] > svg {
+  color: inherit !important;
+}
+
+html[data-ui-style='m3'] :is(
+  [class~='bg-[#24324A]'],
+  [class~='bg-[#1A2536]'],
+  [class~='bg-[#141C2B]'],
+  [class~='bg-[#F26B5E]'],
+  [class~='bg-[#3B82F6]']
+) > svg {
+  color: var(--m3-on-primary) !important;
+}
+
+html[data-ui-style='m3'].dark :is(
+  [class~='bg-[#24324A]'],
+  [class~='bg-[#1A2536]'],
+  [class~='bg-[#141C2B]'],
+  [class~='bg-[#F26B5E]'],
+  [class~='bg-[#3B82F6]']
+) > svg {
+  color: var(--m3-on-primary-container) !important;
 }
 
 html[data-ui-style='m3'] [class~='border-[#E8E8EC]'],
@@ -1079,7 +1215,7 @@ html[data-ui-style='m3'] :where(button, a):active {
 
 html[data-ui-style='m3'] :where(button, input, textarea, select):disabled {
   cursor: not-allowed;
-  opacity: 0.38 !important;
+  opacity: 0.56 !important;
 }
 
 html[data-ui-style='m3'] :where(button, a):hover svg {
@@ -1149,8 +1285,8 @@ html[data-ui-style='m3'] [data-app-shell] {
   overflow-x: clip;
   background-color: var(--bg-main) !important;
   background-image:
-    radial-gradient(circle at 6% 7%, rgb(149 177 238 / 18%), transparent 24rem),
-    radial-gradient(circle at 94% 20%, rgb(231 241 168 / 20%), transparent 22rem);
+    radial-gradient(circle at 6% 7%, rgb(149 177 238 / 12%), transparent 24rem),
+    radial-gradient(circle at 94% 20%, rgb(231 241 168 / 11%), transparent 22rem);
 }
 
 html[data-ui-style='m3'] [data-app-shell]::before,
@@ -1159,8 +1295,8 @@ html[data-ui-style='m3'] [data-app-shell]::after {
   position: fixed;
   z-index: 0;
   pointer-events: none;
-  filter: blur(3px);
-  opacity: 0.42;
+  filter: blur(10px);
+  opacity: 0.24;
 }
 
 html[data-ui-style='m3'] [data-app-shell]::before {
@@ -1181,6 +1317,18 @@ html[data-ui-style='m3'] [data-app-shell]::after {
   border-radius: 58% 42% 35% 65% / 48% 62% 38% 52%;
   background: var(--m3-ref-blue);
   transform: rotate(-18deg);
+}
+
+html[data-ui-style='m3'].dark [data-app-shell] {
+  background-image:
+    radial-gradient(circle at 6% 7%, rgb(149 177 238 / 7%), transparent 24rem),
+    radial-gradient(circle at 94% 20%, rgb(231 241 168 / 5%), transparent 22rem);
+}
+
+html[data-ui-style='m3'].dark [data-app-shell]::before,
+html[data-ui-style='m3'].dark [data-app-shell]::after {
+  filter: blur(14px);
+  opacity: 0.12;
 }
 
 html[data-ui-style='m3'] [data-app-shell] > :not([class~='fixed']) {
