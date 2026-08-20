@@ -1645,7 +1645,7 @@ export default function AttendancePage() {
           </p>
         </div>
 
-        <div className="flex w-full max-w-full flex-nowrap items-center gap-2.5 self-start overflow-x-auto pb-1 md:w-auto md:overflow-visible md:pb-0 md:self-auto">
+        <div data-attendance-actions className="flex w-full max-w-full flex-nowrap items-center gap-2.5 self-start overflow-x-auto pb-1 md:w-auto md:overflow-visible md:pb-0 md:self-auto">
           {isAdminOrOwner && (
             <button
               type="button"

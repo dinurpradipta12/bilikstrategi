@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import Providers from './providers';
 
@@ -6,7 +6,6 @@ export const metadata: Metadata = {
   title: 'Bilik Strategi Workspace - Agency Operations & ClickUp Engine',
   description: 'Aplikasi internal agency untuk project management, task tracking ClickUp, team workload, dan komunikasi.',
   manifest: '/manifest.json',
-  themeColor: '#24324A',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -22,16 +21,21 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#F6F7FB',
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" data-ui-style="m3" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-        <meta name="theme-color" content="#24324A" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Bilik Strategi" />
@@ -41,7 +45,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try { if (localStorage.getItem('bilik_theme') === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.dataset.theme = 'dark'; document.documentElement.style.colorScheme = 'dark'; } } catch (_) {}`,
+            __html: `try { var t = localStorage.getItem('bilik_theme') === 'dark' ? 'dark' : 'light'; var s = localStorage.getItem('bilik_ui_style') === 'legacy' ? 'legacy' : 'm3'; document.documentElement.classList.toggle('dark', t === 'dark'); document.documentElement.dataset.theme = t; document.documentElement.dataset.uiStyle = s; document.documentElement.style.colorScheme = t; } catch (_) { document.documentElement.dataset.uiStyle = 'm3'; }`,
           }}
         />
       </head>

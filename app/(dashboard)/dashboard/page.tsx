@@ -573,7 +573,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Dashboard View Mode Switcher Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">
+      <div data-dashboard-hero className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-[#24324A] text-white rounded-xl shadow-2xs">
             <LayoutDashboard className="w-5 h-5 text-[#4F9D78]" />
@@ -629,15 +629,15 @@ export default function DashboardPage() {
       {dashboardTab === 'team' ? (
         <div className="space-y-8 animate-fade-in">
           {/* Global Filters & Sync Header Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">
+          <div data-dashboard-filter-bar className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">
             <div>
               <h2 className="text-sm font-extrabold text-[#24324A]">Filter Performa Tim & Project</h2>
               <p className="text-xs text-[#737680]">Pilih project atau anggota tim spesifik untuk menyaring metrik.</p>
             </div>
 
             {/* Global Filters & Sync */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 bg-[#FFFFFF] p-2 border border-[#E8E8EC] rounded-xl shadow-2xs">
+            <div data-dashboard-filter-actions className="flex flex-wrap items-center gap-2">
+              <div data-dashboard-filter-group className="flex items-center gap-2 bg-[#FFFFFF] p-2 border border-[#E8E8EC] rounded-xl shadow-2xs">
                 <Filter className="w-3.5 h-3.5 text-[#737680] ml-1" />
                 <select
                   value={selectedProject}

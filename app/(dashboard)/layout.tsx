@@ -246,7 +246,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
+    <div data-app-shell className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
       {/* Collapsible Sidebar (Desktop) */}
       <div className="hidden md:block">
         <Sidebar />

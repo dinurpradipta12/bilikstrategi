@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { Shield, CheckCircle2, ArrowRight, Users, Lock } from 'lucide-react';
 import logoBilikHitam from '@/src/logobilik-hitam.png';
 import clickupLogo from '@/src/clickup.png';
+import UiStyleToggle from '@/components/theme/UiStyleToggle';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
@@ -17,6 +18,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#F7F7F8] flex flex-col justify-center items-center p-4">
+      <div className="fixed right-4 top-4 z-20">
+        <UiStyleToggle />
+      </div>
       {/* Background Graphic Accents */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-[#EEF2F7] to-transparent opacity-60 pointer-events-none -z-10" />
 
