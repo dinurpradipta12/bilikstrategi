@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { ArrowUpRight, Building2, CheckCircle2, Loader2, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Building2, CheckCircle2, Copy, Loader2, Plus, X } from 'lucide-react';
 import { normalizeTeamSlug } from '@/lib/team-apps/validation';
 
 type TeamApp = {
@@ -17,6 +17,7 @@ type TeamApp = {
   app_url: string | null;
   status: 'draft' | 'link_recorded';
   created_at: string;
+  setup_path: string;
 };
 
 type Draft = {
@@ -95,7 +96,7 @@ export default function TeamAppsPage() {
       setSlugEdited(false);
       setShortNameEdited(false);
       setShowForm(false);
-      setMessage('Tim disimpan. Pilih hosting nanti untuk membuat aplikasi dan link mandiri.');
+      setMessage('Tim disimpan. Salin link setup di kartu tim dan kirim kepada calon Owner.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Gagal menambahkan tim.');
     } finally { setBusy(false); }
@@ -124,13 +125,23 @@ export default function TeamAppsPage() {
     } finally { setBusy(false); }
   }
 
+  async function copySetupLink(app: TeamApp) {
+    try {
+      await navigator.clipboard.writeText(new URL(app.setup_path, window.location.origin).toString());
+      setError('');
+      setMessage(`Link setup ${app.name} tersalin. Berlaku sekitar 30 hari.`);
+    } catch {
+      setError('Gagal menyalin link. Buka panduan setup lalu salin alamat dari browser.');
+    }
+  }
+
   return (
     <main className="mx-auto max-w-6xl space-y-6 pb-12">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-[#F26B5E]">Owner</p>
           <h1 className="text-2xl font-extrabold tracking-tight text-[#24324A]">Aplikasi Tim</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[#737680]">Siapkan identitas tiap tim dan kelola link aplikasinya dari Bilik Strategi.</p>
+          <p className="mt-2 max-w-2xl text-sm text-[#737680]">Buat link setup untuk tiap tim agar mereka bisa menyalin aplikasi ke akun sendiri.</p>
         </div>
         <button type="button" onClick={() => { setShowForm(true); setError(''); }}
           className="inline-flex items-center gap-2 rounded-xl bg-[#24324A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1A2536]">
@@ -144,7 +155,7 @@ export default function TeamAppsPage() {
           <div className="space-y-1 text-sm">
             <h2 className="font-bold text-[#24324A]">Satu tim, satu aplikasi mandiri</h2>
             <p className="text-[#737680]">Setiap aplikasi tim memakai database, login, dan link sendiri. Semua modul tersedia sejak awal; Owner tim dapat mengubah logo, warna, dan fitur dari Pengaturan di aplikasinya.</p>
-            <p className="text-[#737680]">Saat ini Anda bisa menyimpan rancangan tim. Aktivasi otomatis menunggu pilihan hosting dan koneksi akun penyedia satu kali.</p>
+            <p className="text-[#737680]">Sesudah menambah tim, salin link setup dan kirim ke calon Owner. Link itu memandu pembuatan GitHub, Supabase, hosting, akun Owner, dan branding awal.</p>
           </div>
         </div>
       </section>
@@ -155,7 +166,7 @@ export default function TeamAppsPage() {
       {showForm && (
         <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 shadow-2xs sm:p-6">
           <div className="mb-5 flex items-start justify-between gap-3">
-            <div><h2 className="text-lg font-bold text-[#24324A]">Tim baru</h2><p className="mt-1 text-xs text-[#737680]">Identitas awal ini disimpan sebagai rancangan. Data Bilik Strategi tetap terpisah.</p></div>
+            <div><h2 className="text-lg font-bold text-[#24324A]">Tim baru</h2><p className="mt-1 text-xs text-[#737680]">Setelah disimpan, link setup langsung tersedia. Data Bilik Strategi tetap terpisah.</p></div>
             <button type="button" onClick={() => setShowForm(false)} aria-label="Tutup formulir" className="rounded-lg p-1.5 text-[#737680] hover:bg-[#F7F7F8]"><X className="h-4 w-4" /></button>
           </div>
           <form onSubmit={createApp} className="grid gap-4 sm:grid-cols-2">
@@ -204,13 +215,18 @@ export default function TeamAppsPage() {
                   {app.tagline && <p className="mt-1 text-sm text-[#737680]">{app.tagline}</p>}
                 </div>
               </div>
-              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${app.app_url ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
-                {app.app_url ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}{app.app_url ? 'Tautan tersimpan' : 'Menunggu aktivasi'}
+              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${app.app_url ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-800'}`}>
+                {app.app_url ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}{app.app_url ? 'Tautan aplikasi tersimpan' : 'Link setup siap'}
               </span>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-[#F5F8FE] p-3">
+              <div className="min-w-0 flex-1"><p className="text-xs font-bold text-[#24324A]">Link setup untuk calon Owner</p><p className="mt-1 text-xs text-[#737680]">Mereka menyiapkan database, GitHub, deployment, dan branding melalui link ini. Berlaku sekitar 30 hari.</p></div>
+              <button type="button" onClick={() => copySetupLink(app)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#24324A] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1A2536]"><Copy className="h-3.5 w-3.5" /> Salin link setup</button>
+              <a href={app.setup_path} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-[#D9E0EF] bg-white px-3 py-2 text-xs font-semibold text-[#24324A] hover:bg-[#EDF2FC]">Buka panduan<ArrowUpRight className="h-3.5 w-3.5" /></a>
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[#E8E8EC] pt-4 text-xs">
               {app.app_url ? <a href={app.app_url} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1 break-all font-semibold text-[#F26B5E] hover:underline">{app.app_url}<ArrowUpRight className="h-3.5 w-3.5 shrink-0" /></a>
-                : <span className="text-[#737680]">Link dibuat setelah hosting dan database tim tersedia.</span>}
+                : <span className="text-[#737680]">URL aplikasi tim dapat dicatat setelah deployment selesai.</span>}
               <button type="button" onClick={() => { setLinkingId(app.id); setProvider(app.hosting_provider === 'undecided' ? 'vercel' : app.hosting_provider); setAppUrl(app.app_url || ''); setError(''); }} className="font-semibold text-[#24324A] underline-offset-2 hover:underline">{app.app_url ? 'Ubah tautan' : 'Catat tautan yang sudah ada'}</button>
             </div>
             {linkingId === app.id && (

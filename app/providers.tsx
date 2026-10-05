@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/lib/theme';
 import { NotificationProvider } from '@/components/notifications/NotificationProvider';
 import AttendanceRealtimeAlerts from '@/components/attendance/AttendanceRealtimeAlerts';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isPublicTeamSetup = pathname === '/team-setup';
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -21,6 +24,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    if (isPublicTeamSetup) return;
     const dummyMarkers = [
       'Nusantara Retail',
       'Kopi Senja',
@@ -60,7 +64,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(key);
       }
     });
-  }, []);
+  }, [isPublicTeamSetup]);
+
+  if (isPublicTeamSetup) {
+    return <ThemeProvider><QueryClientProvider client={queryClient}>{children}</QueryClientProvider></ThemeProvider>;
+  }
 
   return (
     <ThemeProvider>

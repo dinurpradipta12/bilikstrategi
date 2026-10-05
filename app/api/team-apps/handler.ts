@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/lib/clickup/users';
 import { normalizeIdentityEmail } from '@/lib/auth/app-role';
 import { isSupabaseAdminConfigured, supabaseAdminFetch } from '@/lib/supabase/admin-rest-client';
 import { parseTeamAppDraft, parseTeamAppLink } from '@/lib/team-apps/validation';
+import { createTeamSetupPath } from '@/lib/team-apps/setup-link';
 
 export const runtime = 'edge';
 
@@ -43,7 +44,11 @@ export async function GET(req: NextRequest) {
     'team_app_instances?select=id,name,slug,short_name,owner_email,tagline,primary_color,accent_color,hosting_provider,app_url,status,created_at,updated_at&order=created_at.desc',
   );
   if (!response.ok) return NextResponse.json({ error: 'Daftar aplikasi tim belum tersedia. Jalankan migrasi database.' }, { status: 503 });
-  return NextResponse.json({ apps: await response.json() });
+  const apps = await response.json() as { id: string }[];
+  return NextResponse.json({ apps: await Promise.all(apps.map(async (app) => ({
+    ...app,
+    setup_path: await createTeamSetupPath(app.id),
+  }))) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
@@ -61,7 +66,7 @@ export async function POST(req: NextRequest) {
   if (response.status === 409) return NextResponse.json({ error: 'Slug tim sudah dipakai. Pilih yang lain.' }, { status: 409 });
   if (!response.ok) return NextResponse.json({ error: 'Gagal menyimpan aplikasi tim. Periksa migrasi database.' }, { status: 502 });
   const rows = await response.json();
-  return NextResponse.json({ app: rows[0] }, { status: 201 });
+  return NextResponse.json({ app: { ...rows[0], setup_path: await createTeamSetupPath(rows[0].id) } }, { status: 201 });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -79,5 +84,5 @@ export async function PATCH(req: NextRequest) {
   if (!response.ok) return NextResponse.json({ error: 'Gagal menyimpan tautan aplikasi.' }, { status: 502 });
   const rows = await response.json();
   if (!rows[0]) return NextResponse.json({ error: 'Aplikasi tim tidak ditemukan.' }, { status: 404 });
-  return NextResponse.json({ app: rows[0] });
+  return NextResponse.json({ app: { ...rows[0], setup_path: await createTeamSetupPath(rows[0].id) } });
 }

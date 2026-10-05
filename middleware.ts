@@ -9,9 +9,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - public PWA assets (manifest and app icons)
-     * - login (auth page)
+     * - login and team-setup (public setup pages)
+     * - team-template (public SQL download for a new team database)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|favicon.png|manifest.json|apple-touch-icon.png|icon-192.png|icon-512.png|login).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|favicon.png|manifest.json|apple-touch-icon.png|icon-192.png|icon-512.png|login|team-setup|team-template).*)',
   ],
 };
 

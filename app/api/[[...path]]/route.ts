@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as appUserRoles from '../app/user-roles/handler';
 import * as appWorkspaces from '../app/workspaces/handler';
 import * as teamApps from '../team-apps/handler';
+import * as teamAppSetup from '../team-apps/setup/handler';
 import * as attendance from '../attendance/handler';
 import * as attendancePresence from '../attendance/presence/handler';
 import * as attendanceSchedule from '../attendance/schedule/handler';
@@ -41,6 +42,7 @@ const routes: Record<string, RouteModule> = {
   'app/user-roles': appUserRoles,
   'app/workspaces': appWorkspaces,
   'team-apps': teamApps,
+  'team-apps/setup': teamAppSetup,
   attendance,
   'attendance/presence': attendancePresence,
   'attendance/schedule': attendanceSchedule,
