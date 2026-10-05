@@ -6,6 +6,10 @@ import { supabaseRest } from '@/lib/supabase/rest-client';
 import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/admin-rest-client';
 import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
+import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
+import { claimDesk, parseOrnaments, spaceCapacity } from '@/lib/spatial-office/space';
+import { DESKS_PER_ROOM } from '@/lib/spatial-office/model';
+
 export const runtime = 'edge';
 const identityCache = new Map<string, { user: ClickUpUser; expires: number }>();
 let rosterCache: { members: ClickUpUser[]; teamId: string; expires: number } | undefined;
@@ -60,13 +64,13 @@ export async function GET(req: NextRequest) {
     // Reuse the existing attendance connection and its RLS permissions. A new
     // service-role credential is not required just to render this read-only view.
     const [roleResult, sessionResult, taskResult, avatarResult] = await Promise.all([
-      supabaseRest.from('app_user_roles').select('email,display_name,status'),
+      supabaseRest.from('app_user_roles').select('email,display_name,status,role,is_superuser'),
       supabaseRest.from('active_sessions').select('*'),
       supabaseRest.from('task_cache').select('task_name,status,assignee_ids,raw_data'),
       isSupabaseAdminConfigured() ? supabaseAdminFetch(`app_settings?select=key,value&key=like.${encodeURIComponent(`spatial-avatar:${teamId}:*`)}`).catch(() => null) : Promise.resolve(null),
     ]);
     if (roleResult.error || sessionResult.error) throw new Error('Snapshot unavailable');
-    const roles = roleResult.data as { email: string; display_name: string; status: string }[];
+    const roles = roleResult.data as { email: string; display_name: string; status: string; role?: string; is_superuser?: boolean }[];
     const sessions = sessionResult.data as SessionRow[];
     if (!Array.isArray(roles) || !Array.isArray(sessions)) throw new Error('Invalid snapshot');
     const roleByEmail = new Map(roles.map(role => [role.email.trim().toLowerCase(), role]));
@@ -83,7 +87,10 @@ export async function GET(req: NextRequest) {
       ...member, tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
       avatar: avatars.get(`spatial-avatar:${teamId}:${member.id}`) || undefined,
     }));
-    return json({ members, viewerId: String(user.id), avatarStorage: Boolean(avatarResult?.ok), syncedAt: new Date().toISOString() });
+    const office = await readOfficeSpace(teamId, members);
+    const ownRole = roleByEmail.get(user.email.trim().toLowerCase());
+    const canEditOffice = ownRole?.is_superuser === true || ['admin', 'owner'].includes(String(ownRole?.role || '').trim().toLowerCase());
+    return json({ viewerRole: ownRole?.is_superuser === true ? 'owner' : String(ownRole?.role || 'member').trim().toLowerCase(), space: office.space, spaceStorage: office.ready, canEditOffice, members, viewerId: String(user.id), avatarStorage: Boolean(avatarResult?.ok), syncedAt: new Date().toISOString() });
   } catch {
     return json({ error: 'Data tim atau presensi belum dapat diperbarui. Coba sinkronkan kembali.' }, 503);
   }
@@ -111,4 +118,31 @@ export async function PUT(req: NextRequest) {
     if (!response.ok) throw new Error('Save failed');
     return json({ avatar });
   } catch { return json({ error: 'Avatar belum tersimpan. Coba kembali.' }, 503); }
+}
+
+export async function PATCH(req: NextRequest) {
+  const origin = req.headers.get('origin');
+  if (origin && origin !== new URL(req.url).origin) return json({ error: 'Asal permintaan tidak sesuai.' }, 403);
+  const auth = await GET(req);
+  if (!auth.ok) return auth;
+  const snapshot = await auth.json();
+  if (!snapshot.spaceStorage) return json({ error: 'Penyimpanan kantor belum terhubung.' }, 503);
+  let action;
+  try {
+    const raw = await req.text();
+    if (raw.length > 20000) return json({ error: 'Data terlalu besar.' }, 413);
+    action = JSON.parse(raw);
+  } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
+  if (!action || !['claim', 'layout'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if (action.type === 'layout' && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur ornamen.' }, 403);
+  const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
+  try {
+    const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
+      if (action.type === 'claim') return claimDesk(current, snapshot.viewerId, action.slot, snapshot.members.length);
+      if (action.layoutRevision !== current.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
+      const ornaments = parseOrnaments(action.ornaments, spaceCapacity(current, snapshot.members.length) / DESKS_PER_ROOM);
+      return { ...current, revision: current.revision + 1, layoutRevision: current.layoutRevision + 1, ornaments };
+    });
+    return json({ space });
+  } catch (error) { return json({ error: error instanceof Error ? error.message : 'Perubahan belum tersimpan.' }, 409); }
 }

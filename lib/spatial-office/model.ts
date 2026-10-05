@@ -8,7 +8,7 @@ export type OfficeMember = {
   tasks?: OfficeTask[];
   avatar?: AvatarStyle;
 };
-export type OfficeSnapshot = { members: OfficeMember[]; syncedAt: string; viewerId?: string; avatarStorage?: boolean };
+export type OfficeSnapshot = { viewerRole?: string; canEditOffice?: boolean; space?: import('./space').OfficeSpace; spaceStorage?: boolean; members: OfficeMember[]; syncedAt: string; viewerId?: string; avatarStorage?: boolean };
 export type RosterMember = { id: string; name: string; email: string; aliases?: string[] };
 export type SessionRow = {
   user_id?: unknown; user_email?: unknown; user_name?: unknown;
@@ -67,13 +67,13 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
   }
   return seats;
 }
-export const DESKS_PER_ROOM = 6;
+export const DESKS_PER_ROOM = 10;
 export function deskPosition(slot: number) {
   const index = slot % DESKS_PER_ROOM;
-  // Three adjoining stations on each side of a shared, continuous workbench.
+  // Five adjoining stations on each side of a shared, continuous workbench.
   const side = index % 2 === 0 ? -1 : 1;
   return {
-    x: (Math.floor(index / 2) - 1) * 1.4,
+    x: (Math.floor(index / 2) - 2) * 1.4,
     z: side * 0.375,
     rotation: side === -1 ? 0 : Math.PI,
     seatZ: side * 1.155,
@@ -82,7 +82,7 @@ export function deskPosition(slot: number) {
 }
 export function officePath(slot: number, leaving = false): Array<[number, number]> {
   const desk = deskPosition(slot);
-  const path: Array<[number, number]> = [[-5.5, 3.5], [-3.15, 3.5], [-3.15, desk.aisleZ], [desk.x, desk.aisleZ], [desk.x, desk.seatZ]];
+  const path: Array<[number, number]> = [[-7, 4.5], [-4.5, 4.5], [-4.5, desk.aisleZ], [desk.x, desk.aisleZ], [desk.x, desk.seatZ]];
   return leaving ? path.reverse() : path;
 }
 export function memberHash(id: string) {
@@ -120,25 +120,27 @@ export function memberZone(member: OfficeMember, now: number): OfficeZone {
 export function zonePosition(slot: number, zone: OfficeZone) {
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot); return { x: d.x, z: d.seatZ, rotation: d.rotation }; }
-  if (zone === 'pantry') return { x: 5.8 + Math.floor(i / 2) * 1.6, z: i % 2 ? 3.6 : 2.3, rotation: i % 2 ? Math.PI : 0 };
-  return { x: (i < 4 ? 6 : 9) + (i % 2 ? 0.4 : -0.4), z: i < 2 ? -3.35 : i < 4 ? -0.4 : -3.35, rotation: i >= 2 && i < 4 ? Math.PI : 0 };
+  if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * 1.15, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
+  const sofa = Math.floor(i / 2);
+  return { x: (sofa < 3 ? 7 + sofa * 2 : sofa === 3 ? 7 : 11) + (i % 2 ? 0.4 : -0.4), z: sofa < 3 ? -4.55 : -1.25, rotation: 0 };
 }
-// Each zone connects through one door to the same clear corridor on the right.
+// All destinations use the shared corridor and the two partition doors.
 export function zonePath(slot: number, zone: OfficeZone): Array<[number, number]> {
   const p = zonePosition(slot, zone);
-  if (zone === 'desk') { const d = deskPosition(slot); return [[3.4, 0.5], [3.4, d.aisleZ], [d.x, d.aisleZ], [p.x, p.z]]; }
-  if (zone === 'pantry') return [[3.4, 0.5], [3.4, 3], [4.5, 3], [5, 3], [p.x, 3], [p.x, p.z]];
-  return [[3.4, 0.5], [4.5, 0.5], [7.5, 0.5], [7.5, -1.8], [p.x, -1.8], [p.x, p.z]];
+  if (zone === 'desk') { const d = deskPosition(slot); return [[5, 0.5], [5, d.aisleZ], [d.x, d.aisleZ], [p.x, p.z]]; }
+  if (zone === 'pantry') return [[5, 0.5], [5, 3.8], [6, 3.8], [p.x, 3.8], [p.x, p.z]];
+  const aisle = slot % DESKS_PER_ROOM < 6 ? -3.1 : 0;
+  return [[5, 0.5], [6, 0.5], [9, 0.5], [9, aisle], [p.x, aisle], [p.x, p.z]];
 }
 // Find a corridor route from the actual position, including rapid direction changes.
-export function travelPath(slot: number, from: [number, number], target: OfficeZone): Array<[number, number]> {
+export function travelPath(slot: number, from: [number, number], target: OfficeZone, fromSlot = slot): Array<[number, number]> {
   type Point = [number, number];
   const nodes = new Map<string, Point>(), edges = new Map<string, Set<string>>();
   const key = (p: Point) => p.join(',');
   const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const segments: [Point, Point][] = [];
-  for (const zone of ['desk', 'lounge', 'pantry'] as const) {
-    const path = zonePath(slot, zone);
+  for (const sourceSlot of new Set([slot % DESKS_PER_ROOM, fromSlot % DESKS_PER_ROOM, ...Array.from({ length: DESKS_PER_ROOM }, (_, i) => i)])) for (const zone of ['desk', 'lounge', 'pantry'] as const) {
+    const path = zonePath(sourceSlot, zone);
     for (const p of path) { nodes.set(key(p), p); if (!edges.has(key(p))) edges.set(key(p), new Set()); }
     for (let i = 1; i < path.length; i++) { const a = path[i - 1], b = path[i]; edges.get(key(a))!.add(key(b)); edges.get(key(b))!.add(key(a)); segments.push([a, b]); }
   }

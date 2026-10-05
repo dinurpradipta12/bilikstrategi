@@ -783,3 +783,91 @@
 .office-avatar-editor input { accent-color:#52684e; }
 .office-edit-avatar { padding:9px 14px; border:1px solid #cad8c0; border-radius:8px; background:#eef4e7; color:#49613f; font-size:11px; margin:8px 0; }
 .spatial-office select:focus-visible { outline:3px solid #a17a43; outline-offset:2px; }
+
+/* Compact game shell. The scene is the home screen; tools open on demand. */
+.office-game { position:relative; width:100%; height:100dvh; min-height:440px; overflow:hidden; background:#e8ece1; }
+.office-game>.office-heading,.office-game>.office-stats,.office-game .office-stage-bar,.office-game .office-stage-footer,.office-game>.office-footnote,.office-game>.office-demo-note { display:none; }
+.office-game>.office-stage { border:0; border-radius:0; box-shadow:none; height:100%; }
+.office-game .office-viewport { height:100%; }
+.office-game-hud { position:absolute; z-index:12; left:18px; right:18px; top:max(18px,env(safe-area-inset-top)); display:flex; align-items:flex-start; justify-content:space-between; gap:10px; pointer-events:none; }
+.office-game-hud>* { pointer-events:auto; }
+.office-game-brand { display:flex; align-items:center; gap:12px; padding:12px 18px; background:#fffef3ed; border:1px solid #d2dbcc; border-radius:16px; box-shadow:0 5px 20px #344b4110; }
+.office-game-brand strong { display:block; font-size:16px; letter-spacing:-.5px; }
+.office-game-brand span { display:block; margin-top:3px; font-size:8px; letter-spacing:1.4px; color:#6c8369; }
+.office-game-actions { display:flex; gap:6px; align-items:center; }
+.office-game-actions>button,.office-app-menu>summary,.office-game-actions>select { border:1px solid #d1dac9; border-radius:12px; background:#fffef3ed; color:#49634d; padding:11px 13px; font-size:11px; cursor:pointer; list-style:none; }
+.office-game-actions>button { min-height:39px; }
+.office-app-menu summary::-webkit-details-marker { display:none; }
+.office-app-menu nav { position:absolute; right:0; top:52px; width:min(360px,calc(100vw - 36px)); display:grid; grid-template-columns:1fr 1fr; gap:4px; max-height:70dvh; overflow:auto; background:#fffef7; border:1px solid #cbd5c3; border-radius:16px; box-shadow:0 12px 40px #263d3926; padding:12px; }
+.office-app-menu nav a { padding:10px; border-radius:8px; font-size:11px; text-decoration:none; color:#3f5745; }
+.office-app-menu nav a:hover { background:#eaf0e3; }
+.office-game-dock { display:flex; align-items:center; justify-content:center; gap:5px; margin:14px 0; }
+.office-game-dock button,.office-game-dock>a { display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid #d3dec9; border-radius:12px; background:#fffff8; color:#496346; padding:10px 12px; font-size:10px; text-decoration:none; }
+.office-game .office-game-dock { position:absolute; z-index:12; left:50%; bottom:max(18px,env(safe-area-inset-bottom)); transform:translateX(-50%); padding:7px; border-radius:20px; background:#fffef1f2; border:1px solid #d3dcc9; box-shadow:0 8px 32px #283b3926; margin:0; max-width:calc(100% - 24px); }
+.office-game .office-game-dock button,.office-game .office-game-dock>a { flex-direction:column; gap:6px; min-width:62px; padding:9px 10px; background:transparent; border:0; }
+.office-game-dock button:hover,.office-game-dock a:hover,.office-game-dock button[aria-pressed=true] { background:#e2edd9; color:#38512f; }
+.office-game .office-view-controls { top:96px; left:18px; }
+.office-game .office-camera-controls { bottom:26px; right:18px; }
+.office-game .office-camera-hint { bottom:26px; max-width:24%; }
+.office-game>.office-error { position:absolute; z-index:13; left:18px; top:145px; max-width:min(420px,calc(100% - 36px)); background:#fff4dfef; font-size:10px; }
+.office-game>.office-bottom-grid { display:none; }
+.office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { display:block; position:absolute; z-index:14; right:18px; top:96px; bottom:112px; width:330px; overflow:auto; margin:0; border-radius:16px; box-shadow:0 8px 30px #213c3221; background:#fffef8; }
+.office-game.office-panel-team .office-detail-panel,.office-game.office-panel-member .office-team-panel { display:none; }
+.office-game .office-member-grid { grid-template-columns:1fr; max-height:none; }
+.office-close-drawer { position:absolute; z-index:15; right:12px; top:10px; border:0; background:#e7eee1; color:#47613f; width:27px; height:27px; border-radius:50%; font-size:20px; }
+.office-game .office-panel-title { padding-right:27px; }
+.office-game .office-panel-title input { width:110px; }
+.office-desks-panel,.office-editor-panel { background:#fffef8; border:1px solid #cfdac5; border-radius:16px; padding:18px; margin-top:16px; color:#3b553f; }
+.office-game .office-desks-panel,.office-game .office-editor-panel { position:absolute; z-index:15; top:96px; right:18px; bottom:112px; width:330px; overflow:auto; margin:0; box-shadow:0 8px 30px #213c3221; }
+.office-desks-panel p,.office-editor-panel p { font-size:11px; line-height:1.65; color:#6a7c62; margin:10px 0; }
+.office-desks-panel button,.office-editor-panel button { border:1px solid #ccd8c0; border-radius:8px; background:#f1f6eb; color:#49613f; padding:9px 11px; font-size:11px; }
+.office-desks-panel .office-panel-title,.office-editor-panel .office-panel-title { padding:0; }
+.office-desk-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin:14px 0; }
+.office-desk-grid button { display:flex; gap:9px; align-items:center; min-width:0; padding:11px; text-align:left; background:#fafbf6; }
+.office-desk-grid span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+.office-desk-grid .is-mine { background:#e6efdb; border-color:#90aa74; }
+.office-desk-grid button[aria-pressed=true] { box-shadow:inset 0 0 0 2px #829d6b; }
+.office-desk-claim { border-top:1px solid #dae2d2; padding-top:14px; }
+.office-desk-claim>button,.office-editor-actions>button:first-child { width:100%; color:#fffef6; background:#527047; border-color:#527047; }
+.office-desk-label[data-vacant=true] { background:#e7f1dde8; color:#466741; border-color:#a5ba92!important; }
+.office-editor-panel label { display:flex; flex-direction:column; gap:8px; font-size:11px; margin:12px 0; }
+.office-editor-panel select { min-width:0; width:100%; padding:9px; background:#f7f9f0; border:1px solid #d5dfca; border-radius:8px; color:#3c593a; font-size:11px; }
+.office-editor-add { display:flex; gap:8px; align-items:center; }
+.office-editor-add label { flex:1; min-width:0; }
+.office-editor-add>button { margin-top:17px; }
+.office-editor-panel fieldset { border:1px solid #d8e0ce; border-radius:10px; padding:10px; margin:14px 0; }
+.office-editor-panel legend { font-size:11px; padding:0 5px; }
+.office-editor-panel input { width:100%; accent-color:#607b50; }
+.office-editor-rotate,.office-editor-actions { display:flex; gap:8px; margin:10px 0; }
+.office-editor-rotate>button { flex:1; }
+.office-editor-panel .office-editor-delete { color:#9a5143; border-color:#e4cdc5; background:#fcf0e9; width:100%; margin-top:8px; }
+.office-editor-panel [role=alert],.office-desks-panel [role=alert] { color:#a15545; }
+.office-game-toast { position:absolute; left:18px; bottom:108px; z-index:16; border:1px solid #b8cbaa; border-radius:12px; padding:12px; background:#f7ffef; display:flex; align-items:center; gap:10px; font-size:11px; max-width:calc(100% - 36px); }
+.office-game-toast button { border:0; color:#567047; background:transparent; font-size:18px; }
+.office-viewport.is-editing .office-avatar-label { pointer-events:none; opacity:.65; }
+@media(max-width:760px) {
+  .office-game-hud { left:10px; right:10px; top:max(10px,env(safe-area-inset-top)); gap:5px; }
+  .office-game-brand { padding:10px; gap:8px; border-radius:12px; }
+  .office-game-brand strong { font-size:13px; }
+  .office-game-brand span { font-size:6px; letter-spacing:.8px; }
+  .office-game-brand>svg { width:20px; }
+  .office-game-actions { gap:4px; }
+  .office-game-actions>button,.office-app-menu>summary,.office-game-actions>select { padding:9px; font-size:10px; }
+  .office-app-menu>summary>span { display:none; }
+  .office-game .office-view-controls { top:78px; left:10px; }
+  .office-game .office-camera-controls { bottom:105px; right:10px; }
+  .office-game .office-camera-hint { bottom:110px; left:10px; max-width:48%; }
+  .office-game .office-game-dock { bottom:max(14px,env(safe-area-inset-bottom)); gap:1px; padding:5px; border-radius:16px; }
+  .office-game .office-game-dock button,.office-game .office-game-dock>a { min-width:44px; padding:9px 6px; font-size:8px; white-space:nowrap; }
+  .office-game .office-desks-panel,.office-game .office-editor-panel,.office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { top:auto; bottom:96px; right:10px; width:calc(100% - 20px); max-height:52dvh; padding:14px; }
+  .office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { padding:0; }
+  .office-close-drawer { top:10px; bottom:auto; right:12px; }
+  .office-game>.office-error { left:10px; top:126px; max-width:calc(100% - 20px); }
+  .office-game-toast { left:10px; bottom:96px; }
+}
+
+.office-review-game { position:fixed; inset:0; z-index:40; background:#e8ece1; }
+.office-review-game>.office-review-modes { position:absolute; z-index:30; left:18px; bottom:110px; display:flex; gap:5px; margin:0; }
+.office-review-game>.office-review-modes button { padding:7px 9px; font-size:9px; border-radius:8px; gap:6px; }
+.office-review-game>.office-review-modes small { display:none; }
+@media(max-width:760px) { .office-review-game>.office-review-modes { left:10px; top:125px; bottom:auto; max-width:calc(100% - 20px); } .office-review-game>.office-review-modes button { flex:none; padding:6px; font-size:8px; } .office-review-game>.office-review-modes svg { width:12px; } }

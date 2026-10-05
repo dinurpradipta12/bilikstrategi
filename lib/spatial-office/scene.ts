@@ -2,16 +2,17 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { ornamentError, type Ornament } from './space';
 import { AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, typingHand, zonePosition, type OfficeZone, type OfficeMember } from './model';
 
 const CHARACTERS = [...AVATAR_MODELS];
-const FURNITURE = ['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet'];
+const FURNITURE = ['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair'];
 type Rig = { root: THREE.Group; body: THREE.Group; head: THREE.Group; arms: THREE.Group[]; hands: THREE.Group[]; mug: THREE.Group; legs: THREE.Group[] };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
   route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; name: HTMLSpanElement; offset: number;
 };
-export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void };
+export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void };
 
 export class OfficeScene {
   private scene = new THREE.Scene();
@@ -21,8 +22,17 @@ export class OfficeScene {
   private resize: ResizeObserver;
   private templates = new Map<string, THREE.Group>();
   private occupants = new Map<string, Occupant>();
-  private desks = new Map<string, THREE.Group>();
-  private deskLabels = new Map<string, HTMLButtonElement>();
+  private desks = new Map<number, THREE.Group>();
+  private deskLabels = new Map<number, HTMLButtonElement>();
+  private room = 0;
+  private decorations = new Map<string, THREE.Group>();
+  private ornaments: Ornament[] = [];
+  private editMode = false;
+  private selectedOrnament = '';
+  private dragging: { id: string; dx: number; dz: number } | null = null;
+  private raycaster = new THREE.Raycaster();
+  private pointer = new THREE.Vector2();
+  private outline: THREE.BoxHelper | null = null;
   private geometries = new Set<THREE.BufferGeometry>();
   private materials = new Set<THREE.Material>();
   private disposed = false;
@@ -57,7 +67,7 @@ export class OfficeScene {
     this.controls.enableDamping = true;
     this.controls.enablePan = false;
     this.controls.minDistance = 9;
-    this.controls.maxDistance = 40;
+    this.controls.maxDistance = 65;
     this.controls.minPolarAngle = 0.35;
     this.controls.maxPolarAngle = 1.2;
     this.controls.minAzimuthAngle = -Math.PI * 0.46;
@@ -77,6 +87,10 @@ export class OfficeScene {
     this.observer = new IntersectionObserver(([entry]) => { this.visible = entry.isIntersecting; });
     this.observer.observe(host);
     this.resizeCanvas();
+    this.renderer.domElement.addEventListener('pointerdown', this.pointerDown, true);
+    this.renderer.domElement.addEventListener('pointermove', this.pointerMove, true);
+    this.renderer.domElement.addEventListener('pointerup', this.pointerUp, true);
+    this.renderer.domElement.addEventListener('pointercancel', this.pointerUp, true);
     void this.load();
     this.raf = requestAnimationFrame(this.animate);
   }
@@ -135,6 +149,7 @@ export class OfficeScene {
       this.buildRoom();
       this.loaded = true;
       this.setMembers(this.current);
+      this.setOrnaments(this.ornaments, this.room, this.editMode, this.selectedOrnament);
       this.options.onReady();
     } catch {
       if (!this.disposed) this.options.onError('Aset kantor belum dapat dimuat. Coba muat ulang tampilan 3D.');
@@ -171,46 +186,106 @@ export class OfficeScene {
   }
 
   private buildRoom() {
-    for (const x of [-3, 0, 3, 6, 9]) {
-      for (const z of [-3, 0, 3]) this.asset(x > 3 ? 'floor_ivory_3m' : 'floor_wood_3m', x, z);
-      this.asset('wall_with_window_3m', x, -4.5);
-      this.glass(x, 4.5, 3);
+    for (const x of [-4.5, -1.5, 1.5, 4.5, 7.5, 10.5]) {
+      for (const z of [-4.5, -1.5, 1.5, 4.5]) this.asset(x > 6 ? 'floor_ivory_3m' : 'floor_wood_3m', x, z);
+      this.asset('wall_with_window_3m', x, -6); this.glass(x, 6, 3);
     }
-    for (const z of [-3, 0, 3]) { if (z < 3) this.asset('wall_with_window_3m', -4.5, z, 0, Math.PI / 2); else this.glass(-4.5, z, 3, true, true); this.glass(10.5, z, 3, true); }
-    // Full-height partitions with sliding doors: real openings for the walking routes.
-    this.glass(4.5, -2.4, 4.2, true);
-    this.glass(4.5, 0.5, 1.6, true, true);
-    this.glass(4.5, 1.75, 0.9, true);
-    this.glass(4.5, 3, 1.6, true, true);
-    this.glass(4.5, 4.15, 0.7, true);
-    this.glass(7.5, 1.5, 6);
-    // A translucent canopy closes the volume while preserving the overhead view.
-    this.box(3, 2.87, 0, 15, 0.035, 9, '#d9e3da', 0.025);
-    for (const x of [-4.5, 4.5, 10.5]) this.box(x, 2.84, 0, 0.09, 0.10, 9, '#799084');
-    this.asset('floor_plant', -3.8, -3.85);
-    this.asset('floor_plant', -3.8, 3.65);
-    this.asset('bookshelf', -1.8, -4.1);
-    this.asset('floor_lamp', 3.6, -3.85);
-    this.asset('pinboard', 0.1, -4.4, 0.8);
-    for (let slot = 0; slot < DESKS_PER_ROOM; slot++) { const p = deskPosition(slot); this.asset('office_desk', p.x, p.z, 0, p.rotation); }
-    this.asset('sofa', 6, -3.5); this.asset('sofa', 9, -3.5); this.asset('sofa', 6, -0.25, 0, Math.PI);
-    this.asset('area_rug', 7.4, -1.9).scale.set(2, 1, 1.35);
-    this.asset('side_table', 8.6, -0.35); this.asset('book_stack', 8.6, -0.35, 0.59);
-    this.asset('floor_plant', 10, 0.7); this.asset('floor_lamp', 10, -3.8);
-    for (const x of [5.8, 7.4, 9]) {
-      const cabinet = this.asset('drawer_cabinet', x, 4.08); cabinet.scale.set(1.6, 0.65, 1);
-      this.asset('coffee_mug', x - 0.25, 4.05, 0.94);
-      this.asset('desk_plant', x + 0.35, 4.07, 0.94).scale.setScalar(0.6);
+    for (const z of [-4.5, -1.5, 1.5, 4.5]) {
+      if (z < 4.5) this.asset('wall_with_window_3m', -6, z, 0, Math.PI / 2); else this.glass(-6, z, 3, true, true);
+      this.glass(12, z, 3, true);
     }
-    // Compact coffee station, composed around the supplied cabinet and cup assets.
-    this.box(9.25, 1.15, 4, 0.44, 0.43, 0.32, '#344c43');
-    this.box(9.25, 1.16, 3.82, 0.30, 0.12, 0.06, '#d8bd89');
-    this.asset('coffee_mug', 9.25, 3.78, 0.96).scale.setScalar(0.7);
-    for (const [text, x, z] of [['MEJA KOMUNAL', 0, 3.8], ['LOUNGE · ISTIRAHAT / OFFLINE', 7.5, -4], ['PANTRY · COFFEE BREAK', 7.5, 1.7]] as const) {
+    this.glass(6, -3.125, 5.75, true); this.glass(6, 0.5, 1.5, true, true);
+    this.glass(6, 2.15, 1.8, true); this.glass(6, 3.8, 1.5, true, true); this.glass(6, 5.275, 1.45, true);
+    this.glass(9, 1.5, 6);
+    this.box(3, 2.87, 0, 18, 0.035, 12, '#d9e3da', 0.025);
+    for (const x of [-6, 6, 12]) this.box(x, 2.84, 0, 0.09, 0.10, 12, '#799084');
+    this.asset('pinboard', 0, -5.9, 0.8);
+    for (let slot = 0; slot < DESKS_PER_ROOM; slot++) {
+      const p = deskPosition(slot), group = new THREE.Group();
+      group.position.set(p.x, 0, p.z); group.rotation.y = p.rotation; this.scene.add(group); this.desks.set(slot, group);
+      this.asset('office_desk', 0, 0, 0, 0, group);
+      this.asset('office_swivel_chair', 0, -0.78, 0, 0, group);
+      this.asset('laptop', 0, 0.12, 0.78, Math.PI, group);
+      this.asset('keyboard', 0, -0.27, 0.78, Math.PI, group);
+      this.asset('coffee_mug', -0.48, 0.04, 0.78, 0, group);
+      const label = document.createElement('button'); label.type = 'button'; label.className = 'office-desk-label';
+      label.addEventListener('click', () => this.options.onSelectDesk(this.room * DESKS_PER_ROOM + slot));
+      this.labels.appendChild(label); this.deskLabels.set(slot, label);
+    }
+    for (const [x, z] of [[7, -4.7], [9, -4.7], [11, -4.7], [7, -1.4], [11, -1.4]]) this.asset('sofa', x, z);
+    for (const x of [7.2, 9, 10.8]) {
+      const cabinet = this.asset('drawer_cabinet', x, 5.6); cabinet.scale.set(1.8, 0.65, 1);
+      this.asset('coffee_mug', x - 0.25, 5.55, 0.94);
+    }
+    this.box(10.8, 1.15, 5.55, 0.44, 0.43, 0.32, '#344c43');
+    this.box(10.8, 1.16, 5.37, 0.30, 0.12, 0.06, '#d8bd89');
+    // Street, sidewalk and a planted pocket garden outside the glazed office.
+    this.box(5, -0.18, 2, 36, 0.2, 27, '#c4d3b1');
+    this.box(4.5, -0.055, 7, 31, 0.12, 2, '#dedbd0');
+    this.box(4.5, -0.09, 10.5, 31, 0.08, 5, '#727d7c');
+    for (let x = -10; x < 20; x += 3) this.box(x, -0.042, 10.5, 1.5, 0.01, 0.09, '#efe7c6');
+    for (let z = 8.6; z < 12.5; z += 0.65) this.box(-4.5, -0.035, z, 2, 0.015, 0.32, '#fff9e8');
+    this.box(15.5, -0.04, 0, 6.4, 0.12, 12, '#9fb881');
+    this.box(15.5, 0.03, 1.9, 6.4, 0.08, 1.1, '#dfd8c4');
+    this.box(15.5, 0.03, 4.15, 1.1, 0.08, 3.4, '#dfd8c4');
+    for (const [x, z] of [[13.2, -4.8], [17.5, -4.8], [17.5, 0], [17.5, 4.8]]) this.asset('floor_plant', x, z).scale.setScalar(2.3);
+    this.asset('sofa', 14.5, -1.2); this.asset('side_table', 16, -1.2);
+    for (const x of [-8, 20]) { this.box(x, 1.5, 7.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 7.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
+    for (const [text, x, z] of [['WORKSPACE · 10 MEJA', 0, -4], ['LOUNGE', 9, -5.6], ['PANTRY', 9, 2], ['OFFICE GARDEN', 15.5, -3], ['BILIK STREET', 7, 11.5]] as const) {
       const element = document.createElement('span'); element.className = 'office-entry-label'; element.textContent = text;
       this.labels.appendChild(element); this.roomLabels.push({ element, position: new THREE.Vector3(x, 0.12, z) });
     }
   }
+
+  setOrnaments(items: Ornament[], room: number, editing: boolean, selected: string) {
+    this.ornaments = items; this.room = room; this.editMode = editing; this.selectedOrnament = selected;
+    if (!editing && this.dragging) { this.dragging = null; this.controls.enabled = true; }
+    if (!this.loaded) return;
+    const visible = items.filter(item => item.room === room), ids = new Set(visible.map(item => item.id));
+    for (const [id, group] of this.decorations) if (!ids.has(id)) { this.scene.remove(group); this.decorations.delete(id); }
+    for (const item of visible) {
+      let group = this.decorations.get(item.id);
+      if (group && group.userData.asset !== item.asset) { this.scene.remove(group); this.decorations.delete(item.id); group = undefined; }
+      if (!group) { group = this.asset(item.asset, item.x, item.z); group.userData.ornamentId = item.id; group.userData.asset = item.asset; this.decorations.set(item.id, group); }
+      group.position.set(item.x, 0, item.z); group.rotation.y = item.rotation;
+    }
+    const object = editing ? this.decorations.get(selected) : undefined;
+    if (object) {
+      if (!this.outline) { this.outline = new THREE.BoxHelper(object, '#d49745'); this.scene.add(this.outline); }
+      this.outline.visible = true; this.outline.setFromObject(object);
+      this.outline.material.color.set(ornamentError(items.find(item => item.id === selected)!) ? '#db6c60' : '#d49745');
+    } else if (this.outline) this.outline.visible = false;
+  }
+  private floorPoint(event: PointerEvent) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+  }
+  private pointerDown = (event: PointerEvent) => {
+    if (!this.editMode || event.button !== 0) return;
+    const point = this.floorPoint(event); if (!point) return;
+    const hit = this.raycaster.intersectObjects([...this.decorations.values()], true)[0];
+    if (!hit) return;
+    let object: THREE.Object3D | null = hit.object;
+    while (object && !object.userData.ornamentId) object = object.parent;
+    if (!object) return;
+    event.stopImmediatePropagation(); this.controls.enabled = false;
+    this.dragging = { id: object.userData.ornamentId, dx: object.position.x - point.x, dz: object.position.z - point.z };
+    this.renderer.domElement.setPointerCapture(event.pointerId); this.options.onSelectOrnament(this.dragging.id);
+  };
+  private pointerMove = (event: PointerEvent) => {
+    if (!this.dragging || !this.editMode) return;
+    const point = this.floorPoint(event); if (!point) return;
+    event.stopImmediatePropagation();
+    const x = Math.round((point.x + this.dragging.dx) * 4) / 4, z = Math.round((point.z + this.dragging.dz) * 4) / 4;
+    this.options.onMoveOrnament(this.dragging.id, THREE.MathUtils.clamp(x, -5.5, 18.5), THREE.MathUtils.clamp(z, -5.5, 5.5));
+  };
+  private pointerUp = (event: PointerEvent) => {
+    if (!this.dragging) return;
+    event.stopImmediatePropagation(); this.dragging = null; this.controls.enabled = true;
+    if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
+  };
 
   private rig(member: OfficeMember): Rig {
     const style = member.avatar || defaultAvatar(member.id);
@@ -288,43 +363,27 @@ export class OfficeScene {
     this.current = members;
     if (!this.loaded) return;
     const ids = new Set(members.map(({ member }) => member.id));
-    for (const [id, desk] of this.desks) {
-      if (!ids.has(id)) { this.scene.remove(desk); this.desks.delete(id); this.deskLabels.get(id)?.remove(); this.deskLabels.delete(id); }
-    }
     for (const [id, occupant] of this.occupants) {
       if (!ids.has(id)) { this.removeOccupant(id, occupant); }
     }
     for (const { member, slot } of members) {
-      const position = deskPosition(slot);
-      if (!this.desks.has(member.id)) {
-        const group = new THREE.Group();
-        this.scene.add(group);
-        group.position.set(position.x, 0, position.z);
-        this.asset('office_swivel_chair', 0, -0.78, 0, 0, group);
-        this.asset('laptop', 0, 0.12, 0.78, Math.PI, group);
-        this.asset('keyboard', 0, -0.27, 0.78, Math.PI, group);
-        this.asset('coffee_mug', -0.48, 0.04, 0.78, 0, group);
-        this.asset('desk_plant', 0.49, -0.14, 0.78, 0, group).scale.setScalar(0.7);
-        this.desks.set(member.id, group);
-        const label = document.createElement('button'); label.type = 'button'; label.className = 'office-desk-label';
-        label.addEventListener('click', () => this.options.onSelect(member.id));
-        this.labels.appendChild(label); this.deskLabels.set(member.id, label);
-      }
-      this.deskLabels.get(member.id)!.textContent = member.name;
-      this.desks.get(member.id)!.position.set(position.x, 0, position.z);
-      this.desks.get(member.id)!.rotation.y = position.rotation;
       let occupant = this.occupants.get(member.id);
       if (occupant && occupant.style !== JSON.stringify(member.avatar)) {
         const position = occupant.rig.root.position.clone(), rotation = occupant.rig.root.rotation.y;
         this.removeOccupant(member.id, occupant);
         const replacement = this.makeOccupant(member, slot);
         replacement.rig.root.position.copy(position); replacement.rig.root.rotation.y = rotation;
-        replacement.zone = occupant.zone; replacement.route = occupant.route;
+        replacement.zone = occupant.zone; replacement.route = occupant.route; replacement.slot = occupant.slot;
         occupant = replacement; this.occupants.set(member.id, occupant);
       }
       // First snapshot (including returning to this dashboard) restores the seat.
       // Only an observed status/timer change walks to another zone.
       if (!occupant) { occupant = this.makeOccupant(member, slot); this.occupants.set(member.id, occupant); }
+      const previousSlot = occupant.slot;
+      if (previousSlot !== slot) {
+        const position = occupant.rig.root.position, zone = memberZone(member, Date.now());
+        occupant.route = travelPath(slot, [position.x, position.z], zone, previousSlot).map(([x, z]) => new THREE.Vector3(x, 0, z)); occupant.zone = zone;
+      }
       occupant.member = member; occupant.slot = slot; occupant.name.textContent = member.name;
       occupant.label.setAttribute('aria-label', `${member.name}, ${member.status === 'paused' ? 'istirahat' : member.status === 'offline' ? 'offline di lounge' : 'sudah check-in'}`);
       const zone = memberZone(member, Date.now()); if (zone !== occupant.zone) this.changeZone(occupant, zone);
@@ -346,11 +405,11 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
-  resetCamera() { this.camera.position.set(15.5, 17, 22); this.controls.target.set(2.6, 0.4, 0); this.controls.update(); }
-  focus(zone: OfficeZone) { const x = zone === 'desk' ? 0 : 7.5, z = zone === 'pantry' ? 3 : zone === 'lounge' ? -1.5 : 0; this.controls.target.set(x, 0.5, z); this.camera.position.set(x + 5, 9, z + 9); this.controls.update(); }
+  resetCamera() { this.camera.position.set(23, 23, 31); this.controls.target.set(5, 0.4, 1.8); this.controls.update(); }
+  focus(zone: OfficeZone | 'garden') { const x = zone === 'desk' ? 0 : zone === 'garden' ? 15.5 : 9, z = zone === 'pantry' ? 3.8 : zone === 'lounge' ? -2.5 : 0; this.controls.target.set(x, 0.5, z); this.camera.position.set(x + 5, 9, z + 9); this.controls.update(); }
   zoom(direction: number) {
     const offset = this.camera.position.clone().sub(this.controls.target);
-    offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.84 : 1.19), 9, 40));
+    offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.84 : 1.19), 9, 65));
     this.camera.position.copy(this.controls.target).add(offset); this.controls.update();
   }
 
@@ -420,13 +479,17 @@ export class OfficeScene {
       occupant.label.dataset.paused = String(member.status === 'paused');
       this.placeLabel(occupant.label, rig.root.position.clone().add(new THREE.Vector3(0, 1.86, 0)));
     }
-    for (const { member, slot } of this.current) {
-      const label = this.deskLabels.get(member.id);
-      if (!label) continue;
-      label.hidden = this.occupants.get(member.id)?.zone === 'desk';
-      label.dataset.selected = String(member.id === this.selected);
-      const { x, z } = deskPosition(slot);
-      this.placeLabel(label, new THREE.Vector3(x, 0.84, z));
+    for (const [slot, label] of this.deskLabels) {
+      const occupant = this.current.find(item => item.slot % DESKS_PER_ROOM === slot);
+      const number = this.room * DESKS_PER_ROOM + slot + 1;
+      label.hidden = this.editMode;
+      const text = `${String(number).padStart(2, '0')}${occupant ? '' : ' + '}`;
+      label.title = occupant ? `Meja ${number} · ${occupant.member.name}` : `Klaim meja ${number}`;
+      if (label.textContent !== text) label.textContent = text;
+      label.dataset.selected = String(occupant?.member.id === this.selected);
+      label.dataset.vacant = String(!occupant);
+      label.setAttribute('aria-label', `Meja ${number}, ${occupant ? `milik ${occupant.member.name}` : 'kosong, bisa diklaim'}`);
+      const { x, z } = deskPosition(slot); this.placeLabel(label, new THREE.Vector3(x, 0.88, z));
     }
     for (const label of this.roomLabels) this.placeLabel(label.element, label.position);
     for (const door of this.doors) {
@@ -442,6 +505,11 @@ export class OfficeScene {
     cancelAnimationFrame(this.raf);
     this.resize.disconnect(); this.observer.disconnect(); this.controls.dispose();
     this.renderer.domElement.removeEventListener('webglcontextlost', this.contextLost);
+    this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown, true);
+    this.renderer.domElement.removeEventListener('pointermove', this.pointerMove, true);
+    this.renderer.domElement.removeEventListener('pointerup', this.pointerUp, true);
+    this.renderer.domElement.removeEventListener('pointercancel', this.pointerUp, true);
+    this.outline?.geometry.dispose(); this.outline?.material.dispose();
     this.geometries.forEach(geometry => geometry.dispose());
     this.materials.forEach(material => material.dispose());
     this.renderer.dispose(); this.renderer.forceContextLoss(); this.renderer.domElement.remove();

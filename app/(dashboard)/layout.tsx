@@ -49,15 +49,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     checkAuth();
 
-    // Mobile starts in Presensi while the chat feature is paused globally.
-    if (
-      typeof window !== 'undefined' &&
-      window.innerWidth < 768 &&
-      (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/chat'))
-    ) {
-      router.replace('/attendance');
-    }
-
     // 3. Sidebar Collapsed State Listener
     const checkState = () => {
       const isCollapsed = localStorage.getItem('bilik_sidebar_collapsed') === 'true';
@@ -244,6 +235,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     );
   }
+
+  if (pathname === '/dashboard') return <div data-app-shell className="min-h-dvh bg-[#e8ece1] text-[#263d39]">
+    <main>{children}</main><AppPresenceTracker />
+  </div>;
 
   return (
     <div data-app-shell className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">

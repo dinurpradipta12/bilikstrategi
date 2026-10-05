@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOfficeMembers, reconcileSeats, officePath, deskPosition } from '../lib/spatial-office/model.ts';
+import { buildOfficeMembers, reconcileSeats, officePath, deskPosition, DESKS_PER_ROOM } from '../lib/spatial-office/model.ts';
 
 const roster = [
   { id: '1', name: 'Alya Putri', email: 'alya@example.com', aliases: ['Alya'] },
@@ -48,9 +48,9 @@ test('all members receive unique desks beyond the first room', () => {
 });
 
 test('coworking desks join end to end with opposite seats facing inward', () => {
-  const stations = Array.from({ length: 6 }, (_, slot) => deskPosition(slot));
-  assert.equal(new Set(stations.map(d => d.x)).size, 3);
-  for (let pair = 0; pair < 3; pair++) {
+  const stations = Array.from({ length: DESKS_PER_ROOM }, (_, slot) => deskPosition(slot));
+  assert.equal(new Set(stations.map(d => d.x)).size, 5);
+  for (let pair = 0; pair < 5; pair++) {
     assert.equal(stations[pair * 2].x, stations[pair * 2 + 1].x);
     assert.equal(stations[pair * 2].rotation, 0);
     assert.equal(stations[pair * 2 + 1].rotation, Math.PI);
@@ -58,7 +58,7 @@ test('coworking desks join end to end with opposite seats facing inward', () => 
   assert.equal(stations[2].x - stations[0].x, 1.4);
 });
 test('entry and exit corridors never cross the communal table', () => {
-  for (let slot = 0; slot < 6; slot++) {
+  for (let slot = 0; slot < DESKS_PER_ROOM; slot++) {
     const path = officePath(slot);
     assert.deepEqual(officePath(slot, true), [...path].reverse());
     for (let segment = 1; segment < path.length; segment++) {
@@ -67,7 +67,7 @@ test('entry and exit corridors never cross the communal table', () => {
       for (let step = 0; step <= 20; step++) {
         const x = a[0] + (b[0] - a[0]) * step / 20;
         const z = a[1] + (b[1] - a[1]) * step / 20;
-        assert.ok(Math.abs(x) > 2.35 || Math.abs(z) > 1, 'walk outside table plus body clearance');
+        assert.ok(Math.abs(x) > 3.7 || Math.abs(z) > 1, 'walk outside table plus body clearance');
       }
     }
   }
@@ -87,7 +87,7 @@ test('pantry follows accumulated work across reload, pause and resume', async ()
 });
 test('all zone routes and rapid reversals stay in corridors and use partition doors', async () => {
   const { zonePosition, travelPath } = await import('../lib/spatial-office/model.ts');
-  for (let slot = 0; slot < 6; slot++) {
+  for (let slot = 0; slot < DESKS_PER_ROOM; slot++) {
     for (const source of ['desk', 'lounge', 'pantry']) {
       for (const target of ['desk', 'lounge', 'pantry']) {
         const origin = zonePosition(slot, source), end = zonePosition(slot, target);
@@ -98,8 +98,8 @@ test('all zone routes and rapid reversals stay in corridors and use partition do
           assert.ok(Math.abs(point[0] - from[0]) < 1e-6 || Math.abs(point[1] - from[1]) < 1e-6);
           for (let step = 0; step <= 10; step++) {
             const x = from[0] + (point[0] - from[0]) * step / 10, z = from[1] + (point[1] - from[1]) * step / 10;
-            assert.ok(Math.abs(x) > 2.35 || Math.abs(z) >= 1.15, 'route must clear shared workbench');
-            if (Math.abs(x - 4.5) < 0.02) assert.ok(Math.abs(z - 0.5) < 0.7 || Math.abs(z - 3) < 0.7, 'cross partition only at door');
+            assert.ok(Math.abs(x) > 3.7 || Math.abs(z) >= 1.15, 'route must clear shared workbench');
+            if (Math.abs(x - 6) < 0.02) assert.ok(Math.abs(z - 0.5) < 0.7 || Math.abs(z - 3.8) < 0.7, 'cross partition only at door');
             const reverse = travelPath(slot, [x, z], source);
             assert.deepEqual(reverse.at(-1) || [x, z], [origin.x, origin.z]);
           }
