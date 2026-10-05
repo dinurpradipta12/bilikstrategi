@@ -1,0 +1,41 @@
+asset,category,width_m,depth_m,height_m,description,bytes
+office_desk,Furniture,1.4,0.75,0.78,Work desk,9548
+wood_chair,Furniture,0.58,0.61,1.22,Soft chair,13400
+office_swivel_chair,Furniture,0.7,0.7,1.18,Caster chair,24844
+round_stool,Furniture,0.6,0.6,0.7,Round stool,6024
+meeting_table,Furniture,2.3,1.1,0.8,Six seat table,8920
+drawer_cabinet,Furniture,0.9,0.48,1.44,Three drawers,4880
+bookshelf,Furniture,1.04,0.42,1.94,Open shelving,4640
+sofa,Furniture,1.9,0.76,1.19,Two seat sofa,30556
+side_table,Furniture,0.72,0.72,0.59,Round side table,4908
+whiteboard,Office,1.76,0.23,1.7,Floor stand whiteboard,5504
+pinboard,Office,1.2,0.09,1.27,Wall decor with notes,7732
+monitor,Desk object,0.8,0.26,1.15,Desktop display,8564
+laptop,Desk object,0.65,0.45,0.48,Open laptop,21188
+keyboard,Desk object,0.53,0.18,0.07,Separate keys,14408
+mouse,Desk object,0.13,0.2,0.08,Desk mouse,8448
+desk_lamp,Desk object,0.35,0.34,0.84,Task lamp,15596
+coffee_mug,Desk object,0.25,0.18,0.21,Cup and handle,10692
+book_stack,Desk object,0.46,0.27,0.35,Four books,5848
+pen_cup,Desk object,0.18,0.18,0.34,Five colored pens,8784
+desk_plant,Plants,0.35,0.35,0.53,Mini leafy plant,18208
+floor_plant,Plants,0.65,0.65,0.96,Leafy potted plant,23296
+flower_vase,Plants,0.5,0.5,0.73,Seven stylized flowers,51280
+cactus,Plants,0.42,0.42,0.68,Potted cactus,14576
+framed_art,Decor,0.7,0.1,1.1,Wall art,12424
+wall_clock,Decor,0.63,0.63,0.34,Rotate to mount,19300
+area_rug,Decor,2,1.35,0.04,Striped textile,9492
+cushion,Decor,0.56,0.56,0.23,Accent cushion,9808
+floor_lamp,Lighting,0.58,0.58,1.78,Standing lamp,11588
+pendant_light,Lighting,0.52,0.52,2.8,Hanging light; ceiling at 2.8,12436
+wall_3m,Architecture,3,0.12,2.8,Modular wall segment,2616
+wall_with_window_3m,Architecture,3,0.3,2.8,Decorative glazed window wall,7144
+wall_with_door_3m,Architecture,3,0.2,2.8,Decorative door wall,11912
+corner_walls_3m,Architecture,3,3,2.8,Two adjoining walls,2880
+floor_ivory_3m,Architecture,3,3,0.11,Modular tile at Z=0,3388
+floor_wood_3m,Architecture,3,3,0.11,Wood floor at Z=0,5392
+ceiling_3m,Architecture,3,3,0.12,Ceiling at 2.86,1184
+room_divider,Architecture,1.4,0.4,1.6,Moveable divider,3024
+notice_sign,Decor,0.8,0.08,0.4,Blank abstract sign; no text,8356
+storage_box,Storage,0.58,0.42,0.48,Lidded box,8036
+trash_bin,Storage,0.36,0.36,0.42,Small bin,3964

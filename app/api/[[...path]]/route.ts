@@ -29,6 +29,7 @@ import * as performance from '../performance/handler';
 import * as approvals from '../approvals/handler';
 import * as ownerProfitability from '../owner/profitability/handler';
 import * as automations from '../automations/handler';
+import * as spatialOffice from '../spatial-office/handler';
 import * as contentIdeas from '../content-ideas/handler';
 
 export const runtime = 'edge';
@@ -70,6 +71,7 @@ const routes: Record<string, RouteModule> = {
   'owner/profitability': ownerProfitability,
   automations,
   'content-ideas': contentIdeas,
+  'spatial-office': spatialOffice,
 };
 
 function normalizePath(pathname: string) {

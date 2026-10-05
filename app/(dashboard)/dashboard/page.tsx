@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
 import {
   Briefcase,
   CheckCircle2,
@@ -42,6 +44,8 @@ import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { mergeProjectSources } from '@/lib/projects/dedupe';
 import { useTheme } from '@/lib/theme';
 
+const OfficeDashboard = dynamic(() => import('@/components/spatial-office/OfficeDashboard'), { ssr: false });
+
 interface TeamMember {
   id: string;
   name: string;
@@ -66,7 +70,7 @@ function toSafeString(value: unknown, fallback = ''): string {
 
 export default function DashboardPage() {
   const { isDark } = useTheme();
-  const [dashboardTab, setDashboardTab] = useState<'team' | 'personal'>('team');
+  const [dashboardTab, setDashboardTab] = useState<'office' | 'team' | 'personal'>('office');
   const [projects, setProjects] = useState<AgencyProject[]>([]);
   const [tasks, setTasks] = useState<AgencyTask[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -586,7 +590,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-extrabold text-[#24324A] leading-tight">
-                {dashboardTab === 'team' ? 'Executive Team Dashboard' : `Personal Dashboard — ${currentUser.username}`}
+                {dashboardTab === 'office' ? 'Kantor 3D' : dashboardTab === 'team' ? 'Executive Team Dashboard' : `Personal Dashboard — ${currentUser.username}`}
               </h1>
               {dashboardTab === 'personal' && (
                 <span className="px-2 py-0.5 bg-[#4F9D78]/10 text-[#4F9D78] border border-[#4F9D78]/30 rounded text-[10px] font-extrabold flex items-center gap-1">
@@ -596,7 +600,7 @@ export default function DashboardPage() {
               )}
             </div>
             <p className="text-xs text-[#737680] mt-0.5">
-              {dashboardTab === 'team'
+              {dashboardTab === 'office' ? 'Ruang kerja bersama yang mengikuti anggota tim dan presensi.' : dashboardTab === 'team'
                 ? 'Ringkasan kinerja project, sinkronisasi ClickUp task, dan beban kerja tim agency secara real-time.'
                 : 'Workspace pribadi & rekap privat khusus untuk akun Anda (hanya dapat dibaca oleh pemilik akun).'}
             </p>
@@ -604,7 +608,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Tab Pills */}
-        <div className="flex items-center p-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl self-start sm:self-auto">
+        <div className="flex flex-wrap items-center p-1 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl self-start sm:self-auto">
+          <button
+            onClick={() => setDashboardTab('office')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${dashboardTab === 'office' ? 'bg-[#24324A] text-white shadow-2xs' : 'text-[#737680] hover:text-[#24324A]'}`}
+          >
+            <Briefcase className="w-3.5 h-3.5" /> Kantor 3D
+          </button>
           <button
             onClick={() => setDashboardTab('team')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -631,7 +641,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {dashboardTab === 'team' ? (
+      {dashboardTab === 'office' ? <OfficeDashboard /> : dashboardTab === 'team' ? (
         <div className="space-y-8 animate-fade-in">
           {/* Global Filters & Sync Header Bar */}
           <div data-dashboard-filter-bar className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#FFFFFF] p-4 border border-[#E8E8EC] rounded-2xl shadow-2xs">

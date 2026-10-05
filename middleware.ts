@@ -11,8 +11,9 @@ export const config = {
      * - public PWA assets (manifest and app icons)
      * - login and team-setup (public setup pages)
      * - team-template (public SQL download for a new team database)
+     * - office-preview / spatial-assets (synthetic demo and supplied GLB assets)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|favicon.png|manifest.json|apple-touch-icon.png|icon-192.png|icon-512.png|login|team-setup|team-template).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|favicon.png|manifest.json|apple-touch-icon.png|icon-192.png|icon-512.png|login|team-setup|team-template|spatial-assets|office-preview).*)',
   ],
 };
 
