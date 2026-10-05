@@ -15,17 +15,12 @@ import {
   FileCode,
   Image as ImageIcon,
   Film,
-  Sparkles,
   Grid,
   List,
   Filter,
   X,
-  Share2,
   ExternalLink,
-  ShieldCheck,
-  Tag,
   Clock,
-  HardDrive,
   Pencil,
   Trash2,
   Upload,
@@ -47,9 +42,27 @@ interface AssetItem {
   downloadsCount: number;
 }
 
+type AssetRow = {
+  id: string;
+  title: string;
+  category: AssetItem['category'];
+  description: string | null;
+  format: AssetItem['format'];
+  size: string | null;
+  file_url: string;
+  thumbnail_url: string | null;
+  uploaded_by: string | null;
+  uploaded_date: string | null;
+  tags: string[] | string | null;
+  downloads_count: number | null;
+};
+
+function assetPreviewUrl(asset: AssetItem) {
+  return asset.thumbnailUrl || (asset.format === 'png' ? asset.fileUrl : '');
+}
+
 
 export default function AssetManagementPage() {
-  const [mounted, setMounted] = useState(false);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -85,7 +98,7 @@ export default function AssetManagementPage() {
   // Delete Asset Modal State
   const [deletingAsset, setDeletingAsset] = useState<AssetItem | null>(null);
 
-  // Fetch Assets from Supabase or LocalStorage
+  // Fetch assets from the team database.
   const fetchAssetsFromSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -95,7 +108,7 @@ export default function AssetManagementPage() {
 
       if (error) throw error;
       if (data) {
-        const mapped: AssetItem[] = data.map((item: any) => ({
+        const mapped: AssetItem[] = data.map((item: AssetRow) => ({
           id: String(item.id),
           title: item.title,
           category: item.category,
@@ -103,7 +116,7 @@ export default function AssetManagementPage() {
           format: item.format,
           size: item.size || '3.0 MB',
           fileUrl: item.file_url,
-          thumbnailUrl: item.thumbnail_url || item.file_url,
+          thumbnailUrl: item.thumbnail_url || '',
           uploadedBy: item.uploaded_by || 'Workspace Admin',
           uploadedDate: item.uploaded_date || new Date().toISOString().split('T')[0],
           tags: Array.isArray(item.tags) ? item.tags : typeof item.tags === 'string' ? JSON.parse(item.tags) : ['Asset'],
@@ -118,7 +131,8 @@ export default function AssetManagementPage() {
   };
 
   useEffect(() => {
-    setMounted(true);
+    // The fetch updates state after its asynchronous database response.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAssetsFromSupabase();
 
     if (!isSupabaseConfigured) return;
@@ -184,7 +198,7 @@ export default function AssetManagementPage() {
   // Create Asset Handler
   const handleCreateAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || !newFileUrl.trim()) return;
 
     const tagList = newTags
       .split(',')
@@ -198,8 +212,8 @@ export default function AssetManagementPage() {
       description: newDescription.trim() || 'Aset resmi Team Workspace.',
       format: newFormat,
       size: newSize.trim() || '3.0 MB',
-      fileUrl: newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
-      thumbnailUrl: newThumbnailUrl.trim() || newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
+      fileUrl: newFileUrl.trim(),
+      thumbnailUrl: newThumbnailUrl.trim(),
       uploadedBy: 'Workspace Admin',
       uploadedDate: new Date().toISOString().split('T')[0],
       tags: tagList.length > 0 ? tagList : ['Asset', 'Official'],
@@ -249,7 +263,7 @@ export default function AssetManagementPage() {
     setEditFormat(asset.format);
     setEditSize(asset.size);
     setEditFileUrl(asset.fileUrl);
-    setEditThumbnailUrl(asset.thumbnailUrl || asset.fileUrl);
+    setEditThumbnailUrl(asset.thumbnailUrl || '');
     setEditTags(asset.tags.join(', '));
   };
 
@@ -273,7 +287,7 @@ export default function AssetManagementPage() {
           format: editFormat,
           size: editSize.trim() || ast.size,
           fileUrl: editFileUrl.trim() || ast.fileUrl,
-          thumbnailUrl: editThumbnailUrl.trim() || editFileUrl.trim() || ast.thumbnailUrl,
+          thumbnailUrl: editThumbnailUrl.trim(),
           tags: tagList.length > 0 ? tagList : ast.tags,
         };
       }
@@ -290,7 +304,7 @@ export default function AssetManagementPage() {
           format: editFormat,
           size: editSize.trim() || editingAsset.size,
           file_url: editFileUrl.trim() || editingAsset.fileUrl,
-          thumbnail_url: editThumbnailUrl.trim() || editFileUrl.trim() || editingAsset.thumbnailUrl,
+          thumbnail_url: editThumbnailUrl.trim(),
           tags: tagList.length > 0 ? tagList : editingAsset.tags,
         })
         .eq('id', editingAsset.id);
@@ -501,12 +515,10 @@ export default function AssetManagementPage() {
               <div>
                 {/* Thumbnail Preview Area */}
                 <div className="relative h-44 bg-[#24324A] overflow-hidden cursor-pointer" onClick={() => setViewingAsset(ast)}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={ast.thumbnailUrl || ast.fileUrl}
-                    alt={ast.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
-                  />
+                  {assetPreviewUrl(ast) ? <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={assetPreviewUrl(ast)} alt={ast.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100" />
+                  </> : <div className="flex h-full items-center justify-center text-white/80"><FileText className="size-14" /></div>}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
 
                   {/* Top Badges */}
@@ -650,8 +662,10 @@ export default function AssetManagementPage() {
                           className="w-10 h-10 rounded-lg overflow-hidden bg-[#24324A] flex-shrink-0 cursor-pointer"
                           onClick={() => setViewingAsset(ast)}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={ast.thumbnailUrl || ast.fileUrl} alt={ast.title} className="w-full h-full object-cover" />
+                          {assetPreviewUrl(ast) ? <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={assetPreviewUrl(ast)} alt={ast.title} className="w-full h-full object-cover" />
+                          </> : <div className="flex h-full items-center justify-center text-white"><FileText className="size-5" /></div>}
                         </div>
                         <div>
                           <h4
@@ -734,7 +748,7 @@ export default function AssetManagementPage() {
       {/* ========================================================================= */}
       {/* MODAL 1: FILE VIEWER MODAL (LIHAT FILE) - VIA PORTAL */}
       {/* ========================================================================= */}
-      {viewingAsset && mounted && createPortalDom(
+      {viewingAsset && createPortalDom(
         <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto">
             <button
@@ -763,12 +777,10 @@ export default function AssetManagementPage() {
 
             {/* File Preview Graphic Box */}
             <div className="relative rounded-2xl overflow-hidden border border-[#E8E8EC] bg-[#24324A] min-h-[220px] max-h-[320px] flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={viewingAsset.thumbnailUrl || viewingAsset.fileUrl}
-                alt={viewingAsset.title}
-                className="w-full h-full object-cover max-h-[320px]"
-              />
+              {assetPreviewUrl(viewingAsset) ? <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={assetPreviewUrl(viewingAsset)} alt={viewingAsset.title} className="w-full h-full object-cover max-h-[320px]" />
+              </> : <FileText className="size-20 text-white/80" />}
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-3">
                 <a
                   href={viewingAsset.fileUrl}
@@ -860,7 +872,7 @@ export default function AssetManagementPage() {
       {/* ========================================================================= */}
       {/* MODAL 2: UPLOAD / TAMBAH ASSET BARU - VIA PORTAL */}
       {/* ========================================================================= */}
-      {showUploadModal && mounted && createPortalDom(
+      {showUploadModal && createPortalDom(
         <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative">
             <button onClick={() => setShowUploadModal(false)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
@@ -896,7 +908,7 @@ export default function AssetManagementPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Kategori *</label>
                   <select
                     value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value as any)}
+                    onChange={(e) => setNewCategory(e.target.value as AssetItem['category'])}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
                   >
                     <option value="ratecard">Rate Card & Pricing</option>
@@ -912,7 +924,7 @@ export default function AssetManagementPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Format File *</label>
                   <select
                     value={newFormat}
-                    onChange={(e) => setNewFormat(e.target.value as any)}
+                    onChange={(e) => setNewFormat(e.target.value as AssetItem['format'])}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
                   >
                     <option value="pdf">PDF Document</option>
@@ -1035,7 +1047,7 @@ export default function AssetManagementPage() {
       {/* ========================================================================= */}
       {/* MODAL 3: EDIT ASSET MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
-      {editingAsset && mounted && createPortalDom(
+      {editingAsset && createPortalDom(
         <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative max-h-[90vh] overflow-y-auto">
             <button onClick={() => setEditingAsset(null)} className="absolute top-4 right-4 text-[#737680] hover:text-[#24324A] cursor-pointer">
@@ -1070,7 +1082,7 @@ export default function AssetManagementPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Kategori *</label>
                   <select
                     value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value as any)}
+                    onChange={(e) => setEditCategory(e.target.value as AssetItem['category'])}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
                   >
                     <option value="ratecard">Rate Card & Pricing</option>
@@ -1086,7 +1098,7 @@ export default function AssetManagementPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Format File *</label>
                   <select
                     value={editFormat}
-                    onChange={(e) => setEditFormat(e.target.value as any)}
+                    onChange={(e) => setEditFormat(e.target.value as AssetItem['format'])}
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-bold outline-none focus:border-[#24324A]"
                   >
                     <option value="pdf">PDF Document</option>
@@ -1205,7 +1217,7 @@ export default function AssetManagementPage() {
       {/* ========================================================================= */}
       {/* MODAL 4: DELETE CONFIRMATION MODAL - VIA PORTAL */}
       {/* ========================================================================= */}
-      {deletingAsset && mounted && createPortalDom(
+      {deletingAsset && createPortalDom(
         <div data-mobile-modal className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
           <div data-mobile-modal-panel className="bg-white border border-[#E8E8EC] rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 relative text-center">
             <div className="w-12 h-12 rounded-2xl bg-[#FFF0ED] text-[#D95858] border border-[#F26B5E]/30 flex items-center justify-center mx-auto shadow-xs">
