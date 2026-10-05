@@ -147,7 +147,7 @@ export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
   if (zone === 'bedroom') return { x: -4.4 + (i % 5) * 1.95, z: (i < 5 ? 8 : 10.7) + .4, rotation: 0 };
-  if (zone === 'garden') return { x: 13.5 + Math.floor(i / 2) * 1.05, z: i % 2 ? -1.8 : -.9, rotation: i % 2 ? 0 : Math.PI };
+  if (zone === 'garden') return { x: 13.5 + Math.floor(i / 2) * 1.05, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
   if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * 1.15, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);
   return { x: (sofa < 3 ? 7 + sofa * 2 : sofa === 3 ? 7 : 11) + (i % 2 ? 0.4 : -0.4), z: sofa < 3 ? -4.55 : -1.25, rotation: 0 };
@@ -194,7 +194,7 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
 export function zonePath(slot: number, zone: OfficeZone, layout: DeskLayout[] = []): Array<[number, number]> {
   const p = zonePosition(slot, zone, layout);
   if (zone === 'bedroom') return [[5,.5],[5,6],[5,9.35],[p.x,9.35],[p.x,p.z]];
-  if (zone === 'garden') return [[5,.5],[5,3.8],[6,3.8],[11,3.8],[11,4.5],[12,4.5],[15.5,4.5],[15.5,1.9],[p.x,1.9],[p.x,p.z]];
+  if (zone === 'garden') return [[5,.5],[5,3.8],[6,3.8],[11,3.8],[11,4.5],[12,4.5],[15.5,4.5],[15.5,1.9],[12.5,1.9],[12.5,-1.2],[p.x,-1.2],[p.x,p.z]];
   if (zone === 'desk' && layout.some(d => Math.floor(d.slot / 10) === Math.floor(slot / 10))) return deskCorridor(slot, layout);
   if (zone === 'desk') { const d = deskPosition(slot); return [[5, 0.5], [5, d.aisleZ], [d.x, d.aisleZ], [p.x, p.z]]; }
   if (zone === 'pantry') return [[5, 0.5], [5, 3.8], [6, 3.8], [p.x, 3.8], [p.x, p.z]];

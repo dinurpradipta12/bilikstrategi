@@ -241,8 +241,8 @@ export class OfficeScene {
     this.box(15.5, -0.04, 0, 6.4, 0.12, 12, '#9fb881');
     this.box(15.5, 0.03, 1.9, 6.4, 0.08, 1.1, '#dfd8c4');
     this.box(15.5, 0.03, 7.7, 1.1, 0.08, 10.7, '#dfd8c4');
-    for (const [x, z] of [[13.2, -4.8], [17.5, -4.8], [17.5, 0], [17.5, 4.8]]) this.asset('floor_plant', x, z).scale.setScalar(2.3);
-    for (let i = 0; i < 5; i++) for (let j = 0; j < 2; j++) this.asset('wood_chair', 13.5 + i * 1.05, j ? -1.8 : -.9, 0, j ? 0 : Math.PI);
+    for (const [x, z] of [[13.2, -4.8], [17.5, -4.8], [18.1, 2.8], [17.5, 4.8]]) this.asset('floor_plant', x, z).scale.setScalar(2.3);
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 2; j++) this.asset('wood_chair', 13.5 + i * 1.05, j ? -2.4 : 0, 0, j ? 0 : Math.PI);
     this.asset('side_table', 16, -3.2);
     for (const x of [-8, 20]) { this.box(x, 1.5, 13.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 13.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
     // A glazed sleeping room in front of the workspace, connected through its door.
