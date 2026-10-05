@@ -7,7 +7,7 @@ import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/ad
 import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
 import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
-import { claimDesk, parseOrnaments, spaceCapacity } from '@/lib/spatial-office/space';
+import { claimDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
 import { DESKS_PER_ROOM } from '@/lib/spatial-office/model';
 
 export const runtime = 'edge';
@@ -133,15 +133,18 @@ export async function PATCH(req: NextRequest) {
     if (raw.length > 20000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
-  if (!action || !['claim', 'layout'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if (!action || !['claim', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
   if (action.type === 'layout' && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
+      if (action.type === 'activity') return setActivity(current, snapshot.viewerId, action.zone);
       if (action.type === 'claim') return claimDesk(current, snapshot.viewerId, action.slot, snapshot.members.length);
       if (action.layoutRevision !== current.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
-      const ornaments = parseOrnaments(action.ornaments, spaceCapacity(current, snapshot.members.length) / DESKS_PER_ROOM);
-      return { ...current, revision: current.revision + 1, layoutRevision: current.layoutRevision + 1, ornaments };
+      const rooms = spaceCapacity(current, snapshot.members.length) / DESKS_PER_ROOM;
+      const desks = parseDesks(action.desks ?? current.desks, rooms);
+      const ornaments = parseOrnaments(action.ornaments, rooms, desks);
+      return { ...current, revision: current.revision + 1, layoutRevision: current.layoutRevision + 1, ornaments, desks };
     });
     return json({ space });
   } catch (error) { return json({ error: error instanceof Error ? error.message : 'Perubahan belum tersimpan.' }, 409); }

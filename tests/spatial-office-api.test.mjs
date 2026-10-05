@@ -96,3 +96,19 @@ test('office mutations reject unauthorized sessions, outside origins and missing
     const f = fixture(options); assert.equal((await f.PATCH(f.request(input))).status, status); assert.equal(f.spaceWrites.length, 0);
   }
 });
+
+test('activity is scoped to verified user and invalid destinations never write', async () => {
+  const f = fixture();
+  assert.equal((await f.PATCH(f.request({ action:{ type:'activity', zone:'garden' }, id:'99' }))).status,200);
+  assert.equal(f.spaceWrites[0].activities['1'].zone,'garden');
+  assert.equal(f.spaceWrites[0].activities['99'],undefined);
+  assert.equal((await f.PATCH(f.request({ action:{ type:'activity', zone:'external' } }))).status,409);
+});
+test('desk transforms require a database admin role and are checked for collisions', async () => {
+  const action={ type:'layout', layoutRevision:0, ornaments:[], desks:[{ slot:0, x:-4.6, z:-2.2, rotation:0 }] };
+  const member=fixture(), admin=fixture({ role:'admin' });
+  assert.equal((await member.PATCH(member.request({ action }))).status,403);
+  assert.equal((await admin.PATCH(admin.request({ action }))).status,200);
+  assert.equal(admin.spaceWrites[0].desks[0].x,-4.6);
+  assert.equal((await admin.PATCH(admin.request({ action:{ ...action, desks:[{ slot:0,x:0,z:0,rotation:0 }] } }))).status,409);
+});

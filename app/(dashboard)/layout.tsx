@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import FloatingSidebar from '@/components/layout/FloatingSidebar';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
@@ -237,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (pathname === '/dashboard') return <div data-app-shell className="min-h-dvh bg-[#e8ece1] text-[#263d39]">
-    <main>{children}</main><AppPresenceTracker />
+    <main>{children}</main><AppPresenceTracker /><FloatingAttendance /><FloatingSidebar />
   </div>;
 
   return (

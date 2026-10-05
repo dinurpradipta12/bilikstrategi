@@ -80,10 +80,11 @@ type SavedTeamMember = {
   page_access?: unknown;
 };
 
-export default function Sidebar() {
+export default function Sidebar({ floating = false }: { floating?: boolean }) {
   const pathname = usePathname();
   const { isDark } = useTheme();
-  const collapsed = useSyncExternalStore(subscribeSidebarState, getSidebarStateSnapshot, () => false);
+  const savedCollapsed = useSyncExternalStore(subscribeSidebarState, getSidebarStateSnapshot, () => false);
+  const collapsed = !floating && savedCollapsed;
   const [userProfile, setUserProfile] = useState({
     name: 'Bilik Strategi',
     role: 'member',
@@ -348,7 +349,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`fixed top-0 left-0 bottom-0 z-40 bg-[#FFFFFF] border-r border-[#E8E8EC] transition-all duration-300 flex flex-col ${
+      className={`fixed top-0 ${floating ? 'right-0' : 'left-0'} bottom-0 z-40 bg-[#FFFFFF] border-r border-[#E8E8EC] transition-all duration-300 flex flex-col ${
         collapsed ? 'w-16' : 'w-64'
       }`}
     >
@@ -374,7 +375,7 @@ export default function Sidebar() {
           </Link>
         )}
         <button
-          onClick={handleToggleCollapsed}
+          onClick={handleToggleCollapsed} hidden={floating}
           className="p-1 rounded-md text-[#737680] hover:bg-[#F7F7F8] hover:text-[#202124] transition-colors flex-shrink-0 cursor-pointer"
           title={collapsed ? 'Perluas Sidebar' : 'Perkecil Sidebar'}
         >

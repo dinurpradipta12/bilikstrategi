@@ -871,3 +871,31 @@
 .office-review-game>.office-review-modes button { padding:7px 9px; font-size:9px; border-radius:8px; gap:6px; }
 .office-review-game>.office-review-modes small { display:none; }
 @media(max-width:760px) { .office-review-game>.office-review-modes { left:10px; top:125px; bottom:auto; max-width:calc(100% - 20px); } .office-review-game>.office-review-modes button { flex:none; padding:6px; font-size:8px; } .office-review-game>.office-review-modes svg { width:12px; } }
+
+/* Minimal HUD: brand, local clock, dashboard return; room choices live on avatars. */
+.office-game-brand>img { width:72px; height:32px; object-fit:contain; }
+.office-clock { display:flex; gap:8px; align-items:center; background:#fffef3ed; border:1px solid #d1dac9; border-radius:12px; padding:9px 12px; }
+.office-clock time { font-variant-numeric:tabular-nums; font-size:14px; letter-spacing:1px; }
+.office-clock small { display:block; font-size:8px; color:#6b8069; }
+.office-game-actions>button,.office-back-dashboard { display:flex; align-items:center; gap:6px; }
+.office-back-dashboard { border:1px solid #d1dac9; border-radius:12px; background:#fffef3ed; padding:11px; color:#49634d; }
+.office-game .office-camera-controls { bottom:112px; right:20px; }
+.office-game .office-camera-hint { bottom:115px; }
+.office-game .office-game-dock .office-edit-room { background:#e1edda; }
+.office-activity-controls label { display:flex; flex-direction:column; gap:8px; font-size:11px; }
+.office-activity-controls select { width:100%; border:1px solid #cddcc4; border-radius:8px; background:#f7faef; padding:10px; font-size:11px; }
+.office-activity-controls small { display:block; font-size:10px; line-height:1.6; color:#73846a; margin-top:8px; }
+@media(max-width:760px) {
+ .office-game-hud { flex-wrap:wrap; }
+ .office-game-brand { max-width:calc(100% - 46px); }
+ .office-game-brand>img { width:56px; height:27px; }
+ .office-game-actions { width:100%; }
+ .office-clock { padding:6px 10px; margin-right:auto; }
+ .office-clock time { font-size:12px; }
+ .office-clock small { font-size:8px; }
+ .office-back-copy { display:none; }
+ .office-game .office-camera-controls { right:auto; left:10px; bottom:105px; }
+ .office-game .office-camera-hint { display:none; }
+ .office-game .office-game-dock button,.office-game .office-game-dock>a { min-width:40px; }
+ .office-review-game>.office-review-modes { top:122px; }
+}

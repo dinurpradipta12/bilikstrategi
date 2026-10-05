@@ -129,8 +129,8 @@ test('bubble rotation uses assigned tasks and cannot invent completion', async (
   ]);
   assert.deepEqual(tasks.map(task => task.name), ['Design header', 'Review brief']);
   const member = { id: '1', name: 'Alya', status: 'working', project: 'Website', tasks };
-  const labels = Array.from({ length: 4 }, (_, i) => bubbleLabel(member, 'desk', i * 8000));
-  assert.equal(new Set(labels).size, 4);
+  const labels = Array.from({ length: 9 }, (_, i) => bubbleLabel(member, 'desk', i * 11000));
+  assert.equal(new Set(labels).size, 9);
   assert.ok(labels.some(label => label.includes('Design header')));
   assert.ok(labels.every(label => !label.includes('Someone else') && !label.includes('Already done')));
 });

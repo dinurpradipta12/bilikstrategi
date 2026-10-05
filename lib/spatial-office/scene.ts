@@ -1,9 +1,10 @@
+import type { AttendanceSchedule } from '../attendance/schedule';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ornamentError, type Ornament } from './space';
-import { AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, typingHand, zonePosition, type OfficeZone, type OfficeMember } from './model';
+import { AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, typingHand, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
 const CHARACTERS = [...AVATAR_MODELS];
 const FURNITURE = ['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair'];
@@ -25,6 +26,16 @@ export class OfficeScene {
   private desks = new Map<number, THREE.Group>();
   private deskLabels = new Map<number, HTMLButtonElement>();
   private room = 0;
+  private deskLayout: DeskLayout[] = [];
+  private schedule?: AttendanceSchedule;
+  private skyMinute = -1;
+  private ambient = new THREE.HemisphereLight('#fff5e4', '#a3aaa3', 1.5);
+  private sun = new THREE.DirectionalLight('#fff4df', 2);
+  private textures = new Set<THREE.Texture>();
+  private sign?: THREE.Mesh;
+  private brand = { name: 'Bilik Strategi', logo: '/landscape.png' };
+  private clouds = new THREE.Group();
+  private stars = new THREE.Group();
   private decorations = new Map<string, THREE.Group>();
   private ornaments: Ornament[] = [];
   private editMode = false;
@@ -38,7 +49,7 @@ export class OfficeScene {
   private disposed = false;
   private loaded = false;
   private roomLabels: { element: HTMLElement; position: THREE.Vector3 }[] = [];
-  private doors: { group: THREE.Group; center: THREE.Vector3 }[] = [];
+  private doors: { group: THREE.Group; center: THREE.Vector3; rotate?: boolean }[] = [];
   private current: { member: OfficeMember; slot: number }[] = [];
   private raf = 0;
   private lastFrame = 0;
@@ -70,11 +81,11 @@ export class OfficeScene {
     this.controls.maxDistance = 65;
     this.controls.minPolarAngle = 0.35;
     this.controls.maxPolarAngle = 1.2;
-    this.controls.minAzimuthAngle = -Math.PI * 0.46;
-    this.controls.maxAzimuthAngle = Math.PI * 0.46;
+    this.controls.minAzimuthAngle = -Infinity;
+    this.controls.maxAzimuthAngle = Infinity;
     this.resetCamera();
-    this.scene.add(new THREE.HemisphereLight('#fff5e4', '#a3aaa3', 1.5));
-    const sun = new THREE.DirectionalLight('#fff4df', 2);
+    this.scene.add(this.ambient);
+    const sun = this.sun;
     sun.position.set(-6, 12, 9);
     sun.castShadow = true;
     sun.shadow.mapSize.set(1024, 1024);
@@ -148,6 +159,8 @@ export class OfficeScene {
       if (this.disposed) return;
       this.buildRoom();
       this.loaded = true;
+      this.setDeskLayout(this.deskLayout);
+      this.setBrand(this.brand);
       this.setMembers(this.current);
       this.setOrnaments(this.ornaments, this.room, this.editMode, this.selectedOrnament);
       this.options.onReady();
@@ -181,18 +194,18 @@ export class OfficeScene {
     if (door) {
       const group = new THREE.Group(); group.position.set(x, 0, z); this.scene.add(group);
       panel.position.x -= x; panel.position.z -= z; group.add(panel);
-      this.doors.push({ group, center: new THREE.Vector3(x, 0, z) });
+      this.doors.push({ group, center: new THREE.Vector3(x, 0, z), rotate });
     } else this.box(x, 0.08, z, rotate ? 0.08 : length, 0.16, rotate ? length : 0.08, frame);
   }
 
   private buildRoom() {
     for (const x of [-4.5, -1.5, 1.5, 4.5, 7.5, 10.5]) {
       for (const z of [-4.5, -1.5, 1.5, 4.5]) this.asset(x > 6 ? 'floor_ivory_3m' : 'floor_wood_3m', x, z);
-      this.asset('wall_with_window_3m', x, -6); this.glass(x, 6, 3);
+      this.asset('wall_with_window_3m', x, -6); this.glass(x, 6, 3, false, x === 4.5);
     }
     for (const z of [-4.5, -1.5, 1.5, 4.5]) {
       if (z < 4.5) this.asset('wall_with_window_3m', -6, z, 0, Math.PI / 2); else this.glass(-6, z, 3, true, true);
-      this.glass(12, z, 3, true);
+      this.glass(12, z, 3, true, z === 4.5);
     }
     this.glass(6, -3.125, 5.75, true); this.glass(6, 0.5, 1.5, true, true);
     this.glass(6, 2.15, 1.8, true); this.glass(6, 3.8, 1.5, true, true); this.glass(6, 5.275, 1.45, true);
@@ -202,14 +215,14 @@ export class OfficeScene {
     this.asset('pinboard', 0, -5.9, 0.8);
     for (let slot = 0; slot < DESKS_PER_ROOM; slot++) {
       const p = deskPosition(slot), group = new THREE.Group();
-      group.position.set(p.x, 0, p.z); group.rotation.y = p.rotation; this.scene.add(group); this.desks.set(slot, group);
+      group.position.set(p.x, 0, p.z); group.rotation.y = p.rotation; this.scene.add(group); group.userData.ornamentId = `desk:${slot}`; this.desks.set(slot, group);
       this.asset('office_desk', 0, 0, 0, 0, group);
       this.asset('office_swivel_chair', 0, -0.78, 0, 0, group);
       this.asset('laptop', 0, 0.12, 0.78, Math.PI, group);
       this.asset('keyboard', 0, -0.27, 0.78, Math.PI, group);
       this.asset('coffee_mug', -0.48, 0.04, 0.78, 0, group);
       const label = document.createElement('button'); label.type = 'button'; label.className = 'office-desk-label';
-      label.addEventListener('click', () => this.options.onSelectDesk(this.room * DESKS_PER_ROOM + slot));
+      label.addEventListener('click', () => this.editMode ? this.options.onSelectOrnament(`desk:${this.room * 10 + slot}`) : this.options.onSelectDesk(this.room * DESKS_PER_ROOM + slot));
       this.labels.appendChild(label); this.deskLabels.set(slot, label);
     }
     for (const [x, z] of [[7, -4.7], [9, -4.7], [11, -4.7], [7, -1.4], [11, -1.4]]) this.asset('sofa', x, z);
@@ -220,25 +233,84 @@ export class OfficeScene {
     this.box(10.8, 1.15, 5.55, 0.44, 0.43, 0.32, '#344c43');
     this.box(10.8, 1.16, 5.37, 0.30, 0.12, 0.06, '#d8bd89');
     // Street, sidewalk and a planted pocket garden outside the glazed office.
-    this.box(5, -0.18, 2, 36, 0.2, 27, '#c4d3b1');
-    this.box(4.5, -0.055, 7, 31, 0.12, 2, '#dedbd0');
-    this.box(4.5, -0.09, 10.5, 31, 0.08, 5, '#727d7c');
-    for (let x = -10; x < 20; x += 3) this.box(x, -0.042, 10.5, 1.5, 0.01, 0.09, '#efe7c6');
-    for (let z = 8.6; z < 12.5; z += 0.65) this.box(-4.5, -0.035, z, 2, 0.015, 0.32, '#fff9e8');
+    this.box(5, -0.18, 5, 36, 0.2, 34, '#c4d3b1');
+    this.box(4.5, -0.055, 13, 31, 0.12, 2, '#dedbd0');
+    this.box(4.5, -0.09, 16.5, 31, 0.08, 5, '#727d7c');
+    for (let x = -10; x < 20; x += 3) this.box(x, -0.042, 16.5, 1.5, 0.01, 0.09, '#efe7c6');
+    for (let z = 14.6; z < 18.5; z += 0.65) this.box(-4.5, -0.035, z, 2, 0.015, 0.32, '#fff9e8');
     this.box(15.5, -0.04, 0, 6.4, 0.12, 12, '#9fb881');
     this.box(15.5, 0.03, 1.9, 6.4, 0.08, 1.1, '#dfd8c4');
-    this.box(15.5, 0.03, 4.15, 1.1, 0.08, 3.4, '#dfd8c4');
+    this.box(15.5, 0.03, 7.7, 1.1, 0.08, 10.7, '#dfd8c4');
     for (const [x, z] of [[13.2, -4.8], [17.5, -4.8], [17.5, 0], [17.5, 4.8]]) this.asset('floor_plant', x, z).scale.setScalar(2.3);
-    this.asset('sofa', 14.5, -1.2); this.asset('side_table', 16, -1.2);
-    for (const x of [-8, 20]) { this.box(x, 1.5, 7.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 7.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
-    for (const [text, x, z] of [['WORKSPACE · 10 MEJA', 0, -4], ['LOUNGE', 9, -5.6], ['PANTRY', 9, 2], ['OFFICE GARDEN', 15.5, -3], ['BILIK STREET', 7, 11.5]] as const) {
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 2; j++) this.asset('wood_chair', 13.5 + i * 1.05, j ? -1.8 : -.9, 0, j ? 0 : Math.PI);
+    this.asset('side_table', 16, -3.2);
+    for (const x of [-8, 20]) { this.box(x, 1.5, 13.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 13.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
+    // A glazed sleeping room in front of the workspace, connected through its door.
+    for (const x of [-4.5, -1.5, 1.5, 4.5]) {
+      for (const z of [7.5, 10.5]) this.asset('floor_ivory_3m', x, z);
+      this.glass(x, 12, 3);
+    }
+    for (const z of [7.5, 10.5]) { this.glass(-6, z, 3, true); this.glass(6, z, 3, true); }
+    this.box(0, 2.87, 9, 12, .035, 6, '#d9e3da', .025);
+    for (let slot = 0; slot < 10; slot++) {
+      const x = -4.4 + (slot % 5) * 1.95, z = slot < 5 ? 8 : 10.7;
+      this.box(x,.2,z,1.25,.4,2,'#85755e');
+      this.box(x,.45,z,1.18,.17,1.93,'#f3ecd9');
+      this.box(x,.56,z-.65,.82,.17,.38,'#fffbef');
+      this.box(x,.55,z+.35,1.18,.07,1.05,'#91aab0');
+    }
+    this.box(0,3.24,12.05,6.5,.9,.18,'#1e353b');
+    for (const x of [-3.3,3.3]) this.box(x,3.24,12.17,.06,1,.06,'#8de8c4');
+    for (const y of [2.76,3.72]) this.box(0,y,12.17,6.65,.05,.06,'#8de8c4');
+    const indoor = new THREE.PointLight('#ffead0', 14, 22, 1.4); indoor.position.set(3,4.5,2); this.scene.add(indoor);
+    // Light clouds and stars vary with the workspace's local clock.
+    if (this.clouds && this.stars) {
+      for (let i = 0; i < 7; i++) {
+        const cloud = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 5), new THREE.MeshStandardMaterial({ color: '#fff8ec', transparent: true, opacity: .7 }));
+        cloud.position.set(-14 + i*5, 9 + i%3, -12); cloud.scale.set(1.8,.3,.65); this.clouds.add(cloud); this.track(cloud);
+      }
+      for (let i = 0; i < 65; i++) {
+        const star = new THREE.Mesh(new THREE.SphereGeometry(.035, 4, 3), new THREE.MeshBasicMaterial({ color: '#fff8de' }));
+        star.position.set(Math.sin(i*13.7)*28, 10+(i%11)*1.1, Math.cos(i*8.3)*28); this.stars.add(star); this.track(star);
+      }
+      this.scene.add(this.clouds, this.stars);
+    }
+    for (const [text, x, z] of [['WORKSPACE · 10 MEJA', 0, -4], ['LOUNGE', 9, -5.6], ['PANTRY', 9, 2], ['OFFICE GARDEN', 15.5, -3], ['JALAN KANTOR', 7, 17.5], ['KAMAR TIDUR', 0, 6.6]] as const) {
       const element = document.createElement('span'); element.className = 'office-entry-label'; element.textContent = text;
       this.labels.appendChild(element); this.roomLabels.push({ element, position: new THREE.Vector3(x, 0.12, z) });
     }
   }
 
+  setEnvironment(schedule?: AttendanceSchedule) { this.schedule = schedule; this.skyMinute = -1; }
+  setBrand(brand: { name: string; logo: string }) {
+    this.brand = brand;
+    if (!this.loaded) return;
+    const canvas = document.createElement('canvas');
+    if (!canvas.getContext) return;
+    canvas.width = 1024; canvas.height = 144;
+    const context = canvas.getContext('2d'); if (!context) return;
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+    const draw = (logo?: HTMLImageElement) => {
+      context.fillStyle = '#183137'; context.fillRect(0,0,1024,144);
+      if (logo) { context.fillStyle = '#faf9f1'; context.fillRect(16,18,224,108); const scale = Math.min(204/logo.width,88/logo.height); context.drawImage(logo,128-logo.width*scale/2,72-logo.height*scale/2,logo.width*scale,logo.height*scale); }
+      context.fillStyle = '#a6ffe1'; context.shadowColor = '#63edc1'; context.shadowBlur = 12;
+      context.font = '600 53px sans-serif'; context.textAlign = logo ? 'left' : 'center'; context.textBaseline = 'middle'; context.fillText(brand.name,logo ? 264 : 512,76,logo ? 738 : 980); context.shadowBlur = 0; texture.needsUpdate = true;
+    };
+    draw();
+    if (this.sign) { const old = this.sign.material as THREE.MeshBasicMaterial; old.map?.dispose(); if (old.map) this.textures.delete(old.map); old.map = texture; old.needsUpdate = true; }
+    else { this.sign = new THREE.Mesh(new THREE.PlaneGeometry(6.2,.84), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, side: THREE.DoubleSide })); this.sign.position.set(0,3.24,12.151); this.scene.add(this.sign); this.track(this.sign); }
+    this.textures.add(texture);
+    const logo = new Image(); logo.crossOrigin = 'anonymous'; logo.onload = () => { if (!this.disposed && this.brand === brand) draw(logo); }; logo.src = brand.logo;
+  }
+  setDeskLayout(layout: DeskLayout[] = []) {
+    const changed = JSON.stringify(this.deskLayout) !== JSON.stringify(layout);
+    this.deskLayout = layout;
+    if (!this.loaded) return;
+    for (const [slot, group] of this.desks) { const global = this.room * 10 + slot, d = deskPosition(global, layout); group.position.set(d.x,0,d.z); group.rotation.y = d.rotation; group.userData.ornamentId = `desk:${global}`; }
+    if (changed) for (const occupant of this.occupants.values()) this.changeZone(occupant, occupant.zone);
+  }
   setOrnaments(items: Ornament[], room: number, editing: boolean, selected: string) {
-    this.ornaments = items; this.room = room; this.editMode = editing; this.selectedOrnament = selected;
+    this.ornaments = items; this.room = room; this.setDeskLayout(this.deskLayout); this.editMode = editing; this.selectedOrnament = selected;
     if (!editing && this.dragging) { this.dragging = null; this.controls.enabled = true; }
     if (!this.loaded) return;
     const visible = items.filter(item => item.room === room), ids = new Set(visible.map(item => item.id));
@@ -249,11 +321,11 @@ export class OfficeScene {
       if (!group) { group = this.asset(item.asset, item.x, item.z); group.userData.ornamentId = item.id; group.userData.asset = item.asset; this.decorations.set(item.id, group); }
       group.position.set(item.x, 0, item.z); group.rotation.y = item.rotation;
     }
-    const object = editing ? this.decorations.get(selected) : undefined;
+    const object = editing ? (selected.startsWith('desk:') ? this.desks.get(Number(selected.slice(5)) % 10) : this.decorations.get(selected)) : undefined;
     if (object) {
       if (!this.outline) { this.outline = new THREE.BoxHelper(object, '#d49745'); this.scene.add(this.outline); }
       this.outline.visible = true; this.outline.setFromObject(object);
-      this.outline.material.color.set(ornamentError(items.find(item => item.id === selected)!) ? '#db6c60' : '#d49745');
+      this.outline.material.color.set((!selected.startsWith('desk:') && ornamentError(items.find(item => item.id === selected)!, this.deskLayout)) ? '#db6c60' : '#d49745');
     } else if (this.outline) this.outline.visible = false;
   }
   private floorPoint(event: PointerEvent) {
@@ -265,7 +337,7 @@ export class OfficeScene {
   private pointerDown = (event: PointerEvent) => {
     if (!this.editMode || event.button !== 0) return;
     const point = this.floorPoint(event); if (!point) return;
-    const hit = this.raycaster.intersectObjects([...this.decorations.values()], true)[0];
+    const hit = this.raycaster.intersectObjects([...this.decorations.values(), ...this.desks.values()], true)[0];
     if (!hit) return;
     let object: THREE.Object3D | null = hit.object;
     while (object && !object.userData.ornamentId) object = object.parent;
@@ -341,7 +413,7 @@ export class OfficeScene {
 
   private changeZone(occupant: Occupant, zone: OfficeZone) {
     const p = occupant.rig.root.position;
-    occupant.route = travelPath(occupant.slot, [p.x, p.z], zone).map(([x, z]) => new THREE.Vector3(x, 0, z));
+    occupant.route = travelPath(occupant.slot, [p.x, p.z], zone, occupant.slot, this.deskLayout).map(([x, z]) => new THREE.Vector3(x, 0, z));
     occupant.zone = zone;
   }
 
@@ -353,8 +425,8 @@ export class OfficeScene {
     const bubble = document.createElement('span'); bubble.className = 'office-bubble';
     const name = document.createElement('span'); name.className = 'office-name';
     label.append(bubble, name); this.labels.appendChild(label);
-    const occupant: Occupant = { member, rig: this.rig(member), slot, label, bubble, name, zone: memberZone(member, Date.now()), style: JSON.stringify(member.avatar), route: [], offset: memberHash(member.id) % 24 };
-    const p = zonePosition(slot, occupant.zone);
+    const occupant: Occupant = { member, rig: this.rig(member), slot, label, bubble, name, zone: memberZone(member, Date.now(), this.schedule), style: JSON.stringify(member.avatar), route: [], offset: memberHash(member.id) % 24 };
+    const p = zonePosition(slot, occupant.zone, this.deskLayout);
     occupant.rig.root.position.set(p.x, 0, p.z); occupant.rig.root.rotation.y = p.rotation;
     return occupant;
   }
@@ -381,12 +453,12 @@ export class OfficeScene {
       if (!occupant) { occupant = this.makeOccupant(member, slot); this.occupants.set(member.id, occupant); }
       const previousSlot = occupant.slot;
       if (previousSlot !== slot) {
-        const position = occupant.rig.root.position, zone = memberZone(member, Date.now());
-        occupant.route = travelPath(slot, [position.x, position.z], zone, previousSlot).map(([x, z]) => new THREE.Vector3(x, 0, z)); occupant.zone = zone;
+        const position = occupant.rig.root.position, zone = memberZone(member, Date.now(), this.schedule);
+        occupant.route = travelPath(slot, [position.x, position.z], zone, previousSlot, this.deskLayout).map(([x, z]) => new THREE.Vector3(x, 0, z)); occupant.zone = zone;
       }
       occupant.member = member; occupant.slot = slot; occupant.name.textContent = member.name;
-      occupant.label.setAttribute('aria-label', `${member.name}, ${member.status === 'paused' ? 'istirahat' : member.status === 'offline' ? 'offline di lounge' : 'sudah check-in'}`);
-      const zone = memberZone(member, Date.now()); if (zone !== occupant.zone) this.changeZone(occupant, zone);
+      occupant.label.setAttribute('aria-label', `${member.name}, ${member.status === 'paused' ? 'istirahat' : member.status === 'offline' ? 'belum check-in' : 'sudah check-in'}`);
+      const zone = memberZone(member, Date.now(), this.schedule); if (zone !== occupant.zone) this.changeZone(occupant, zone);
     }
   }
 
@@ -405,7 +477,7 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
-  resetCamera() { this.camera.position.set(23, 23, 31); this.controls.target.set(5, 0.4, 1.8); this.controls.update(); }
+  resetCamera() { this.camera.position.set(25, 26, 38); this.controls.target.set(5, 0.4, 3.6); this.controls.update(); }
   focus(zone: OfficeZone | 'garden') { const x = zone === 'desk' ? 0 : zone === 'garden' ? 15.5 : 9, z = zone === 'pantry' ? 3.8 : zone === 'lounge' ? -2.5 : 0; this.controls.target.set(x, 0.5, z); this.camera.position.set(x + 5, 9, z + 9); this.controls.update(); }
   zoom(direction: number) {
     const offset = this.camera.position.clone().sub(this.controls.target);
@@ -430,8 +502,8 @@ export class OfficeScene {
     if (this.moving) this.time += dt;
     for (const [id, occupant] of this.occupants) {
       const { rig, member } = occupant;
-      const zone = memberZone(member, Date.now()); if (zone !== occupant.zone) this.changeZone(occupant, zone);
-      const destination = zonePosition(occupant.slot, occupant.zone);
+      const zone = memberZone(member, Date.now(), this.schedule); if (zone !== occupant.zone) this.changeZone(occupant, zone);
+      const destination = zonePosition(occupant.slot, occupant.zone, this.deskLayout);
       if (!this.moving && occupant.route.length) { rig.root.position.set(destination.x, 0, destination.z); occupant.route = []; }
       const next = occupant.route[0];
       if (next) {
@@ -442,7 +514,10 @@ export class OfficeScene {
       }
       const settled = !occupant.route.length;
       const working = settled && occupant.zone === 'desk';
-      const seated = settled && occupant.zone !== 'pantry';
+      const sleeping = settled && occupant.zone === 'bedroom';
+      const seated = settled && !sleeping && occupant.zone !== 'pantry';
+      rig.body.rotation.x = sleeping ? -Math.PI / 2 : 0;
+      rig.root.position.y = sleeping ? .53 : 0;
       const t = this.time + occupant.offset;
       rig.body.position.z = seated ? 0.15 : this.moving ? Math.abs(Math.sin(t * 8)) * (settled ? 0.005 : 0.045) : 0;
       rig.head.rotation.x = working && this.moving ? 0.045 + Math.sin(t * 1.7) * 0.025 : 0;
@@ -469,9 +544,9 @@ export class OfficeScene {
       rig.legs.forEach((leg, index) => { leg.rotation.x = seated ? -1.12 : settled ? 0 : Math.sin(t * 8 + index * Math.PI) * 0.4; });
       rig.mug.visible = settled && occupant.zone === 'pantry';
       if (settled) rig.root.rotation.y = destination.rotation;
-      const text = settled ? bubbleLabel(member, occupant.zone, this.moving ? Date.now() : 0) : occupant.zone === 'desk' ? 'Menuju meja kerja' : occupant.zone === 'lounge' ? 'Menuju ruang istirahat' : 'Menuju pantry · animasi kopi';
+      const text = settled ? bubbleLabel(member, occupant.zone, this.moving ? Date.now() : 0) : '';
       if (occupant.bubble.textContent !== text) occupant.bubble.textContent = text;
-      occupant.bubble.hidden = settled && id !== this.selected && (!this.moving || t % 16 >= 4);
+      occupant.bubble.hidden = !text || (id !== this.selected && (!this.moving || (t + occupant.slot * 3) % 25 >= 5));
       occupant.label.dataset.zone = occupant.zone;
       occupant.label.dataset.walking = String(!settled);
       occupant.label.dataset.status = member.status;
@@ -482,20 +557,33 @@ export class OfficeScene {
     for (const [slot, label] of this.deskLabels) {
       const occupant = this.current.find(item => item.slot % DESKS_PER_ROOM === slot);
       const number = this.room * DESKS_PER_ROOM + slot + 1;
-      label.hidden = this.editMode;
+      label.hidden = false;
       const text = `${String(number).padStart(2, '0')}${occupant ? '' : ' + '}`;
       label.title = occupant ? `Meja ${number} · ${occupant.member.name}` : `Klaim meja ${number}`;
       if (label.textContent !== text) label.textContent = text;
       label.dataset.selected = String(occupant?.member.id === this.selected);
       label.dataset.vacant = String(!occupant);
       label.setAttribute('aria-label', `Meja ${number}, ${occupant ? `milik ${occupant.member.name}` : 'kosong, bisa diklaim'}`);
-      const { x, z } = deskPosition(slot); this.placeLabel(label, new THREE.Vector3(x, 0.88, z));
+      const { x, z } = deskPosition(this.room * 10 + slot, this.deskLayout); this.placeLabel(label, new THREE.Vector3(x, 0.88, z));
     }
     for (const label of this.roomLabels) this.placeLabel(label.element, label.position);
     for (const door of this.doors) {
       const open = [...this.occupants.values()].some(occupant => occupant.route.length && occupant.rig.root.position.distanceTo(door.center) < 1.7);
-      door.group.position.z = THREE.MathUtils.damp(door.group.position.z, door.center.z + (open ? 1.5 : 0), 9, dt);
+      const axis = door.rotate ? 'z' : 'x';
+      door.group.position[axis] = THREE.MathUtils.damp(door.group.position[axis], door.center[axis] + (open ? 1.5 : 0), 9, dt);
     }
+    const minute = Math.floor(Date.now() / 60000);
+    if (minute !== this.skyMinute) {
+      this.skyMinute = minute;
+      const time = officeTime(Date.now(), this.schedule), night = time.phase === 'Malam', warm = time.phase === 'Pagi' || time.phase === 'Sore';
+      (this.scene.background as THREE.Color).set(night ? '#1e304a' : warm ? '#edd5ba' : '#dbe8ec');
+      this.ambient.intensity = night ? .85 : 1.5; this.ambient.color.set(night ? '#bacfed' : '#fff5e4');
+      this.sun.intensity = night ? .3 : warm ? 1.6 : 2;
+      this.sun.color.set(night ? '#9caeef' : warm ? '#ffd5a0' : '#fff4df');
+      this.sun.position.set(Math.cos((time.hour-6)/12*Math.PI)*14, night ? 8 : 8 + Math.sin((time.hour-6)/12*Math.PI)*7, 9);
+      this.stars.visible = night; this.clouds.visible = !night;
+    }
+    if (this.moving) this.clouds.position.x = Math.sin(this.time * .012) * 3;
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
@@ -512,6 +600,7 @@ export class OfficeScene {
     this.outline?.geometry.dispose(); this.outline?.material.dispose();
     this.geometries.forEach(geometry => geometry.dispose());
     this.materials.forEach(material => material.dispose());
+    this.textures.forEach(texture => texture.dispose());
     this.renderer.dispose(); this.renderer.forceContextLoss(); this.renderer.domElement.remove();
     this.labels.replaceChildren();
   }
