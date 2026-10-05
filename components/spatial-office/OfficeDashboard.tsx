@@ -22,6 +22,7 @@ type Data = OfficeSnapshot & { seats: Map<string, number> };
 export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [error, setError] = useState('');
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [refreshing, setRefreshing] = useState(!demo);
   const [refresh, setRefresh] = useState(0);
@@ -78,11 +79,16 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
     const schedule = () => { clearTimeout(timer); timer = setTimeout(load, 500); };
     const visibility = () => { if (!document.hidden) schedule(); };
     void load();
-    const interval = setInterval(load, 30_000);
+    const interval = setInterval(load, 10_000);
     const realtime = supabase.channel('spatial-office-presence')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions' }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_user_roles' }, schedule)
-      .subscribe();
+      .subscribe(status => {
+        if (disposed) return;
+        setRealtimeConnected(status === 'SUBSCRIBED');
+        // Recover changes missed while the channel was connecting or reconnecting.
+        if (status === 'SUBSCRIBED') schedule();
+      });
     const broadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('bilik_attendance_channel') : null;
     if (broadcast) broadcast.onmessage = schedule;
     window.addEventListener('focus', schedule);
@@ -134,11 +140,11 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
         <h2>Satu tim. Satu ruang.</h2><p>Temui tim di meja mereka, dari mana saja.</p>
       </div>
       <div className="office-heading-actions">
-        <span className={`office-sync ${error ? 'office-sync-warning' : ''}`} role="status"><span />{demo ? 'Mode simulasi' : error ? 'Sinkronisasi tertunda' : refreshing ? 'Menyinkronkan…' : 'Terhubung ke presensi'}</span>
+        <span className={`office-sync ${error ? 'office-sync-warning' : ''}`} role="status"><span />{demo ? 'Data contoh · bukan presensi asli' : error ? 'Koneksi data bermasalah' : !dataReady ? 'Menghubungkan presensi…' : realtimeConnected ? 'Presensi live' : 'Sinkron berkala · 10 detik'}</span>
         {!demo && <button type="button" className="office-icon-button" aria-label="Sinkronkan kantor" title="Sinkronkan kantor" disabled={refreshing} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /></button>}
       </div>
     </header>
-    {demo && <div className="office-demo-note"><Box size={16} /><span><strong>Simulasi kantor.</strong> Nama dan presensi di sini adalah contoh. Pilih anggota untuk mencoba check-in, istirahat, atau checkout.</span></div>}
+    {demo && <div className="office-demo-note"><Box size={16} /><span><strong>Simulasi desain — tidak mengikuti check-in asli.</strong> Nama dan presensi di sini adalah contoh. Pilih anggota untuk mencoba check-in, istirahat, atau checkout.</span></div>}
     {error && <div className="office-error" role="alert">{error} {data.syncedAt && 'Tampilan menggunakan data terakhir yang berhasil diterima.'}{authRequired && <Link href="/login" className="office-login-link">Buka halaman login →</Link>}</div>}
     <div className="office-stats">
       <div><Users size={16} /><strong>{dataReady ? active : '—'}</strong><span>di kantor</span></div>
@@ -148,7 +154,7 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
     </div>
     <div className="office-stage">
       <div className="office-stage-bar">
-        <div className="office-room-name"><span className="office-room-icon"><Box size={17} /></span><div><strong>Studio tim</strong><span>Area {currentRoom + 1} dari {rooms} · {members.length} meja</span></div></div>
+        <div className="office-room-name"><span className="office-room-icon"><Box size={17} /></span><div><strong>Meja komunal</strong><span>Area {currentRoom + 1} dari {rooms} · {members.length} anggota</span></div></div>
         <div className="office-stage-actions">
           {rooms > 1 && <div className="office-room-nav"><button type="button" aria-label="Area sebelumnya" disabled={currentRoom === 0} onClick={() => setRoom(currentRoom - 1)}><ChevronLeft size={17} /></button><span>{currentRoom + 1}/{rooms}</span><button type="button" aria-label="Area berikutnya" disabled={currentRoom >= rooms - 1} onClick={() => setRoom(currentRoom + 1)}><ChevronRight size={17} /></button></div>}
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
@@ -179,6 +185,6 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
         </div> : <><Link href="/attendance" className="office-primary-link"><Check size={15} /> Buka presensi <ArrowUpRight size={15} /></Link><Link href="/office-preview" target="_blank" className="office-preview-link">Coba simulasi gerakan <ArrowUpRight size={13} /></Link></>}
       </aside>
     </div>
-    <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · Pembaruan otomatis</span>}</footer>
+    <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {realtimeConnected ? 'Realtime + cadangan 10 detik' : 'Sinkron tiap 10 detik'}</span>}</footer>
   </section>;
 }

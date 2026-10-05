@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOfficeMembers, reconcileSeats } from '../lib/spatial-office/model.ts';
+import { buildOfficeMembers, reconcileSeats, officePath, deskPosition } from '../lib/spatial-office/model.ts';
 
 const roster = [
   { id: '1', name: 'Alya Putri', email: 'alya@example.com', aliases: ['Alya'] },
@@ -45,4 +45,30 @@ test('all members receive unique desks beyond the first room', () => {
   const seats = reconcileSeats(new Map(), members);
   assert.equal(seats.size, 25);
   assert.equal(new Set(seats.values()).size, 25);
+});
+
+test('coworking desks join end to end with opposite seats facing inward', () => {
+  const stations = Array.from({ length: 6 }, (_, slot) => deskPosition(slot));
+  assert.equal(new Set(stations.map(d => d.x)).size, 3);
+  for (let pair = 0; pair < 3; pair++) {
+    assert.equal(stations[pair * 2].x, stations[pair * 2 + 1].x);
+    assert.equal(stations[pair * 2].rotation, 0);
+    assert.equal(stations[pair * 2 + 1].rotation, Math.PI);
+  }
+  assert.equal(stations[2].x - stations[0].x, 1.4);
+});
+test('entry and exit corridors never cross the communal table', () => {
+  for (let slot = 0; slot < 6; slot++) {
+    const path = officePath(slot);
+    assert.deepEqual(officePath(slot, true), [...path].reverse());
+    for (let segment = 1; segment < path.length; segment++) {
+      const [a, b] = [path[segment - 1], path[segment]];
+      assert.ok(a[0] === b[0] || a[1] === b[1], 'corridors are axis aligned');
+      for (let step = 0; step <= 20; step++) {
+        const x = a[0] + (b[0] - a[0]) * step / 20;
+        const z = a[1] + (b[1] - a[1]) * step / 20;
+        assert.ok(Math.abs(x) > 2.35 || Math.abs(z) > 1, 'walk outside table plus body clearance');
+      }
+    }
+  }
 });

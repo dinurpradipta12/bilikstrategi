@@ -18,11 +18,11 @@ Preview hanya memakai state React dan data fiktif. Tombol simulasi tidak menulis
 
 Roster menggunakan workspace ClickUp yang sama dengan halaman Team. Presensi menggunakan `active_sessions`. Pencocokan mendahulukan ID/email; data legacy tanpa keduanya harus memiliki nama atau alias yang persis sama dan unik. Tidak ada pencocokan substring. Email dan catatan presensi tidak dikirim ke scene.
 
-Realtime Supabase menginvalidasi snapshot; polling 30 detik dan refresh ketika kembali ke tab menjadi fallback. Roster server boleh dicache selama 30 detik. Nama duplikat yang hanya memiliki presensi legacy tidak dianggap hadir secara otomatis. Snapshot gagal tidak dianggap sebagai checkout; respons 401/403 menghapus data yang sudah tidak boleh dilihat.
+Realtime Supabase menginvalidasi snapshot; polling 10 detik dan refresh ketika kembali ke tab menjadi fallback. Roster server boleh dicache selama 30 detik. Nama duplikat yang hanya memiliki presensi legacy tidak dianggap hadir secara otomatis. Snapshot gagal tidak dianggap sebagai checkout; respons 401/403 menghapus data yang sudah tidak boleh dilihat.
 
-Meja mengikuti ID anggota, tetap stabil selama tampilan terbuka, dan slot kosong dipakai oleh anggota baru. Saat halaman dibuka ulang, urutan awal ditentukan dari ID. Penetapan denah lintas perangkat yang dapat diedit dan disimpan merupakan modul lanjutan. Satu area berisi enam meja, tanpa membatasi jumlah anggota keseluruhan.
+Meja mengikuti ID anggota, tetap stabil selama tampilan terbuka, dan slot kosong dipakai oleh anggota baru. Saat halaman dibuka ulang, urutan awal ditentukan dari ID. Penetapan denah lintas perangkat yang dapat diedit dan disimpan merupakan modul lanjutan. Satu area memakai meja komunal panjang dengan tiga kursi berhadapan di setiap sisi, tanpa membatasi jumlah anggota keseluruhan.
 
-Tidak memerlukan migration SQL baru. Server memerlukan koneksi Supabase admin dan token ClickUp yang sudah dipakai aplikasi. Login cookie simulasi lokal tidak cukup untuk membaca data asli.
+Tidak memerlukan migration SQL baru. Server menggunakan koneksi baca Supabase yang sama dengan presensi serta token ClickUp pengguna yang diverifikasi. Modul ini tidak membutuhkan service-role key tambahan. Login cookie simulasi lokal tidak cukup untuk membaca data asli.
 
 ## Aset dan rendering
 
@@ -43,7 +43,7 @@ npx eslint components/spatial-office lib/spatial-office app/api/spatial-office a
 npm run build -- --webpack
 ```
 
-Review browser lokal mencakup pemuatan GLB, check-in → duduk, checkout → keluar, penambahan/hapus anggota, perpindahan area, serta portrait tanpa overflow horizontal. Endpoint tanpa token dan cookie identitas palsu mengembalikan 401. Sinkronisasi dengan akun produksi belum diuji dalam modul review ini.
+Review browser lokal mencakup pemuatan GLB, check-in → duduk, checkout → keluar, penambahan/hapus anggota, perpindahan area, serta portrait tanpa overflow horizontal. Endpoint tanpa token dan cookie identitas palsu mengembalikan 401. Data asli dipilih melalui mode Data tim langsung atau dashboard, sedangkan mode Simulasi desain selalu memakai nama contoh.
 
 ## Aset yang disarankan berikutnya
 

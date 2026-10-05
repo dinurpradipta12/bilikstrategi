@@ -64,7 +64,20 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
 export const DESKS_PER_ROOM = 6;
 export function deskPosition(slot: number) {
   const index = slot % DESKS_PER_ROOM;
-  return { x: index % 2 === 0 ? -2.15 : 2.15, z: -3.3 + Math.floor(index / 2) * 2.9 };
+  // Three adjoining stations on each side of a shared, continuous workbench.
+  const side = index % 2 === 0 ? -1 : 1;
+  return {
+    x: (Math.floor(index / 2) - 1) * 1.4,
+    z: side * 0.375,
+    rotation: side === -1 ? 0 : Math.PI,
+    seatZ: side * 1.255,
+    aisleZ: side * 2.2,
+  };
+}
+export function officePath(slot: number, leaving = false): Array<[number, number]> {
+  const desk = deskPosition(slot);
+  const path: Array<[number, number]> = [[-5.5, 3.5], [-3.15, 3.5], [-3.15, desk.aisleZ], [desk.x, desk.aisleZ], [desk.x, desk.seatZ]];
+  return leaving ? path.reverse() : path;
 }
 export function memberHash(id: string) {
   let hash = 0;

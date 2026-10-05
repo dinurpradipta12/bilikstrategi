@@ -2,12 +2,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { bubbleLabel, deskPosition, memberHash, type OfficeMember } from './model';
+import { bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, officePath, type OfficeMember } from './model';
 
 const CHARACTERS = ['operations', 'research', 'copywriter', 'designer', 'qa', 'analyst', 'hr', 'finance'];
 const FURNITURE = ['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard'];
-const ENTRY = new THREE.Vector3(-5.5, 0, 4.75);
-const AISLE_Z = 4.75;
+const ENTRY = new THREE.Vector3(-5.5, 0, 3.5);
 type Rig = { root: THREE.Group; body: THREE.Group; head: THREE.Group; arms: THREE.Group[]; legs: THREE.Group[] };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; phase: 'entering' | 'seated' | 'leaving';
@@ -154,22 +153,27 @@ export class OfficeScene {
 
   private buildRoom() {
     for (let x = -3; x <= 3; x += 3) {
-      for (let z = -4.5; z <= 4.5; z += 3) this.asset('floor_wood_3m', x, z);
-      this.asset('wall_with_window_3m', x, -6);
+      for (let z = -3; z <= 3; z += 3) this.asset('floor_wood_3m', x, z);
+      this.asset('wall_with_window_3m', x, -4.5);
     }
-    for (const z of [-4.5, -1.5, 1.5]) this.asset('wall_with_window_3m', -4.5, z, 0, Math.PI / 2);
+    for (const z of [-3, 0]) this.asset('wall_with_window_3m', -4.5, z, 0, Math.PI / 2);
     // A real gap on the left is the entrance; no walking through a decorative door.
-    this.asset('floor_ivory_3m', -6, 4.5);
-    this.asset('floor_plant', -3.8, -5.4);
-    this.asset('floor_plant', 3.8, 5.2);
-    this.asset('floor_plant', -3.9, 3.1);
-    this.asset('sofa', -2, -5.35);
-    this.asset('side_table', -0.55, -5.25);
-    this.asset('coffee_mug', -0.55, -5.25, 0.59);
-    this.asset('bookshelf', 2.45, -5.6);
-    this.asset('book_stack', 2.45, -5.55, 1.08);
-    this.asset('floor_lamp', 3.6, -5.35);
-    this.asset('pinboard', 0.1, -5.9, 0.8);
+    this.asset('floor_ivory_3m', -6, 3);
+    this.asset('floor_plant', -3.8, -3.85);
+    this.asset('floor_plant', 3.8, 3.65);
+    this.asset('floor_plant', -3.9, 1.45);
+    this.asset('area_rug', -1.8, -3.5).scale.set(1.5, 1, 1.15);
+    this.asset('sofa', -2, -3.85);
+    for (let slot = 0; slot < DESKS_PER_ROOM; slot++) {
+      const station = deskPosition(slot);
+      this.asset('office_desk', station.x, station.z, 0, station.rotation);
+    }
+    this.asset('side_table', -0.55, -3.6);
+    this.asset('coffee_mug', -0.55, -3.6, 0.59);
+    this.asset('bookshelf', 2.45, -4.1);
+    this.asset('book_stack', 2.45, -4.05, 1.08);
+    this.asset('floor_lamp', 3.6, -3.85);
+    this.asset('pinboard', 0.1, -4.4, 0.8);
     const entry = document.createElement('span');
     entry.className = 'office-entry-label';
     entry.textContent = 'MASUK / KELUAR';
@@ -219,11 +223,18 @@ export class OfficeScene {
     return { root, body, head, arms, legs };
   }
 
-  private route(slot: number, leaving: boolean) {
-    const desk = deskPosition(slot);
-    const seat = new THREE.Vector3(desk.x, 0, desk.z - 0.88);
-    const path = [ENTRY.clone(), new THREE.Vector3(0, 0, AISLE_Z), new THREE.Vector3(0, 0, seat.z), seat];
-    return leaving ? path.reverse() : path;
+  private route(slot: number, leaving: boolean, from?: THREE.Vector3) {
+    const path = officePath(slot, leaving).map(([x, z]) => new THREE.Vector3(x, 0, z));
+    if (!from) return path;
+    // Resume or reverse along the same corridor, including rapid check-in/out.
+    let nearest = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < path.length - 1; i++) {
+      const segment = new THREE.Line3(path[i], path[i + 1]);
+      const distance = segment.closestPointToPoint(from, true, new THREE.Vector3()).distanceToSquared(from);
+      if (distance < bestDistance) { bestDistance = distance; nearest = i; }
+    }
+    return path.slice(nearest + 1);
   }
 
   private makeOccupant(member: OfficeMember, slot: number) {
@@ -254,7 +265,6 @@ export class OfficeScene {
         const group = new THREE.Group();
         this.scene.add(group);
         group.position.set(position.x, 0, position.z);
-        this.asset('office_desk', 0, 0, 0, 0, group);
         this.asset('office_swivel_chair', 0, -0.88, 0, 0, group);
         this.asset('laptop', 0, -0.02, 0.78, Math.PI, group);
         this.asset('coffee_mug', -0.48, 0.04, 0.78, 0, group);
@@ -266,17 +276,18 @@ export class OfficeScene {
       }
       this.deskLabels.get(member.id)!.textContent = member.name;
       this.desks.get(member.id)!.position.set(position.x, 0, position.z);
+      this.desks.get(member.id)!.rotation.y = position.rotation;
       let occupant = this.occupants.get(member.id);
       if (member.status !== 'offline') {
         if (!occupant) { occupant = this.makeOccupant(member, slot); this.occupants.set(member.id, occupant); }
         else if (occupant.phase === 'leaving' || occupant.slot !== slot) {
           // Reverse safely via the aisle if a user checks in while still exiting.
           occupant.phase = 'entering';
-          occupant.route = [new THREE.Vector3(0, 0, occupant.rig.root.position.z), ...this.route(slot, false).slice(2)];
+          occupant.route = this.route(slot, false, occupant.rig.root.position);
         }
       } else if (occupant && occupant.phase !== 'leaving') {
+        occupant.route = this.route(slot, true, occupant.rig.root.position);
         occupant.phase = 'leaving';
-        occupant.route = [new THREE.Vector3(0, 0, occupant.rig.root.position.z), new THREE.Vector3(0, 0, AISLE_Z), ENTRY.clone()];
       }
       if (occupant) {
         occupant.member = member; occupant.slot = slot;
@@ -301,7 +312,7 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
-  resetCamera() { this.camera.position.set(10.1, 11.55, 14.55); this.controls.target.set(-0.25, 0.4, 0); this.controls.update(); }
+  resetCamera() { this.camera.position.set(9.3, 10.7, 13.4); this.controls.target.set(-0.25, 0.4, 0); this.controls.update(); }
   zoom(direction: number) {
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.84 : 1.19), 9, 29));
@@ -353,7 +364,7 @@ export class OfficeScene {
       rig.head.rotation.z = seated && this.moving ? Math.sin(t * 0.6) * 0.045 : 0;
       rig.arms.forEach((arm, index) => { arm.rotation.x = seated ? (working ? -1.1 : -0.2) + (working && this.moving ? Math.sin(t * 9 + index * Math.PI) * 0.085 : 0) : Math.sin(t * 8 + index * Math.PI) * 0.35; });
       rig.legs.forEach((leg, index) => { leg.rotation.x = seated ? -1.12 : Math.sin(t * 8 + index * Math.PI) * 0.4; });
-      if (seated) rig.root.rotation.y = 0;
+      if (seated) rig.root.rotation.y = deskPosition(occupant.slot).rotation;
       occupant.bubble.textContent = seated ? bubbleLabel(member) : occupant.phase === 'leaving' ? '👋 Selesai bekerja' : '🚶 Menuju meja';
       const bubbleVisible = !seated || id === this.selected || (this.moving && (t % 16 < 4));
       occupant.bubble.hidden = !bubbleVisible;
@@ -370,7 +381,7 @@ export class OfficeScene {
       this.placeLabel(label, new THREE.Vector3(x, 0.84, z));
     }
     const entry = this.labels.querySelector<HTMLElement>('[data-entry]');
-    if (entry) this.placeLabel(entry, new THREE.Vector3(-5.6, 0.05, 5.3));
+    if (entry) this.placeLabel(entry, new THREE.Vector3(-5.6, 0.05, 4.1));
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
