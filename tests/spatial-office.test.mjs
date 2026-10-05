@@ -72,3 +72,72 @@ test('entry and exit corridors never cross the communal table', () => {
     }
   }
 });
+
+test('pantry follows accumulated work across reload, pause and resume', async () => {
+  const { memberZone, workedSeconds } = await import('../lib/spatial-office/model.ts');
+  const now = 1800000000000;
+  const member = buildOfficeMembers(roster, [{ user_id: '1', check_in_timestamp: now - 60000, accumulated_seconds: 840 }])[0];
+  assert.equal(workedSeconds(member, now), 900);
+  assert.equal(memberZone(member, now - 1), 'desk');
+  assert.equal(memberZone(JSON.parse(JSON.stringify(member)), now), 'pantry');
+  assert.equal(memberZone(member, now + 60000), 'desk');
+  assert.equal(memberZone({ ...member, status: 'paused' }, now), 'lounge');
+  assert.equal(memberZone({ ...member, status: 'offline' }, now), 'lounge');
+  assert.equal(workedSeconds({ ...member, status: 'paused' }, now + 900000), 840);
+});
+test('all zone routes and rapid reversals stay in corridors and use partition doors', async () => {
+  const { zonePosition, travelPath } = await import('../lib/spatial-office/model.ts');
+  for (let slot = 0; slot < 6; slot++) {
+    for (const source of ['desk', 'lounge', 'pantry']) {
+      for (const target of ['desk', 'lounge', 'pantry']) {
+        const origin = zonePosition(slot, source), end = zonePosition(slot, target);
+        let from = [origin.x, origin.z];
+        const path = travelPath(slot, from, target);
+        if (source !== target) assert.deepEqual(path.at(-1), [end.x, end.z]);
+        for (const point of path) {
+          assert.ok(Math.abs(point[0] - from[0]) < 1e-6 || Math.abs(point[1] - from[1]) < 1e-6);
+          for (let step = 0; step <= 10; step++) {
+            const x = from[0] + (point[0] - from[0]) * step / 10, z = from[1] + (point[1] - from[1]) * step / 10;
+            assert.ok(Math.abs(x) > 2.35 || Math.abs(z) >= 1.15, 'route must clear shared workbench');
+            if (Math.abs(x - 4.5) < 0.02) assert.ok(Math.abs(z - 0.5) < 0.7 || Math.abs(z - 3) < 0.7, 'cross partition only at door');
+            const reverse = travelPath(slot, [x, z], source);
+            assert.deepEqual(reverse.at(-1) || [x, z], [origin.x, origin.z]);
+          }
+          from = point;
+        }
+      }
+    }
+  }
+});
+test('typing hands touch the supplied keyboard with either desk orientation', async () => {
+  const { typingHand, KEYBOARD_TOP, AVATAR_SCALE, deskPosition } = await import('../lib/spatial-office/model.ts');
+  for (const slot of [0, 1]) for (const index of [0, 1]) for (const tap of [-0.015, 0, 0.015]) {
+    const [x, y, z] = typingHand(index, 0.15, tap), desk = deskPosition(slot);
+    assert.ok(Math.abs((z + 0.15 - 0.15) * AVATAR_SCALE - KEYBOARD_TOP) < 1e-10, 'bottom of hand touches key surface');
+    const zWorld = desk.seatZ - y * AVATAR_SCALE * Math.cos(desk.rotation);
+    assert.ok(Math.abs(zWorld - (desk.z - 0.27 * Math.cos(desk.rotation))) < 1e-10);
+    assert.ok(Math.abs(x * AVATAR_SCALE) + 0.17 * AVATAR_SCALE < 0.265, 'hands fit on keyboard');
+  }
+});
+test('bubble rotation uses assigned tasks and cannot invent completion', async () => {
+  const { memberTasks, bubbleLabel } = await import('../lib/spatial-office/model.ts');
+  const tasks = memberTasks(roster[0], [
+    { task_name: 'Design header', status: 'in_progress', assignee_ids: ['1'] },
+    { task_name: 'Review brief', status: 'in_review', raw_data: { assignee_emails: ['alya@example.com'] } },
+    { task_name: 'Someone else', status: 'in_progress', assignee_ids: ['2'] },
+    { task_name: 'Already done', status: 'completed', assignee_ids: ['1'] },
+  ]);
+  assert.deepEqual(tasks.map(task => task.name), ['Design header', 'Review brief']);
+  const member = { id: '1', name: 'Alya', status: 'working', project: 'Website', tasks };
+  const labels = Array.from({ length: 4 }, (_, i) => bubbleLabel(member, 'desk', i * 8000));
+  assert.equal(new Set(labels).size, 4);
+  assert.ok(labels.some(label => label.includes('Design header')));
+  assert.ok(labels.every(label => !label.includes('Someone else') && !label.includes('Already done')));
+});
+test('avatar accepts only supplied models and palette and strips arbitrary identity fields', async () => {
+  const { defaultAvatar, parseAvatar } = await import('../lib/spatial-office/model.ts');
+  const avatar = defaultAvatar('1');
+  assert.deepEqual(parseAvatar({ ...avatar, userId: 'someone-else' }), avatar);
+  assert.equal(parseAvatar({ ...avatar, model: '../external.glb' }), null);
+  assert.equal(parseAvatar({ ...avatar, shirtColor: 'url(external)' }), null);
+});

@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { DESKS_PER_ROOM, reconcileSeats, statusLabel, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
+import { defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
+import AvatarEditor from './AvatarEditor';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
@@ -21,6 +22,8 @@ type Data = OfficeSnapshot & { seats: Map<string, number> };
 
 export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
+  const [editing, setEditing] = useState<{ id: string; avatar: AvatarStyle } | null>(null);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
@@ -62,7 +65,7 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
         }
         if (!response.ok || !Array.isArray(payload.members)) throw new Error(payload.error || 'Data kantor belum tersedia.');
         if (!disposed) {
-          setData(previous => ({ members: payload.members, syncedAt: payload.syncedAt, seats: reconcileSeats(previous.seats, payload.members) }));
+          setData(previous => ({ members: payload.members, viewerId: payload.viewerId, avatarStorage: payload.avatarStorage, syncedAt: payload.syncedAt, seats: reconcileSeats(previous.seats, payload.members) }));
           setError(''); setAuthRequired(false);
         }
       } catch (failure) {
@@ -104,20 +107,50 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
   const currentRoom = Math.min(room, rooms - 1);
   const members = useMemo(() => data.members.flatMap(member => {
     const slot = data.seats.get(member.id)!;
-    return Math.floor(slot / DESKS_PER_ROOM) === currentRoom ? [{ member, slot }] : [];
-  }), [data, currentRoom]);
+    return Math.floor(slot / DESKS_PER_ROOM) === currentRoom ? [{ member: editing?.id === member.id ? { ...member, avatar: editing.avatar } : member, slot }] : [];
+  }), [data, currentRoom, editing]);
   const dataReady = demo || Boolean(data.syncedAt);
   const active = data.members.filter(member => member.status !== 'offline').length;
   const paused = data.members.filter(member => member.status === 'paused').length;
   const selectedMember = data.members.find(member => member.id === selected);
   const selectMember = useCallback((id: string) => {
     setSelected(id);
+    setEditing(current => current?.id === id ? current : null);
     const slot = data.seats.get(id);
     if (slot !== undefined) setRoom(Math.floor(slot / DESKS_PER_ROOM));
   }, [data.seats]);
+  const openEditor = () => {
+    const member = data.members.find(m => m.id === (demo ? selected : data.viewerId));
+    if (!member) return;
+    selectMember(member.id); setNotice(''); setEditing({ id: member.id, avatar: member.avatar || defaultAvatar(member.id) });
+  };
+  const saveAvatar = async () => {
+    if (!editing) return;
+    const { id, avatar } = editing;
+    if (!demo) {
+      const response = await fetch('/api/spatial-office', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatar }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Avatar belum tersimpan.');
+    } else { try { localStorage.setItem(`office-demo-avatar:${id}`, JSON.stringify(avatar)); } catch { throw new Error('Browser tidak mengizinkan penyimpanan avatar simulasi.'); } }
+    setData(previous => ({ ...previous, members: previous.members.map(m => m.id === id ? { ...m, avatar } : m) }));
+    setEditing(null); setNotice(demo ? 'Avatar simulasi tersimpan di browser ini.' : 'Avatar Anda tersimpan.');
+  };
+  useEffect(() => {
+    if (!demo) return;
+    const members = DEMO_MEMBERS.map(member => {
+      let avatar;
+      try { avatar = parseAvatar(JSON.parse(localStorage.getItem(`office-demo-avatar:${member.id}`) || 'null')) || undefined; } catch { /* Retain the supplied asset style. */ }
+      return { ...member, startedAt: Date.now(), accumulatedSeconds: 0, avatar, tasks: member.project ? [{ name: `Review ${member.project}`, status: 'in_progress' }, { name: `Susun draft ${member.project}`, status: 'to_do' }] : [] };
+    });
+    queueMicrotask(() => setData(previous => ({ ...previous, members })));
+  }, [demo]);
+  const pantryDemo = () => {
+    if (!demo || !selectedMember) return;
+    setData(previous => ({ ...previous, members: previous.members.map(m => m.id === selected ? { ...m, status: 'working', startedAt: Date.now(), accumulatedSeconds: 900 } : m) }));
+  };
   const changeDemo = (status: OfficeMember['status']) => {
     if (!demo || !selectedMember) return;
-    setData(previous => ({ ...previous, members: previous.members.map(member => member.id === selected ? { ...member, status, project: status === 'offline' ? '' : member.project || 'Project baru' } : member) }));
+    setData(previous => ({ ...previous, members: previous.members.map(member => member.id === selected ? { ...member, status, startedAt: Date.now(), accumulatedSeconds: status === 'offline' ? 0 : workedSeconds(member, Date.now()), project: status === 'offline' ? '' : member.project || 'Project baru' } : member) }));
   };
   const addDemo = () => {
     if (!demo) return;
@@ -131,12 +164,12 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
   const removeDemo = () => {
     if (!demo || !selectedMember) return;
     setData(previous => { const next = previous.members.filter(member => member.id !== selected); return { ...previous, members: next, seats: reconcileSeats(previous.seats, next) }; });
-    setSelected('');
+    setSelected(''); setEditing(null);
   };
 
   return <section className="spatial-office" aria-label="Kantor 3D">
     <header className="office-heading">
-      <div><div className="office-eyebrow"><span className="office-tiny-square" /> SPATIAL WORKSPACE <span className="office-version">01</span></div>
+      <div><div className="office-eyebrow"><span className="office-tiny-square" /> SPATIAL WORKSPACE <span className="office-version">02</span></div>
         <h2>Satu tim. Satu ruang.</h2><p>Temui tim di meja mereka, dari mana saja.</p>
       </div>
       <div className="office-heading-actions">
@@ -147,10 +180,10 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
     {demo && <div className="office-demo-note"><Box size={16} /><span><strong>Simulasi desain — tidak mengikuti check-in asli.</strong> Nama dan presensi di sini adalah contoh. Pilih anggota untuk mencoba check-in, istirahat, atau checkout.</span></div>}
     {error && <div className="office-error" role="alert">{error} {data.syncedAt && 'Tampilan menggunakan data terakhir yang berhasil diterima.'}{authRequired && <Link href="/login" className="office-login-link">Buka halaman login →</Link>}</div>}
     <div className="office-stats">
-      <div><Users size={16} /><strong>{dataReady ? active : '—'}</strong><span>di kantor</span></div>
+      <div><Users size={16} /><strong>{dataReady ? active : '—'}</strong><span>check-in</span></div>
       <div><Coffee size={16} /><strong>{dataReady ? paused : '—'}</strong><span>istirahat</span></div>
       <div><Box size={16} /><strong>{dataReady ? data.members.length : '—'}</strong><span>meja tim</span></div>
-      <span className="office-stats-caption">Meja tetap tersedia saat pemiliknya keluar.</span>
+      <span className="office-stats-caption">Offline dan istirahat tampil di lounge.</span>
     </div>
     <div className="office-stage">
       <div className="office-stage-bar">
@@ -162,7 +195,7 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
       </div>
       <OfficeCanvas members={members} motion={motion} selected={selected} onSelect={selectMember} />
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
-      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span><i className="is-paused" /> Istirahat</span><span><i className="is-offline" /> Di luar kantor</span><p>Bubble menampilkan status sesi dan project presensi.</p></div>
+      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span><i className="is-paused" /> Istirahat</span><span><i className="is-offline" /> Di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
     <div className="office-bottom-grid">
       <section className="office-team-panel">
@@ -179,8 +212,11 @@ export default function OfficeDashboard({ demo = false }: { demo?: boolean }) {
       <aside className="office-detail-panel">
         <div className="office-panel-title"><h3>{selectedMember ? 'Meja anggota' : 'Ruang untuk terhubung'}</h3>{selectedMember && <button type="button" className="office-icon-button" aria-label="Tutup detail anggota" onClick={() => setSelected('')}><X size={15} /></button>}</div>
         {selectedMember ? <><h4>{selectedMember.name}</h4><p>{statusLabel(selectedMember)} · Meja {(data.seats.get(selectedMember.id) ?? 0) + 1}</p><div className="office-project"><span>PROJECT PRESENSI</span><strong>{selectedMember.project || 'Belum ada project yang dipilih'}</strong></div></> : <p>Pilih karakter atau nama anggota untuk melihat status dan project yang sedang mereka kerjakan.</p>}
+        {((demo && selectedMember) || (!demo && data.viewerId)) && !editing && <button type="button" className="office-edit-avatar" onClick={openEditor}>{demo ? 'Ubah avatar' : 'Ubah avatar saya'}</button>}
+        {editing && <AvatarEditor value={editing.avatar} onChange={avatar => setEditing({ ...editing, avatar })} onSave={saveAvatar} onClose={() => setEditing(null)} demo={demo} storage={Boolean(data.avatarStorage)} />}
+        {notice && <p role="status">{notice}</p>}
         {demo ? <div className="office-demo-controls">
-          {selectedMember && <><button type="button" onClick={() => changeDemo('working')}><LogIn size={14} /> Check-in</button><button type="button" onClick={() => changeDemo('paused')}><Coffee size={14} /> Istirahat</button><button type="button" onClick={() => changeDemo('offline')}><LogOut size={14} /> Checkout</button><button type="button" onClick={removeDemo}><X size={14} /> Hapus anggota</button></>}
+          {selectedMember && <><button type="button" onClick={() => changeDemo('working')}><LogIn size={14} /> Check-in</button><button type="button" onClick={() => changeDemo('paused')}><Coffee size={14} /> Istirahat</button><button type="button" onClick={() => changeDemo('offline')}><LogOut size={14} /> Checkout</button><button type="button" onClick={pantryDemo}><Coffee size={14} /> Simulasi 15 menit → pantry</button><button type="button" onClick={removeDemo}><X size={14} /> Hapus anggota</button></>}
           <button type="button" onClick={addDemo}><Plus size={14} /> Tambah anggota</button>
         </div> : <><Link href="/attendance" className="office-primary-link"><Check size={15} /> Buka presensi <ArrowUpRight size={15} /></Link><Link href="/office-preview" target="_blank" className="office-preview-link">Coba simulasi gerakan <ArrowUpRight size={13} /></Link></>}
       </aside>

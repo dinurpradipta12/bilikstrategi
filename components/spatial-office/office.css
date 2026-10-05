@@ -771,3 +771,15 @@
 @media (max-width: 760px) {
   .office-review-modes button { flex: 1 1 180px; }
 }
+
+.office-view-controls { position:absolute; top:12px; left:12px; display:flex; gap:4px; padding:4px; background:#fffef5ed; border:1px solid #d5dfd0; border-radius:10px; }
+.office-view-controls button { padding:7px 10px; background:transparent; border:0; border-radius:6px; color:#496652; font:inherit; font-size:10px; }
+.office-view-controls button:hover { background:#e1ebdb; }
+.office-avatar-label[data-status=offline] .office-name { background:#e9ece6; color:#7c867a; border-color:#c6cdc1; }
+.office-avatar-editor { border-top:1px solid var(--office-line); margin-top:14px; padding-top:8px; }
+.office-avatar-editor label { display:flex; flex-direction:column; gap:6px; margin:12px 0; font-size:11px; }
+.office-avatar-editor select { width:100%; border:1px solid #d5ddce; border-radius:7px; padding:9px; background:#f8faf3; color:#40583e; font-size:12px; }
+.office-avatar-editor .office-avatar-checkbox { flex-direction:row; align-items:center; }
+.office-avatar-editor input { accent-color:#52684e; }
+.office-edit-avatar { padding:9px 14px; border:1px solid #cad8c0; border-radius:8px; background:#eef4e7; color:#49613f; font-size:11px; margin:8px 0; }
+.spatial-office select:focus-visible { outline:3px solid #a17a43; outline-offset:2px; }

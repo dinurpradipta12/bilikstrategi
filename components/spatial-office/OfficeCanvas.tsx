@@ -44,6 +44,12 @@ export default function OfficeCanvas({ members, motion, selected, onSelect }: Pr
         {state.error && <button type="button" onClick={() => { setState({ loading: true, error: '' }); setAttempt(value => value + 1); }}>Coba lagi</button>}
       </div>
     </div>}
+    <div className="office-view-controls" aria-label="Pilihan ruangan">
+      <button type="button" onClick={() => scene.current?.resetCamera()}>Semua</button>
+      <button type="button" onClick={() => scene.current?.focus('desk')}>Meja</button>
+      <button type="button" onClick={() => scene.current?.focus('lounge')}>Lounge</button>
+      <button type="button" onClick={() => scene.current?.focus('pantry')}>Pantry</button>
+    </div>
     <div className="office-camera-controls" aria-label="Kontrol kamera">
       <button type="button" title="Perbesar" aria-label="Perbesar kantor" onClick={() => scene.current?.zoom(1)}><Plus size={17} /></button>
       <button type="button" title="Perkecil" aria-label="Perkecil kantor" onClick={() => scene.current?.zoom(-1)}><Minus size={17} /></button>

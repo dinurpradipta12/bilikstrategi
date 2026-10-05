@@ -3,7 +3,8 @@ import { getAuthenticatedUser } from '@/lib/clickup/users';
 import { getAuthorizedTeams } from '@/lib/clickup/teams';
 import type { ClickUpUser } from '@/lib/clickup/types';
 import { supabaseRest } from '@/lib/supabase/rest-client';
-import { buildOfficeMembers, type SessionRow } from '@/lib/spatial-office/model';
+import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/admin-rest-client';
+import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
 export const runtime = 'edge';
 const identityCache = new Map<string, { user: ClickUpUser; expires: number }>();
@@ -58,9 +59,11 @@ export async function GET(req: NextRequest) {
     if (!roster.some(member => String(member.id) === String(user.id))) return json({ error: 'Anda bukan anggota tim ini.' }, 403);
     // Reuse the existing attendance connection and its RLS permissions. A new
     // service-role credential is not required just to render this read-only view.
-    const [roleResult, sessionResult] = await Promise.all([
+    const [roleResult, sessionResult, taskResult, avatarResult] = await Promise.all([
       supabaseRest.from('app_user_roles').select('email,display_name,status'),
       supabaseRest.from('active_sessions').select('*'),
+      supabaseRest.from('task_cache').select('task_name,status,assignee_ids,raw_data'),
+      isSupabaseAdminConfigured() ? supabaseAdminFetch(`app_settings?select=key,value&key=like.${encodeURIComponent(`spatial-avatar:${teamId}:*`)}`).catch(() => null) : Promise.resolve(null),
     ]);
     if (roleResult.error || sessionResult.error) throw new Error('Snapshot unavailable');
     const roles = roleResult.data as { email: string; display_name: string; status: string }[];
@@ -69,12 +72,43 @@ export async function GET(req: NextRequest) {
     const roleByEmail = new Map(roles.map(role => [role.email.trim().toLowerCase(), role]));
     if (roleByEmail.get(user.email.trim().toLowerCase())?.status === 'inactive') return json({ error: 'Akun ini tidak aktif.' }, 403);
     const activeIds = new Set(roster.filter(member => roleByEmail.get(member.email?.trim().toLowerCase())?.status !== 'inactive').map(member => String(member.id)));
-    const members = buildOfficeMembers(roster.map(member => ({
+    const officeRoster = roster.map(member => ({
       id: String(member.id), name: roleByEmail.get(member.email?.trim().toLowerCase())?.display_name || member.username || 'Anggota tim',
       email: member.email || '', aliases: [member.username],
-    })), sessions).filter(member => activeIds.has(member.id));
-    return json({ members, syncedAt: new Date().toISOString() });
+    }));
+    const avatarRows = avatarResult?.ok ? await avatarResult.json() as { key: string; value: unknown }[] : [];
+    const avatars = new Map(avatarRows.map(row => [row.key, parseAvatar(row.value)]));
+    const tasks = !taskResult.error && Array.isArray(taskResult.data) ? taskResult.data as TaskRow[] : [];
+    const members = buildOfficeMembers(officeRoster, sessions).filter(member => activeIds.has(member.id)).map(member => ({
+      ...member, tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
+      avatar: avatars.get(`spatial-avatar:${teamId}:${member.id}`) || undefined,
+    }));
+    return json({ members, viewerId: String(user.id), avatarStorage: Boolean(avatarResult?.ok), syncedAt: new Date().toISOString() });
   } catch {
     return json({ error: 'Data tim atau presensi belum dapat diperbarui. Coba sinkronkan kembali.' }, 503);
   }
+}
+
+export async function PUT(req: NextRequest) {
+  const origin = req.headers.get('origin');
+  if (origin && origin !== new URL(req.url).origin) return json({ error: 'Asal permintaan tidak sesuai.' }, 403);
+  if (Number(req.headers.get('content-length') || 0) > 2048) return json({ error: 'Data avatar terlalu besar.' }, 413);
+  // Reuse the verified identity, exact workspace membership, and inactive-user check.
+  // The client never chooses whose preferences are written.
+  const auth = await GET(req);
+  if (!auth.ok) return auth;
+  const snapshot = await auth.json();
+  if (!snapshot.avatarStorage) return json({ error: 'Penyimpanan avatar belum tersedia. Periksa koneksi server ke app_settings.' }, 503);
+  let avatar;
+  try { avatar = parseAvatar((await req.json()).avatar); } catch { return json({ error: 'Data avatar tidak valid.' }, 400); }
+  if (!avatar) return json({ error: 'Pilihan avatar tidak valid.' }, 400);
+  const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
+  try {
+    const response = await supabaseAdminFetch('app_settings?on_conflict=key', {
+      method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify({ key: `spatial-avatar:${teamId}:${snapshot.viewerId}`, value: avatar, updated_at: new Date().toISOString() }),
+    });
+    if (!response.ok) throw new Error('Save failed');
+    return json({ avatar });
+  } catch { return json({ error: 'Avatar belum tersimpan. Coba kembali.' }, 503); }
 }
