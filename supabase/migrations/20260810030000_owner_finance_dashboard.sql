@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.app_owner_finance_settings (
   monthly_revenue_target NUMERIC(14, 2) NOT NULL DEFAULT 0,
   operational_budget NUMERIC(14, 2) NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'IDR',
-  created_by_email TEXT NOT NULL DEFAULT 'snllabsarchive@gmail.com',
+  created_by_email TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (workspace_id, month_key)
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.app_owner_finance_entries (
   amount NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
   entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
   notes TEXT NOT NULL DEFAULT '',
-  created_by_email TEXT NOT NULL DEFAULT 'snllabsarchive@gmail.com',
+  created_by_email TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

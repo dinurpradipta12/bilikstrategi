@@ -6,8 +6,6 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const fallbackTasks: any[] = [];
-
 function isUuid(value?: string | null) {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 }
@@ -176,9 +174,6 @@ export async function GET(req: NextRequest) {
 
     const rows = dedupeTaskRows(Array.isArray(data) ? data : []);
 
-    fallbackTasks.length = 0;
-    fallbackTasks.push(...rows);
-
     let tasks = rows.map(rowToTask);
     if (projectId && !isUuid(projectId)) {
       tasks = tasks.filter((task) => task.project_id === projectId || task.clickup_task_id === projectId);
@@ -189,10 +184,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ tasks }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
-    let tasks = dedupeTaskRows(fallbackTasks).map(rowToTask);
-    if (projectId) tasks = tasks.filter((task) => task.project_id === projectId || task.clickup_task_id === projectId);
-    if (assigneeId) tasks = tasks.filter((task) => task.assignee_ids.includes(String(assigneeId)));
-    return NextResponse.json({ tasks, warning: error?.message || 'Supabase task cache unavailable' }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ error: error?.message || 'Tugas tidak dapat dimuat.' }, { status: 503 });
   }
 }
 
@@ -219,9 +211,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, task }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
-    const row = taskToRow(body);
-    fallbackTasks.unshift(row);
-    return NextResponse.json({ success: true, task: rowToTask(row), warning: error?.message || 'Saved to memory fallback' }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ error: error?.message || 'Tugas gagal disimpan.' }, { status: 503 });
   }
 }
 
@@ -296,6 +286,6 @@ export async function DELETE(req: NextRequest) {
     }
     return NextResponse.json({ success: true, taskId }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
-    return NextResponse.json({ success: true, taskId, warning: error?.message || 'Delete fallback only' }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ error: error?.message || 'Tugas gagal dihapus.' }, { status: 503 });
   }
 }

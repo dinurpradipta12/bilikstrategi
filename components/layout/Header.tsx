@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Plus, Bell, ChevronDown, LogOut, Settings } from 'lucide-react';
 
-import SyncUpButton from '@/components/syncup/SyncUpButton';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import { useNotifications } from '@/components/notifications/NotificationProvider';
+import { useBranding } from '@/components/branding/BrandingProvider';
 
 interface HeaderProps {
   onOpenCommandMenu: () => void;
@@ -21,6 +20,7 @@ type AppWorkspace = {
 };
 
 export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderProps) {
+  const { branding } = useBranding();
   const { notifications, unreadCount, markRead } = useNotifications();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -28,14 +28,14 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   const [workspaces, setWorkspaces] = useState<AppWorkspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>({
     id: 'bilik-strategi',
-    name: 'Bilik Strategi Workspace',
-    slug: 'bilik-strategi',
+    name: branding.name,
+    slug: 'team',
   });
   const [userProfile, setUserProfile] = useState({
-    name: 'Bilik Strategi',
+    name: 'Pengguna',
     email: '',
     role: 'owner',
-    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
+    avatar: '',
   });
   const loadWorkspaces = async () => {
     try {
@@ -73,7 +73,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
   useEffect(() => {
     async function loadClickUpProfile() {
       let currentEmail = '';
-      let currentName = 'Bilik Strategi';
+      let currentName = 'Pengguna';
       let currentAvatar = '';
       let serverAppRole = '';
       let serverIsSuperuser = false;
@@ -89,7 +89,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
       }
 
       try {
-        const res = await fetch('/api/clickup/user');
+        const res = await fetch('/api/native/user');
         const data = await res.json();
         if (data.user) {
           currentName = String(data.user.username || currentName);
@@ -99,30 +99,11 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
           if (data.user.profilePicture) currentAvatar = String(data.user.profilePicture);
         }
       } catch (err) {
-        console.warn('[Header] ClickUp profile fetch failed, using default workspace profile.', err);
+        console.warn('[Header] aplikasi profile fetch failed, using default workspace profile.', err);
       }
 
-      const isSuperOwner = serverIsSuperuser || isSuperuserEmail(currentEmail);
-      let finalRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
-
-      if (!isSuperOwner && !serverAppRole) {
-        const savedTeamStr = localStorage.getItem('bilik_team_members');
-        if (savedTeamStr) {
-          try {
-            const parsed = JSON.parse(savedTeamStr);
-            if (Array.isArray(parsed)) {
-              const found = parsed.find(
-                (m: any) =>
-                  (m.email && String(m.email).toLowerCase().trim() === currentEmail.toLowerCase().trim()) ||
-                  (m.name && String(m.name).toLowerCase().trim() === currentName.toLowerCase().trim())
-              );
-              if (found && found.role) {
-                finalRole = found.role;
-              }
-            }
-          } catch {}
-        }
-      }
+      const isSuperOwner = serverIsSuperuser || serverAppRole === 'owner';
+      const finalRole = isSuperOwner ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
       setUserProfile({
         name: currentName,
@@ -160,7 +141,7 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
             className="flex max-w-40 items-center gap-2 rounded-lg border border-[#E8E8EC] bg-[#F7F7F8] px-3 py-1.5 text-xs font-medium text-[#24324A] transition-colors hover:bg-[#EEF2F7] lg:max-w-52 xl:max-w-64"
           >
             <div className="w-2 h-2 rounded-full bg-[#4F9D78] flex-shrink-0"></div>
-            <span className="font-semibold truncate">{activeWorkspace.name}</span>
+            <span className="font-semibold truncate">{branding.name}</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#737680] flex-shrink-0" />
           </button>
 
@@ -213,17 +194,14 @@ export default function Header({ onOpenCommandMenu, onOpenCreateTask }: HeaderPr
 
       {/* Right: Quick Create, Notifications, Profile */}
       <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-        {/* Start SyncUp Voice/Video Call Button */}
-        <div className="hidden lg:block"><SyncUpButton variant="header" /></div>
-
         {/* Quick Create Task */}
-        <button
+        {branding.modules_enabled.tasks && <button
           onClick={onOpenCreateTask}
           className="flex items-center gap-1.5 rounded-lg bg-[#24324A] p-2 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[#1A2536] lg:px-3.5 lg:py-1.5"
         >
           <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
           <span className="hidden lg:inline">Create Task</span>
-        </button>
+        </button>}
 
         {/* Notification Bell */}
         <div className="relative">

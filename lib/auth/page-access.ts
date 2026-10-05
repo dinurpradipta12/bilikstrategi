@@ -20,7 +20,10 @@ export type PageAccessKey =
   | 'automations'
   | 'notifications'
   | 'settings'
-  | 'calendar';
+  | 'calendar'
+  | 'chat'
+  | 'finance'
+  | 'salary_slips';
 
 export type PageAccessMap = Record<PageAccessKey, boolean>;
 
@@ -31,7 +34,7 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
 }> = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
   { key: 'projects', label: 'Projects', href: '/projects' },
-  { key: 'tasks', label: 'ClickUp Tasks', href: '/tasks' },
+  { key: 'tasks', label: 'Tugas', href: '/tasks' },
   { key: 'my_tasks', label: 'My Tasks', href: '/my-tasks' },
   { key: 'timeline', label: 'Timeline', href: '/timeline' },
   { key: 'team', label: 'Team Workload', href: '/team' },
@@ -51,6 +54,9 @@ export const PAGE_ACCESS_OPTIONS: ReadonlyArray<{
   { key: 'notifications', label: 'Notifications', href: '/notifications' },
   { key: 'settings', label: 'Settings', href: '/settings' },
   { key: 'calendar', label: 'Calendar', href: '/calendar' },
+  { key: 'chat', label: 'Chat Tim', href: '/chat' },
+  { key: 'finance', label: 'Finance', href: '/finance' },
+  { key: 'salary_slips', label: 'Slip Gaji', href: '/salary-slips' },
 ];
 
 export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
@@ -76,6 +82,9 @@ export const DEFAULT_PAGE_ACCESS: PageAccessMap = {
   notifications: true,
   settings: true,
   calendar: true,
+  chat: true,
+  finance: true,
+  salary_slips: true,
 };
 
 export function normalizePageAccess(value: unknown): PageAccessMap {

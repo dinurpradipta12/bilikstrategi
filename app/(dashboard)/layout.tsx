@@ -17,6 +17,8 @@ import {
   pageKeyForPathname,
 } from '@/lib/auth/page-access';
 import { hasUnrestrictedPageAccess } from '@/lib/auth/app-role';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import { teamModuleForPage } from '@/lib/branding/types';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -28,35 +30,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [holidayAccess, setHolidayAccess] = useState<HolidayAccessSnapshot | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+  const { branding } = useBranding();
 
   useEffect(() => {
-    // 1. Strict Authentication Check for All Dashboard Routes
-    const checkAuth = () => {
-      const hasCookieLoggedIn =
-        document.cookie.includes('clickup_logged_in=true') ||
-        document.cookie.includes('clickup_access_token');
-      const hasLocalStorageLoggedIn =
-        localStorage.getItem('clickup_logged_in') === 'true' ||
-        !!localStorage.getItem('bilik_current_user');
-
-      if (!hasCookieLoggedIn && !hasLocalStorageLoggedIn) {
-        setIsAuthenticated(false);
-        window.location.href = '/login';
-      } else {
+    let cancelled = false;
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.user) throw new Error('Sesi tidak ditemukan.');
+        return data;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        if (data.user.must_change_password && pathname !== '/change-password') {
+          router.replace('/change-password');
+          return;
+        }
         setIsAuthenticated(true);
-      }
-    };
-
-    checkAuth();
-
-    // Mobile starts in Presensi while the chat feature is paused globally.
-    if (
-      typeof window !== 'undefined' &&
-      window.innerWidth < 768 &&
-      (pathname === '/' || pathname === '/dashboard' || pathname.startsWith('/chat'))
-    ) {
-      router.replace('/attendance');
-    }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsAuthenticated(false);
+        router.replace('/login');
+      });
 
     // 3. Sidebar Collapsed State Listener
     const checkState = () => {
@@ -69,6 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener('storage', checkState);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('sidebar-toggle', checkState);
       window.removeEventListener('storage', checkState);
     };
@@ -85,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let cancelled = false;
     setPageAccessState('checking');
 
-    fetch('/api/clickup/user', { cache: 'no-store' })
+    fetch('/api/native/user', { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) return null;
         return response.json();
@@ -93,11 +90,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((data) => {
         if (cancelled) return;
 
-        // Keep the app usable while the optional page-access migration is not
-        // deployed yet. Once the API returns access data, it becomes the source
-        // of truth for members and clients.
         if (!data?.user) {
-          setPageAccessState('allowed');
+          setPageAccessState('denied');
+          router.replace('/login');
           return;
         }
 
@@ -113,7 +108,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           return;
         }
 
-        const allowed = hasFullAccess || access[pageKey] !== false;
+        const moduleKey = teamModuleForPage(pageKey);
+        const moduleEnabled = !moduleKey || branding.modules_enabled[moduleKey] !== false;
+        const ownerOnly = pageKey === 'finance' || pageKey === 'salary_slips' || pageKey === 'profitability';
+        const allowed = moduleEnabled && (!ownerOnly || role === 'owner')
+          && (hasFullAccess || access[pageKey] !== false);
 
         if (allowed) {
           setPageAccessState('allowed');
@@ -121,21 +120,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
 
         setPageAccessState('denied');
-        const fallback = firstAllowedPagePath(access);
+        const fallback = firstAllowedPagePath({
+          ...access,
+          ...Object.fromEntries(Object.keys(access).map((key) => {
+            const keyForModule = teamModuleForPage(key);
+            return [key, access[key as keyof typeof access] && (!keyForModule || branding.modules_enabled[keyForModule] !== false)];
+          })),
+        });
         if (fallback && fallback !== pathname) {
           router.replace(fallback);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setPageAccessState('allowed');
+          setPageAccessState('denied');
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, pathname, router]);
+  }, [isAuthenticated, pathname, router, branding.modules_enabled]);
 
   useEffect(() => {
     if (isAuthenticated !== true) {
@@ -274,8 +279,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <MobileBottomNav />
 
       {/* Presensi controls stay mounted while navigating between dashboard pages. */}
-      <AppPresenceTracker />
-      <FloatingAttendance />
+      {branding.modules_enabled.attendance && <AppPresenceTracker />}
+      {branding.modules_enabled.attendance && <FloatingAttendance />}
 
       {/* Global Command Menu (Cmd+K) */}
       <CommandMenu
@@ -285,10 +290,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
 
       {/* Quick Create Task Modal */}
-      <CreateTaskModal
+      {branding.modules_enabled.tasks && <CreateTaskModal
         isOpen={createTaskOpen}
         onClose={() => setCreateTaskOpen(false)}
-      />
+      />}
 
     </div>
   );

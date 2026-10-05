@@ -13,7 +13,7 @@ import {
   AlertCircle,
   Briefcase,
 } from 'lucide-react';
-import { AgencyTask, AgencyProject } from '@/lib/mock/data';
+import { AgencyTask, AgencyProject } from '@/lib/types/agency';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import { supabase } from '@/lib/supabase/client';
 import { formatCalendarDate, getCalendarMonthRange } from '@/lib/calendar-date';
@@ -355,7 +355,7 @@ export default function TimelinePage() {
             {loading ? (
               <div className="relative z-10 p-12 text-center text-xs text-[#737680]">
                 <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#F26B5E] mb-2" />
-                <span>Memuat kalender timeline schedule ClickUp...</span>
+                <span>Memuat kalender timeline schedule aplikasi...</span>
               </div>
             ) : filteredProjects.length === 0 && filteredTasks.length === 0 ? (
               <div className="relative z-10 p-12 text-center text-xs text-[#737680]">

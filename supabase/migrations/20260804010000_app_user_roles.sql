@@ -19,15 +19,6 @@ CREATE POLICY "Allow public read app_user_roles"
   FOR SELECT
   USING (true);
 
-INSERT INTO public.app_user_roles (email, display_name, role, is_superuser, status)
-VALUES ('snllabsarchive@gmail.com', 'Dinur Pradipta', 'owner', TRUE, 'active')
-ON CONFLICT (email) DO UPDATE SET
-  display_name = EXCLUDED.display_name,
-  role = 'owner',
-  is_superuser = TRUE,
-  status = 'active',
-  updated_at = NOW();
-
 DO $$
 BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE public.app_user_roles;

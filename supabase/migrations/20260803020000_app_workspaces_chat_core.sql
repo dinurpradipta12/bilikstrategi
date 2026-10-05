@@ -141,13 +141,13 @@ CREATE POLICY "Allow public delete app_chat_sync_jobs" ON public.app_chat_sync_j
 INSERT INTO public.app_workspaces (id, name, slug, owner_email, clickup_workspace_id, clickup_space_id, clickup_sync_enabled, clickup_sync_status)
 VALUES (
   'bilik-strategi',
-  'Bilik Strategi Workspace',
-  'bilik-strategi',
-  'snllabsarchive@gmail.com',
-  '90182855619',
-  '901811771867',
-  TRUE,
-  'configured'
+  'Team Workspace',
+  'team',
+  NULL,
+  NULL,
+  NULL,
+  FALSE,
+  'not_configured'
 )
 ON CONFLICT (id) DO NOTHING;
 

@@ -37,9 +37,7 @@ import {
   Legend,
 } from 'recharts';
 import { supabase } from '@/lib/supabase/client';
-import { AgencyTask, AgencyProject } from '@/lib/mock/data';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
-import { mergeProjectSources } from '@/lib/projects/dedupe';
+import { AgencyTask, AgencyProject } from '@/lib/types/agency';
 import { useTheme } from '@/lib/theme';
 
 interface TeamMember {
@@ -120,19 +118,16 @@ export default function DashboardPage() {
 
   // Currently Logged-in User State (Personal View)
   const [currentUser, setCurrentUser] = useState({
-    username: 'Bilik Strategi',
+    username: 'Team Workspace',
     email: '',
     role: 'Member',
-    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
+    avatar: '/api/branding/icon',
   });
 
   const checkIsAdminOrOwner = (userEmail: string, defaultRole: string) => {
-    const emailLower = toSafeString(userEmail).toLowerCase().trim();
+    void userEmail;
     const roleLower = toSafeString(defaultRole).toLowerCase().trim();
-
-    // The server-resolved app role is authoritative. Do not let a stale
-    // localStorage member record downgrade or upgrade this account.
-    return isSuperuserEmail(emailLower) || roleLower.includes('owner') || roleLower.includes('admin') || roleLower.includes('lead');
+    return roleLower === 'owner' || roleLower === 'admin';
   };
 
   const [activeSessionTime, setActiveSessionTime] = useState<string | null>(null);
@@ -185,25 +180,19 @@ export default function DashboardPage() {
     }
 
     try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-      const res = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-        cache: 'no-store',
-      });
+      const res = await fetch('/api/attendance?active_only=1', { cache: 'no-store' });
       if (res.ok) {
-        const rows = await res.json();
+        const rows = (await res.json()).activeCheckIns;
         if (Array.isArray(rows)) {
           rows.forEach((r: any) => {
             const userName = toSafeString(r.user_name);
             if (userName) {
               sessionsMap[userName.toLowerCase()] = {
-                checkInTimestamp: Number(r.check_in_timestamp || Date.now()),
-                project_name: r.project_name || r.selected_project,
-                isPaused: r.is_paused === true,
-                pausedAt: r.paused_at || null,
-                accumulatedSeconds: Number(r.accumulated_seconds || 0),
+                checkInTimestamp: Number(r.checkInTimestamp || Date.now()),
+                project_name: r.selectedProject,
+                isPaused: r.isPaused === true,
+                pausedAt: r.pausedAt || null,
+                accumulatedSeconds: Number(r.accumulatedSeconds || 0),
               };
             }
           });
@@ -223,15 +212,9 @@ export default function DashboardPage() {
     }
 
     try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-      const res = await fetch(`${url}/rest/v1/attendance_logs?select=*`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-        cache: 'no-store',
-      });
+      const res = await fetch('/api/attendance', { cache: 'no-store' });
       if (res.ok) {
-        const logs = await res.json();
+        const logs = (await res.json()).history;
         if (Array.isArray(logs)) {
           logs.forEach((log: any) => {
             const userName = toSafeString(log.user_name);
@@ -337,26 +320,11 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    // Resolve the user from the server identity first; localStorage is only a
-    // compatibility fallback for sessions created before server role storage.
-    const savedUserStr = localStorage.getItem('bilik_current_user');
-    let savedUser: any = {};
-    if (savedUserStr) {
-      try { savedUser = JSON.parse(savedUserStr); } catch {}
-    }
-
     const applyUserProfile = (u: any) => {
       const email = toSafeString(u?.email).trim();
-      const username = toSafeString(u?.username, 'Bilik Strategi');
-      const isSuperOwner = u?.is_superuser === true || isSuperuserEmail(email);
+      const username = toSafeString(u?.username, 'Team Workspace');
       const appRole = String(u?.app_role || '').toLowerCase();
-      const role = isSuperOwner
-        ? 'Owner / Workspace Admin'
-        : appRole === 'owner' || u?.role === 1
-          ? 'Owner'
-          : appRole === 'admin' || u?.role === 2
-            ? 'Admin'
-            : (u?.role || 'Member');
+      const role = appRole === 'owner' || u?.role === 1 ? 'Owner' : appRole === 'admin' || u?.role === 2 ? 'Admin' : 'Member';
 
       setCurrentUser({
         username,
@@ -366,8 +334,7 @@ export default function DashboardPage() {
       });
     };
 
-    applyUserProfile(savedUser);
-    fetch('/api/clickup/user', { cache: 'no-store' })
+    fetch('/api/native/user', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data?.user) applyUserProfile(data.user);
@@ -403,36 +370,20 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch app projects first, then merge ClickUp projects when available.
-      const [appProjectsRes, clickupProjectsRes] = await Promise.all([
-        fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
-        fetch('/api/clickup/projects', { cache: 'no-store' }).catch(() => null),
-      ]);
-
-      let appProjects: AgencyProject[] = [];
-      let clickupProjects: AgencyProject[] = [];
-
-      if (appProjectsRes?.ok) {
+      const appProjectsRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
+      let liveProjects: AgencyProject[] = [];
+      if (appProjectsRes.ok) {
         const projectsData = await appProjectsRes.json();
-        appProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
+        liveProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
       }
-
-      if (clickupProjectsRes?.ok) {
-        const projectsData = await clickupProjectsRes.json();
-        clickupProjects = Array.isArray(projectsData.projects) ? projectsData.projects : [];
-      }
-
-      // The app project is canonical; ClickUp only enriches the matching row.
-      // Matching by ClickUp List ID/name prevents one project from counting twice.
-      const liveProjects = mergeProjectSources(appProjects, clickupProjects);
 
       // 2. Fetch live app tasks
       const tasksRes = await fetch('/api/supabase/tasks', { cache: 'no-store' });
       const tasksData = await tasksRes.json();
       const liveTasks = Array.isArray(tasksData.tasks) ? tasksData.tasks : [];
 
-      // 3. Fetch live ClickUp team members
-      const teamRes = await fetch('/api/clickup/teams');
+      // Fetch team members from the team's account directory.
+      const teamRes = await fetch('/api/native/teams');
       const teamData = await teamRes.json();
       const liveMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
@@ -445,17 +396,16 @@ export default function DashboardPage() {
         const memberEmail = toSafeString(m.email);
         const name = memberUsername || (memberEmail ? memberEmail.split('@')[0] : 'Member');
         const assignedTasks = liveTasks.filter((t: AgencyTask) =>
-          t.assignee_names?.some((an: string) =>
-            toSafeString(an).toLowerCase().includes(toSafeString(name).toLowerCase())
-          )
+          t.assignee_ids?.map(String).includes(String(m.id))
+          || t.assignee_emails?.some((email: string) => email.toLowerCase() === memberEmail.toLowerCase())
         );
-        const hoursTracked = assignedTasks.reduce((acc: number, t: AgencyTask) => acc + (t.time_tracked_hours || 4), 0);
+        const hoursTracked = assignedTasks.reduce((acc: number, t: AgencyTask) => acc + (t.time_tracked_hours || 0), 0);
         return {
           id: String(m.id),
           name,
           avatar: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=24324A&color=fff`,
           hoursTracked,
-          capacity: 40,
+          capacity: Number(m.capacity_hours) || 40,
         };
       });
 
@@ -597,7 +547,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-xs text-[#737680] mt-0.5">
               {dashboardTab === 'team'
-                ? 'Ringkasan kinerja project, sinkronisasi ClickUp task, dan beban kerja tim agency secara real-time.'
+                ? 'Ringkasan kinerja project, sinkronisasi aplikasi task, dan beban kerja tim agency secara real-time.'
                 : 'Workspace pribadi & rekap privat khusus untuk akun Anda (hanya dapat dibaca oleh pemilik akun).'}
             </p>
           </div>
@@ -672,7 +622,7 @@ export default function DashboardPage() {
               <button
                 onClick={fetchDashboardData}
                 className="flex items-center gap-1.5 px-3 py-2 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs font-bold text-[#24324A] hover:bg-[#EEF2F7] transition-colors cursor-pointer shadow-2xs"
-                title="Sinkronkan data ClickUp terbaru"
+                title="Sinkronkan data aplikasi terbaru"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Sync</span>
@@ -685,7 +635,7 @@ export default function DashboardPage() {
         {/* Card 1: Active Projects */}
         <div className="p-5 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs">
           <div className="flex items-center justify-between text-[#737680] mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Project ClickUp</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">Project aplikasi</span>
             <Briefcase className="w-4 h-4 text-[#24324A]" />
           </div>
           <div className="flex items-baseline gap-2">
@@ -764,7 +714,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-black text-[#24324A]">{teamMembers.length}</span>
-            <span className="text-xs text-[#737680]">ClickUp Members</span>
+            <span className="text-xs text-[#737680]">aplikasi Members</span>
           </div>
           <div className="dashboard-progress-track w-full bg-[#FFF0ED] h-1.5 rounded-full mt-3 overflow-hidden">
             <div className="bg-[#F26B5E] h-full rounded-full" style={{ width: '100%' }}></div>
@@ -779,7 +729,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-[#24324A]">Task Dibuat vs Selesai (Mingguan)</h2>
-              <p className="text-xs text-[#737680]">Perbandingan laju pembuatan task vs penyelesaian di ClickUp</p>
+              <p className="text-xs text-[#737680]">Perbandingan laju pembuatan task vs penyelesaian di aplikasi</p>
             </div>
             <div className="flex items-center gap-3 text-xs">
               <span className="flex items-center gap-1.5"><span className="dashboard-chart-created-swatch w-3 h-3 rounded-xs bg-[#24324A]" /> Dibuat</span>
@@ -808,8 +758,8 @@ export default function DashboardPage() {
         <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-[#24324A]">Distribusi Status Task ClickUp</h2>
-              <p className="text-xs text-[#737680]">Proporsi status real-time dari {filteredTasks.length} task ClickUp</p>
+              <h2 className="text-sm font-bold text-[#24324A]">Distribusi Status Task aplikasi</h2>
+              <p className="text-xs text-[#737680]">Proporsi status real-time dari {filteredTasks.length} task aplikasi</p>
             </div>
           </div>
 
@@ -840,7 +790,7 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <span className="text-xs text-[#737680] italic">Belum ada data task di ClickUp</span>
+              <span className="text-xs text-[#737680] italic">Belum ada data task di aplikasi</span>
             )}
           </div>
         </div>
@@ -849,7 +799,7 @@ export default function DashboardPage() {
         <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-[#24324A]">Beban Kerja per Anggota Tim ClickUp (Jam)</h2>
+              <h2 className="text-sm font-bold text-[#24324A]">Beban Kerja per Anggota Tim aplikasi (Jam)</h2>
               <p className="text-xs text-[#737680]">Estimasi jam tercatat vs kapasitas mingguan</p>
             </div>
             <Link href="/team" className="text-xs font-semibold text-[#F26B5E] hover:underline flex items-center">
@@ -880,7 +830,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-[#24324A]">Tren Penyelesaian Task Per Bulan</h2>
-              <p className="text-xs text-[#737680]">Tingkat penyelesaian deliverable ClickUp</p>
+              <p className="text-xs text-[#737680]">Tingkat penyelesaian deliverable aplikasi</p>
             </div>
           </div>
 
@@ -905,7 +855,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-[#24324A] flex items-center">
               <AlertTriangle className="w-4 h-4 text-[#D95858] mr-2" />
-              Task Prioritas Tinggi & Urgent di ClickUp
+              Task Prioritas Tinggi & Urgent di aplikasi
             </h2>
             <Link href="/tasks" className="text-xs font-semibold text-[#F26B5E] hover:underline">
               Kelola Semua Task →
@@ -947,7 +897,7 @@ export default function DashboardPage() {
         {/* Live Projects Overview (1 Col) */}
         <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[#24324A]">Project ClickUp Terbaru</h2>
+            <h2 className="text-sm font-bold text-[#24324A]">Project aplikasi Terbaru</h2>
             <Link href="/projects" className="text-xs font-semibold text-[#737680] hover:underline">
               Lihat Semua
             </Link>
@@ -977,7 +927,7 @@ export default function DashboardPage() {
               ))
             ) : (
               <div className="py-8 text-center text-xs text-[#737680]">
-                Belum ada project yang dibuat di ClickUp.
+                Belum ada project yang dibuat di aplikasi.
               </div>
             )}
           </div>

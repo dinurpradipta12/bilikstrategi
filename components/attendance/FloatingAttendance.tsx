@@ -35,7 +35,7 @@ type ActiveAttendance = {
 
 type AttendanceAction = 'checkin' | 'pause' | 'resume' | 'checkout';
 
-const DEFAULT_PROJECT = 'Bilik Strategi Workspace';
+const DEFAULT_PROJECT = 'Team Workspace';
 const ATTENDANCE_EVENT = 'bilik-attendance-changed';
 
 function text(value: unknown) {
@@ -229,8 +229,8 @@ export default function FloatingAttendance() {
     const bootstrap = async () => {
       try {
         const [userResponse, projectsResponse] = await Promise.all([
-          fetch('/api/clickup/user', { cache: 'no-store' }),
-          fetch('/api/clickup/projects', { cache: 'no-store' }),
+          fetch('/api/native/user', { cache: 'no-store' }),
+          fetch('/api/native/projects', { cache: 'no-store' }),
         ]);
 
         const userData = await userResponse.json().catch(() => ({}));

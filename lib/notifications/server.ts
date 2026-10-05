@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { normalizeIdentityEmail } from '@/lib/auth/app-role';
+import { DEFAULT_APP_WORKSPACE_ID, getServerWorkspaceContext } from '@/lib/auth/server-workspace-context';
 import { supabaseRest } from '@/lib/supabase/rest-client';
 import {
   isSupabaseAdminConfigured,
   supabaseAdminFetch,
 } from '@/lib/supabase/admin-rest-client';
 
-export const DEFAULT_NOTIFICATION_WORKSPACE = 'bilik-strategi';
+export const DEFAULT_NOTIFICATION_WORKSPACE = DEFAULT_APP_WORKSPACE_ID;
 
 export type NotificationActor = {
   id?: string;
@@ -53,35 +54,18 @@ export type AppNotification = {
   dedupe_key?: string | null;
 };
 
-function decodeCookie(value: string | undefined) {
-  if (!value) return '';
-  let decoded = value;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const next = decodeURIComponent(decoded);
-      if (next === decoded) break;
-      decoded = next;
-    } catch {
-      break;
-    }
-  }
-  return decoded;
-}
-
 function normalizeEmail(value: unknown) {
   return normalizeIdentityEmail(value);
 }
 
-export function getNotificationActor(req?: NextRequest): NotificationActor {
-  const email = normalizeEmail(decodeCookie(req?.cookies.get('clickup_user_email')?.value));
-  const name = decodeCookie(req?.cookies.get('clickup_user_name')?.value) || email.split('@')[0] || 'Pengguna';
-  const clickupId = decodeCookie(req?.cookies.get('clickup_user_id')?.value);
-  const avatar = decodeCookie(req?.cookies.get('clickup_user_avatar')?.value);
-  return { email, name, clickupId, avatar };
+export async function getNotificationActor(req?: NextRequest): Promise<NotificationActor> {
+  if (!req) return { email: '', name: 'Pengguna' };
+  const context = await getServerWorkspaceContext(req);
+  return { id: context.identity.id, email: context.identity.email, name: context.identity.name, avatar: context.identity.avatarUrl };
 }
 
-export function getNotificationWorkspaceId(req?: NextRequest) {
-  return decodeCookie(req?.cookies.get('app_workspace_id')?.value) || DEFAULT_NOTIFICATION_WORKSPACE;
+export function getNotificationWorkspaceId(_req?: NextRequest) {
+  return DEFAULT_NOTIFICATION_WORKSPACE;
 }
 
 async function readRows(table: string, select: string, filters: string) {
@@ -152,7 +136,7 @@ export async function publishNotification(input: PublishNotificationInput) {
   }
 
   const workspaceId = input.workspaceId || getNotificationWorkspaceId(input.req);
-  const actor = input.actor || getNotificationActor(input.req);
+  const actor = input.actor || await getNotificationActor(input.req);
   const requestedRecipients = uniqueEmails(input.recipientEmails || []);
   const excludedRecipients = new Set(uniqueEmails(input.excludeRecipientEmails || []));
   const recipientEmails = (input.audience === 'explicit'
@@ -219,7 +203,7 @@ export async function publishTaskCreated(req: NextRequest, task: any) {
   if (!id) return;
   const name = taskName(task);
   const project = String(task?.project_name || task?.project_id || 'project aplikasi');
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   const assignees = taskAssigneeEmails(task).filter((email) => email !== actor.email);
   const eventKey = `task:${id}:created`;
 
@@ -282,7 +266,7 @@ export async function publishTaskUpdated(req: NextRequest, task: any, previous?:
   if (previous && previousSignature === currentSignature) return;
 
   const token = String(task?.clickup_updated_at || task?.updated_at || task?.last_synced_at || Date.now());
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   const project = String(task?.project_name || task?.project_id || 'project aplikasi');
   const previousAssignees = new Set(taskAssigneeEmails(previous));
   const assignees = taskAssigneeEmails(task).filter((email) => email !== actor.email);
@@ -331,7 +315,7 @@ export async function publishTaskUpdated(req: NextRequest, task: any, previous?:
 export async function publishTaskDeleted(req: NextRequest, task: any) {
   const id = taskId(task);
   if (!id) return;
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   await publishNotification({
     req,
     actor,
@@ -360,7 +344,7 @@ export async function publishProjectEvent(
     excludeRecipientEmails?: string[];
   }
 ) {
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   await publishNotification({
     req,
     actor,
@@ -380,7 +364,7 @@ export async function publishProjectAssignments(
   req: NextRequest,
   input: { projectId: string; projectName: string; recipientEmails: string[] }
 ) {
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   const recipients = uniqueEmails(input.recipientEmails).filter((email) => email !== actor.email);
   if (recipients.length === 0) return;
 
@@ -403,7 +387,7 @@ export async function publishProjectAssignments(
 }
 
 export async function listNotifications(req: NextRequest, limit = 50) {
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   if (!actor.email || !isSupabaseAdminConfigured()) {
     return { notifications: [] as AppNotification[], unreadCount: 0, storageReady: isSupabaseAdminConfigured() };
   }
@@ -424,7 +408,7 @@ export async function listNotifications(req: NextRequest, limit = 50) {
 }
 
 export async function markNotificationsRead(req: NextRequest, body: any) {
-  const actor = getNotificationActor(req);
+  const actor = await getNotificationActor(req);
   if (!actor.email || !isSupabaseAdminConfigured()) return { storageReady: false };
 
   const workspaceId = getNotificationWorkspaceId(req);

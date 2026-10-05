@@ -22,7 +22,7 @@ import {
   Plus,
   UserPlus,
 } from 'lucide-react';
-import { AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/types/agency';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 
 interface TaskDetailDrawerProps {
@@ -36,7 +36,7 @@ interface TaskDetailDrawerProps {
   startInEditMode?: boolean;
 }
 
-interface ClickUpMember {
+interface TeamMember {
   id: string;
   name: string;
   email: string;
@@ -65,16 +65,16 @@ export default function TaskDetailDrawer({
   const [taskStatus, setTaskStatus] = useState<AgencyTask['status']>('to_do');
   const [taskPriority, setTaskPriority] = useState<AgencyTask['priority']>('normal');
   const [taskDueDate, setTaskDueDate] = useState('');
-  const [taskAssigneeId, setTaskAssigneeId] = useState('276885530');
+  const [taskAssigneeId, setTaskAssigneeId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  // Real ClickUp Team members for PIC dropdown
-  const [members, setMembers] = useState<ClickUpMember[]>([]);
+  // Real aplikasi Team members for PIC dropdown
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [currentUser, setCurrentUser] = useState({ name: 'Anggota', avatar: '' });
 
-  // Subtasks State (ClickUp Live Synced)
+  // Subtasks stored with the task.
   const [subtasks, setSubtasks] = useState<Array<{ id: string; name: string; status: 'completed' | 'to_do' }>>([]);
-  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   const [newSubtaskName, setNewSubtaskName] = useState('');
   const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
 
@@ -82,10 +82,9 @@ export default function TaskDetailDrawer({
   const [tagInput, setTagInput] = useState('');
   const [showAddTagInput, setShowAddTagInput] = useState(false);
 
-  // Real ClickUp Comments state
+  // Comments stored with the task.
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<Array<{ id: string; user: string; text: string; time: string; avatar?: string }>>([]);
-  const [loadingComments, setLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
 
   const [localTask, setLocalTask] = useState<AgencyTask | null>(task);
@@ -107,7 +106,7 @@ export default function TaskDetailDrawer({
       setTaskDueDate(
         task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
       );
-      setTaskAssigneeId(task.assignee_ids?.[0] || '276885530');
+      setTaskAssigneeId(task.assignee_ids?.[0] || '');
       setSubtasks(Array.isArray(persistedSubtasks) ? persistedSubtasks : []);
       setComments(Array.isArray(persistedComments) ? persistedComments : []);
       setIsEditing(startInEditMode);
@@ -115,16 +114,16 @@ export default function TaskDetailDrawer({
     }
   }, [task, startInEditMode]);
 
-  // Fetch real team members, ClickUp comments & subtasks when drawer opens
+  // Fetch team members and the signed-in user when the drawer opens.
   useEffect(() => {
     if (isOpen && task) {
       async function fetchMembers() {
         try {
-          const res = await fetch('/api/clickup/teams');
+          const res = await fetch('/api/native/teams');
           if (res.ok) {
             const data = await res.json();
             if (data.members && data.members.length > 0) {
-              const formatted: ClickUpMember[] = data.members.map((m: any) => ({
+              const formatted: TeamMember[] = data.members.map((m: any) => ({
                 id: String(m.id),
                 name: m.username || (m.email ? m.email.split('@')[0] : 'Team Member'),
                 email: m.email || '',
@@ -139,62 +138,11 @@ export default function TaskDetailDrawer({
         }
       }
 
-      async function fetchComments() {
-        const clickupTaskId = task?.clickup_task_id || task?.id;
-        if (!clickupTaskId || String(clickupTaskId).startsWith('app-')) return;
-        setLoadingComments(true);
-        try {
-          const res = await fetch(`/api/clickup/comments?taskId=${clickupTaskId}`);
-          if (res.ok) {
-            const data = await res.json();
-            const rawComments = data.comments || data;
-            if (Array.isArray(rawComments)) {
-              const formatted = rawComments.map((c: any) => ({
-                id: c.id || `c-${Math.random()}`,
-                user: c.user?.username || c.user?.email || 'User ClickUp',
-                avatar: c.user?.profilePicture || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
-                text: c.comment_text || c.text || '',
-                time: c.date ? new Date(parseInt(c.date, 10)).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : 'Baru saja',
-              }));
-              setComments(formatted);
-            }
-          }
-        } catch {
-          // Keep app-persisted comments.
-        } finally {
-          setLoadingComments(false);
-        }
-      }
-
-      async function fetchSubtasks() {
-        const clickupTaskId = task?.clickup_task_id || task?.id;
-        if (!clickupTaskId || String(clickupTaskId).startsWith('app-')) return;
-        setLoadingSubtasks(true);
-        try {
-          const res = await fetch(`/api/clickup/subtasks?taskId=${clickupTaskId}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data.subtasks) && data.subtasks.length > 0) {
-              const formatted = data.subtasks.map((st: any) => ({
-                id: String(st.id),
-                name: st.name || 'Subtask',
-                status: st.status?.status?.toLowerCase() === 'complete' || st.status?.status?.toLowerCase() === 'completed' || st.status?.type === 'closed' ? ('completed' as const) : ('to_do' as const),
-              }));
-              setSubtasks(formatted);
-              setLoadingSubtasks(false);
-              return;
-            }
-          }
-        } catch {
-          // ignore
-        } finally {
-          setLoadingSubtasks(false);
-        }
-      }
-
       fetchMembers();
-      fetchComments();
-      fetchSubtasks();
+      fetch('/api/native/user', { cache: 'no-store' })
+        .then((response) => response.json())
+        .then((data) => setCurrentUser({ name: String(data.user?.username || 'Anggota'), avatar: String(data.user?.profilePicture || '') }))
+        .catch(() => {});
     }
   }, [isOpen, task]);
 
@@ -223,7 +171,20 @@ export default function TaskDetailDrawer({
     return data.task || updatedTask;
   };
 
-  // Handle saving task edits to ClickUp API
+  const persistTaskChange = async (updatedTask: AgencyTask) => {
+    const previousTask = activeTask;
+    setLocalTask(updatedTask);
+    try {
+      const savedTask = await saveTaskToApp(updatedTask);
+      setLocalTask(savedTask);
+      onTaskUpdated?.(savedTask);
+    } catch (error) {
+      setLocalTask(previousTask);
+      alert(error instanceof Error ? error.message : 'Perubahan tugas gagal disimpan.');
+    }
+  };
+
+  // Save task edits to the team database.
   const handleSaveTaskEdits = async () => {
     setIsSaving(true);
     setSaveSuccessMsg(null);
@@ -252,21 +213,6 @@ export default function TaskDetailDrawer({
         onTaskUpdated(savedTask);
       }
 
-      fetch('/api/clickup/tasks', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: activeTask.clickup_task_id || activeTask.id,
-          name: taskName,
-          description: taskDesc,
-          status: taskStatus,
-          priority: taskPriority,
-          due_date: taskDueDate,
-          assignees: taskAssigneeId ? [taskAssigneeId] : undefined,
-          notification_silent: true,
-        }),
-      }).catch(() => {});
-
       setIsEditing(false);
       setSaveSuccessMsg('Perubahan task berhasil disimpan ke aplikasi.');
       setTimeout(() => setSaveSuccessMsg(null), 3500);
@@ -286,35 +232,19 @@ export default function TaskDetailDrawer({
     const subtaskText = newSubtaskName.trim();
     setNewSubtaskName('');
 
-    const tempId = `st_${Date.now()}`;
+    const tempId = `st_${crypto.randomUUID()}`;
     const newStItem = { id: tempId, name: subtaskText, status: 'to_do' as const };
     const updatedSubtasks = [...subtasks, newStItem];
     setSubtasks(updatedSubtasks);
 
-    const taskWithSubtasks = { ...activeTask, subtask_count: updatedSubtasks.length } as AgencyTask;
-    saveTaskToApp(taskWithSubtasks, { subtasks: updatedSubtasks }).then(setLocalTask).catch(() => {});
-
     try {
-      const res = await fetch('/api/clickup/subtasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listId: activeTask.project_id,
-          parentId: activeTask.clickup_task_id || activeTask.id,
-          name: subtaskText,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.subtask?.id) {
-          const finalSubtasks = updatedSubtasks.map((s) => (s.id === tempId ? { ...s, id: String(data.subtask.id) } : s));
-          setSubtasks(finalSubtasks);
-          saveTaskToApp({ ...activeTask, subtask_count: finalSubtasks.length } as AgencyTask, { subtasks: finalSubtasks }).then(setLocalTask).catch(() => {});
-        }
-      }
-    } catch {
-      // Keep optimistic subtask item
+      const savedTask = await saveTaskToApp({ ...activeTask, subtask_count: updatedSubtasks.length } as AgencyTask, { subtasks: updatedSubtasks });
+      setLocalTask(savedTask);
+      onTaskUpdated?.(savedTask);
+    } catch (error) {
+      setSubtasks(subtasks);
+      setNewSubtaskName(subtaskText);
+      alert(error instanceof Error ? error.message : 'Subtask gagal disimpan.');
     } finally {
       setIsCreatingSubtask(false);
     }
@@ -325,21 +255,13 @@ export default function TaskDetailDrawer({
     const updated = subtasks.map((s) => (s.id === subtaskId ? { ...s, status: nextStatus } : s));
     setSubtasks(updated);
 
-    if (activeTask) {
-      saveTaskToApp(activeTask, { subtasks: updated }).then(setLocalTask).catch(() => {});
-    }
-
     try {
-      await fetch('/api/clickup/subtasks', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subtaskId,
-          status: nextStatus === 'completed' ? 'complete' : 'to do',
-        }),
-      });
-    } catch {
-      // ignore
+      const savedTask = await saveTaskToApp(activeTask, { subtasks: updated });
+      setLocalTask(savedTask);
+      onTaskUpdated?.(savedTask);
+    } catch (error) {
+      setSubtasks(subtasks);
+      alert(error instanceof Error ? error.message : 'Subtask gagal diperbarui.');
     }
   };
 
@@ -347,16 +269,13 @@ export default function TaskDetailDrawer({
     const updated = subtasks.filter((s) => s.id !== subtaskId);
     setSubtasks(updated);
 
-    if (activeTask) {
-      saveTaskToApp({ ...activeTask, subtask_count: updated.length } as AgencyTask, { subtasks: updated }).then(setLocalTask).catch(() => {});
-    }
-
     try {
-      await fetch(`/api/clickup/subtasks?subtaskId=${subtaskId}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // ignore
+      const savedTask = await saveTaskToApp({ ...activeTask, subtask_count: updated.length } as AgencyTask, { subtasks: updated });
+      setLocalTask(savedTask);
+      onTaskUpdated?.(savedTask);
+    } catch (error) {
+      setSubtasks(subtasks);
+      alert(error instanceof Error ? error.message : 'Subtask gagal dihapus.');
     }
   };
 
@@ -369,9 +288,7 @@ export default function TaskDetailDrawer({
     if (!currentTags.includes(newTag)) {
       const updatedTags = [...currentTags, newTag];
       const updatedTask = { ...activeTask, tags: updatedTags };
-      setLocalTask(updatedTask);
-      if (onTaskUpdated) onTaskUpdated(updatedTask);
-      saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
+      void persistTaskChange(updatedTask);
     }
     setTagInput('');
     setShowAddTagInput(false);
@@ -380,9 +297,7 @@ export default function TaskDetailDrawer({
   const handleRemoveTag = (tagToRemove: string) => {
     const updatedTags = (activeTask.tags || []).filter((t) => t !== tagToRemove);
     const updatedTask = { ...activeTask, tags: updatedTags };
-    setLocalTask(updatedTask);
-    if (onTaskUpdated) onTaskUpdated(updatedTask);
-    saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
+    void persistTaskChange(updatedTask);
   };
 
   // Assignee Handlers
@@ -403,19 +318,7 @@ export default function TaskDetailDrawer({
         assignee_avatars: [...currentAvatars, selectedMember.avatar],
         assignee_emails: [...currentEmails, selectedMember.email],
       };
-      setLocalTask(updatedTask);
-      if (onTaskUpdated) onTaskUpdated(updatedTask);
-      saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
-
-      fetch('/api/clickup/tasks', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: activeTask.clickup_task_id || activeTask.id,
-          assignees: updatedTask.assignee_ids,
-          notification_silent: true,
-        }),
-      }).catch(() => {});
+      void persistTaskChange(updatedTask);
     }
   };
 
@@ -437,22 +340,10 @@ export default function TaskDetailDrawer({
       assignee_avatars: currentAvatars,
       assignee_emails: currentEmails,
     };
-    setLocalTask(updatedTask);
-    if (onTaskUpdated) onTaskUpdated(updatedTask);
-    saveTaskToApp(updatedTask).then(setLocalTask).catch(() => {});
-
-    fetch('/api/clickup/tasks', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        taskId: activeTask.clickup_task_id || activeTask.id,
-        assignees: currentIds,
-        notification_silent: true,
-      }),
-    }).catch(() => {});
+    void persistTaskChange(updatedTask);
   };
 
-  // Handle sending comment to app first; ClickUp sync runs in the background.
+  // Comments are stored with the task in the team database.
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -462,8 +353,8 @@ export default function TaskDetailDrawer({
     setCommentText('');
     const newComment = {
       id: `c_${Date.now()}`,
-      user: 'Dinur Pradipta',
-      avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+      user: currentUser.name,
+      avatar: currentUser.avatar || '/api/branding/icon',
       text: textToSend,
       time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     };
@@ -473,17 +364,11 @@ export default function TaskDetailDrawer({
     try {
       const savedTask = await saveTaskToApp({ ...activeTask, comments_count: nextComments.length } as AgencyTask, { comments: nextComments, subtasks });
       setLocalTask(savedTask);
-
-      fetch('/api/clickup/comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: activeTask.clickup_task_id || activeTask.id,
-          commentText: textToSend,
-        }),
-      }).catch(() => {});
-    } catch {
+      onTaskUpdated?.(savedTask);
+    } catch (error) {
       setComments(comments);
+      setCommentText(textToSend);
+      alert(error instanceof Error ? error.message : 'Komentar gagal disimpan.');
     } finally {
       setIsSendingComment(false);
     }
@@ -524,31 +409,20 @@ export default function TaskDetailDrawer({
               <span>{isEditing ? 'Mode Batal Edit' : 'Edit Task'}</span>
             </button>
 
-            <button
+            {activeTask.clickup_url && <button
               onClick={copyUrl}
               className="p-1.5 rounded-lg border border-[#E8E8EC] text-[#737680] hover:text-[#202124] hover:bg-[#FFFFFF] text-xs flex items-center gap-1 cursor-pointer"
               title="Salin URL Task"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>{copied ? 'Tersalin!' : 'Copy Link'}</span>
-            </button>
-
-            <a
-              href={activeTask.clickup_url}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1.5 rounded-lg bg-[#24324A] text-white text-xs flex items-center gap-1 hover:bg-[#1A2536]"
-              title="Buka di ClickUp"
-            >
-              <span>ClickUp</span>
-              <ExternalLink className="w-3.5 h-3.5 text-[#F26B5E]" />
-            </a>
+            </button>}
 
             {onDeleteTask && (
               <button
                 onClick={() => setShowConfirmDelete(true)}
                 className="p-1.5 rounded-lg border border-[#FFF0ED] bg-[#FFF0ED] text-[#D95858] hover:bg-[#D95858] hover:text-white transition-colors text-xs flex items-center gap-1 cursor-pointer ml-1"
-                title="Hapus Task dari ClickUp"
+                title="Hapus Task dari aplikasi"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -575,9 +449,9 @@ export default function TaskDetailDrawer({
             <div className="p-4 bg-[#FFFBF0] border border-[#FEF3D6] rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-[#E6A23C] flex items-center gap-1">
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Detail Task ClickUp
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Detail Task aplikasi
                 </span>
-                <span className="text-[10px] text-[#737680]">Perubahan akan langsung disimpan ke ClickUp</span>
+                <span className="text-[10px] text-[#737680]">Perubahan akan langsung disimpan ke aplikasi</span>
               </div>
 
               <div>
@@ -621,7 +495,7 @@ export default function TaskDetailDrawer({
                     className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg bg-[#FFFFFF] focus:outline-none focus:border-[#24324A]"
                   >
                     {members.length === 0 ? (
-                      <option value="276885530">Dinur Pradipta (owner)</option>
+                      <option value="276885530">Owner Tim (owner)</option>
                     ) : (
                       members.map((u) => (
                         <option key={u.id} value={u.id}>
@@ -788,11 +662,11 @@ export default function TaskDetailDrawer({
             </div>
           </div>
 
-          {/* Assignees / PIC ClickUp */}
+          {/* Assignees / PIC aplikasi */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider flex items-center">
-                <User className="w-3.5 h-3.5 mr-1 text-[#24324A]" /> Assignees / PIC ClickUp
+                <User className="w-3.5 h-3.5 mr-1 text-[#24324A]" /> Assignees / PIC aplikasi
               </h3>
               <select
                 onChange={(e) => {
@@ -817,7 +691,7 @@ export default function TaskDetailDrawer({
                 activeTask.assignee_names.map((name, idx) => (
                   <div key={name + idx} className="flex items-center gap-2 bg-[#F7F7F8] px-2.5 py-1 rounded-lg border border-[#E8E8EC] text-xs">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={activeTask.assignee_avatars?.[idx] || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg'} alt={name} className="w-5 h-5 rounded-full object-cover" />
+                    <img src={activeTask.assignee_avatars?.[idx] || '/api/branding/icon'} alt={name} className="w-5 h-5 rounded-full object-cover" />
                     <span className="font-semibold text-[#202124]">{name}</span>
                     {activeTask.assignee_names.length > 1 && (
                       <button
@@ -842,7 +716,6 @@ export default function TaskDetailDrawer({
               <h3 className="text-xs font-bold text-[#737680] uppercase tracking-wider flex items-center">
                 <CheckSquare className="w-3.5 h-3.5 mr-1 text-[#4F9D78]" />
                 Subtasks ({subtasks.length})
-                {loadingSubtasks && <RefreshCw className="w-3 h-3 animate-spin text-[#4F9D78] ml-1.5" />}
               </h3>
             </div>
 
@@ -906,8 +779,7 @@ export default function TaskDetailDrawer({
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-[#24324A] flex items-center gap-2">
                 <MessageSquare className="w-3.5 h-3.5 text-[#F26B5E]" />
-                <span>Komentar Task & Synchronized ClickUp Chat ({comments.length})</span>
-                {loadingComments && <RefreshCw className="w-3 h-3 animate-spin text-[#F26B5E]" />}
+                <span>Komentar Task & Synchronized aplikasi Chat ({comments.length})</span>
               </h3>
             </div>
 
@@ -942,7 +814,7 @@ export default function TaskDetailDrawer({
                 type="text"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Tulis komentar baru (otomatis tersimpan ke ClickUp)..."
+                placeholder="Tulis komentar baru (otomatis tersimpan ke aplikasi)..."
                 className="flex-1 px-3 py-2 text-xs border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-[#FFFFFF]"
               />
               <button

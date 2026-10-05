@@ -4,143 +4,76 @@ import { getNotificationActor, publishProjectEvent } from '@/lib/notifications/s
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-// Shared in-memory fallback store across all requests
-const globalProjectsStore: any[] = [];
-
-async function publishProjectNotification(req: NextRequest, input: Parameters<typeof publishProjectEvent>[1]) {
-  await publishProjectEvent(req, input).catch((error) => {
-    console.warn('[Projects API] Notification publish failed:', error);
-  });
+function uuid(value: unknown) {
+  const text = String(value || '');
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
+}
+function failure(error: unknown) {
+  return NextResponse.json({ error: error instanceof Error ? error.message : 'Project gagal disimpan.' }, { status: 503 });
 }
 
 export async function GET() {
-  try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      globalProjectsStore.length = 0;
-      globalProjectsStore.push(...data);
-      return NextResponse.json({ projects: data }, { headers: { 'Cache-Control': 'no-store' } });
-    }
-  } catch (error: any) {
-    console.warn('[Projects API] Supabase query error, fallback to memory', error);
-  }
-
-  return NextResponse.json({ projects: globalProjectsStore }, { headers: { 'Cache-Control': 'no-store' } });
+  const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+  if (error) return failure(error);
+  return NextResponse.json({ projects: data || [] }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, id, notification_silent: notificationSilent, actor_name: _actorName, ...projectData } = body;
-    const actorName = getNotificationActor(req).name;
-
+    const action = String(body.action || 'create');
+    const id = uuid(body.id || body.project_id);
+    const actor = await getNotificationActor(req);
     if (action === 'delete') {
-      const targetId = id || body.project_id;
-      const existingProject = globalProjectsStore.find((p) => p.id === targetId);
-      const index = globalProjectsStore.findIndex((p) => p.id === targetId);
-      if (index !== -1) globalProjectsStore.splice(index, 1);
-
-      try {
-        const { error } = await supabase.from('projects').delete().eq('id', targetId);
-        if (!error && !notificationSilent) {
-          await publishProjectNotification(req, {
-            type: 'project_deleted',
-            title: 'Project dihapus',
-            message: `${actorName} menghapus project "${existingProject?.name || body.name || 'Project'}".`,
-            projectId: String(targetId),
-            projectName: String(existingProject?.name || body.name || 'Project'),
-            token: new Date().toISOString(),
-          });
-        }
-      } catch (err) {
-        console.warn('[Projects API] Supabase delete error', err);
-      }
-
+      if (!id) return NextResponse.json({ error: 'Project tidak valid.' }, { status: 400 });
+      const { data, error } = await supabase.from('projects').delete().eq('id', id).select('*');
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length === 0) return NextResponse.json({ error: 'Project tidak ditemukan.' }, { status: 404 });
+      await publishProjectEvent(req, {
+        type: 'project_deleted', title: 'Project dihapus',
+        message: `${actor.name} menghapus project "${data[0].name}".`,
+        projectId: id, projectName: data[0].name, token: new Date().toISOString(),
+      }).catch(() => null);
       return NextResponse.json({ success: true, message: 'Project deleted' });
     }
 
-    if (action === 'update') {
-      const index = globalProjectsStore.findIndex((p) => p.id === id);
-      const updatedAt = new Date().toISOString();
-      const updatedProject = {
-        ...(index !== -1 ? globalProjectsStore[index] : {}),
-        ...projectData,
-        id,
-        updated_at: updatedAt,
-      };
-      if (index !== -1) {
-        globalProjectsStore[index] = updatedProject;
-      }
-
-      try {
-        const { error } = await supabase.from('projects').update({ ...projectData, updated_at: updatedAt }).eq('id', id);
-        if (!error && !notificationSilent) {
-          await publishProjectNotification(req, {
-            type: 'project_updated',
-            title: 'Project diperbarui',
-            message: `${actorName} memperbarui project "${updatedProject.name || 'Project'}".`,
-            projectId: String(id),
-            projectName: String(updatedProject.name || 'Project'),
-            token: updatedAt,
-            payload: { status: updatedProject.status || null },
-          });
-        }
-      } catch (err) {
-        console.warn('[Projects API] Supabase update error', err);
-      }
-
-      return NextResponse.json({ success: true, project: updatedProject });
+    let previous: Record<string, any> | null = null;
+    if (action === 'update' && id) {
+      const result = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
+      if (result.error) throw result.error;
+      previous = result.data;
+      if (!previous) return NextResponse.json({ error: 'Project tidak ditemukan.' }, { status: 404 });
     }
-
-    // Insert / Upsert new project
-    const isValidUUID = id && typeof id === 'string' && id.length > 20 && id.includes('-');
-    const newId = isValidUUID ? id : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'b0eebc99-9c0b-4ef8-bb6d-' + Date.now().toString(16).padStart(12, '0'));
-
-    const newProject = {
-      id: newId,
-      name: projectData.name || 'Project Baru',
-      description: projectData.description || projectData.content || '',
-      status: projectData.status || 'in_progress',
-      client_name: projectData.client_name || 'Bilik Strategi Workspace',
-      team_lead_name: projectData.team_lead_name || 'Dinur Pradipta',
-      progress: projectData.progress || 0,
-      start_date: projectData.start_date || new Date().toISOString().split('T')[0],
-      due_date: projectData.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      created_at: new Date().toISOString(),
+    const payload = {
+      ...(action === 'create' ? { id: id || crypto.randomUUID() } : {}),
+      name: String(body.name ?? previous?.name ?? '').trim(),
+      description: String(body.description ?? body.content ?? previous?.description ?? '').trim(),
+      status: String(body.status ?? previous?.status ?? 'in_progress'),
+      client_id: body.client_id === undefined ? previous?.client_id || null : uuid(body.client_id),
+      client_name: String(body.client_name ?? previous?.client_name ?? ''),
+      team_lead_id: body.team_lead_id === undefined ? previous?.team_lead_id || null : uuid(body.team_lead_id),
+      team_lead_name: String(body.team_lead_name ?? previous?.team_lead_name ?? actor.name),
+      member_ids: Array.isArray(body.member_ids) ? body.member_ids.map(String) : previous?.member_ids || [],
+      start_date: body.start_date ?? previous?.start_date ?? null,
+      due_date: body.due_date ?? previous?.due_date ?? null,
+      updated_at: new Date().toISOString(),
     };
-
-    const existingIdx = globalProjectsStore.findIndex((p) => p.id === newProject.id);
-    if (existingIdx !== -1) {
-      globalProjectsStore[existingIdx] = newProject;
-    } else {
-      globalProjectsStore.unshift(newProject);
+    if (!payload.name) return NextResponse.json({ error: 'Nama project wajib diisi.' }, { status: 400 });
+    if (action === 'update') {
+      if (!id) return NextResponse.json({ error: 'Project tidak valid.' }, { status: 400 });
+      const { data, error } = await supabase.from('projects').update(payload).eq('id', id).select('*');
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length === 0) return NextResponse.json({ error: 'Project tidak ditemukan.' }, { status: 404 });
+      return NextResponse.json({ success: true, project: data[0] });
     }
-
-    try {
-      const { error } = await supabase.from('projects').upsert([newProject]);
-      if (!error && !notificationSilent) {
-        await publishProjectNotification(req, {
-          type: 'project_created',
-          title: 'Project baru dibuat',
-          message: `${actorName} membuat project "${newProject.name}".`,
-          projectId: String(newProject.id),
-          projectName: String(newProject.name),
-          token: String(newProject.created_at),
-          payload: { status: newProject.status },
-        });
-      }
-    } catch (err) {
-      console.warn('[Projects API] Supabase insert error', err);
-    }
-
-    return NextResponse.json({ success: true, project: newProject });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Gagal menyimpan project' }, { status: 500 });
-  }
+    const { data, error } = await supabase.from('projects').insert(payload).select('*').single();
+    if (error) throw error;
+    await publishProjectEvent(req, {
+      type: 'project_created', title: 'Project baru dibuat',
+      message: `${actor.name} membuat project "${data.name}".`,
+      projectId: data.id, projectName: data.name, token: String(data.created_at || Date.now()),
+    }).catch(() => null);
+    return NextResponse.json({ success: true, project: data }, { status: 201 });
+  } catch (error) { return failure(error); }
 }

@@ -138,61 +138,7 @@ SELECT
 FROM public.app_user_roles
 ON CONFLICT (workspace_id, user_email) DO NOTHING;
 
--- Starter structure based on the supplied Social Media Specialist reference.
-INSERT INTO public.app_performance_items (
-  workspace_id,
-  item_type,
-  title,
-  description,
-  cadence,
-  scope_type,
-  scope_value,
-  weight,
-  sort_order,
-  created_by,
-  updated_by
-)
-SELECT
-  'bilik-strategi',
-  seed.item_type,
-  seed.title,
-  seed.description,
-  seed.cadence,
-  seed.scope_type,
-  seed.scope_value,
-  seed.weight,
-  seed.sort_order,
-  'snllabsarchive@gmail.com',
-  'snllabsarchive@gmail.com'
-FROM (
-  VALUES
-    ('job_description', 'Mengelola seluruh aktivitas Instagram yang ditangani', 'Bertanggung jawab atas interaksi audiens, produksi konten, dan optimasi akun.', 'monthly', 'role', 'Social Media Specialist', 10::NUMERIC, 10),
-    ('job_description', 'Membuat content plan, content writing, dan caption', 'Menyiapkan rencana serta materi konten sesuai timeline dan platform kerja tim.', 'monthly', 'role', 'Social Media Specialist', 10::NUMERIC, 20),
-    ('job_description', 'Mencapai ekspektasi dan tujuan divisi', 'Menjalankan target sesuai ekspektasi divisi serta arahan yang telah disepakati.', 'quarterly', 'role', 'Social Media Specialist', 10::NUMERIC, 30),
-    ('job_description', 'Menjalankan tanggung jawab jabatan secara mandiri', 'Menunjukkan inisiatif, kreativitas, problem solving, improvisasi, dan evaluasi dua arah.', 'quarterly', 'role', 'Social Media Specialist', 10::NUMERIC, 40),
-    ('job_description', 'Menjalankan pekerjaan sesuai SOP dan kewenangan', 'Mematuhi wilayah kerja, arahan, rincian tugas, hubungan kerja, peraturan, dan prosedur.', 'monthly', 'role', 'Social Media Specialist', 10::NUMERIC, 50),
-    ('job_description', 'Meningkatkan performa dan pengembangan jabatan', 'Mendiskusikan rencana pengembangan bersama strategist, creative manager, dan project manager.', 'quarterly', 'role', 'Social Media Specialist', 10::NUMERIC, 60),
-    ('job_description', 'Menggunakan fasilitas kerja sesuai kebijakan', 'Memanfaatkan Canva Premium dan aplikasi pendukung yang disediakan secara bertanggung jawab.', 'per_activity', 'role', 'Social Media Specialist', 5::NUMERIC, 70),
-    ('daily_activity', 'Check-in dan mengirim daily report', 'Lakukan presensi masuk/keluar dan kirim rangkuman pekerjaan setelah selesai bekerja.', 'daily', 'role', 'Social Media Specialist', 10::NUMERIC, 110),
-    ('daily_activity', 'Menangani interaksi admin', 'Balas chat, komentar, mention, dan repost yang masuk pada akun yang ditangani.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 120),
-    ('daily_activity', 'Membuat script konten sesuai timeline', 'Kerjakan script yang sudah direncanakan dan catat progres serta hambatannya.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 130),
-    ('daily_activity', 'Membuat content writing', 'Siapkan content writing dan caption untuk kebutuhan content development.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 140),
-    ('daily_activity', 'Upload konten sesuai jadwal', 'Publikasikan konten sesuai content plan yang telah disepakati.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 150),
-    ('daily_activity', 'Menganalisis performa konten', 'Bantu tim strategist membaca performa setiap konten yang sudah dipublikasikan.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 160),
-    ('daily_activity', 'Berkoordinasi dengan tim dan divisi terkait', 'Catat koordinasi, keputusan, dan tindak lanjut penting hari ini.', 'daily', 'role', 'Social Media Specialist', 15::NUMERIC, 170),
-    ('initiative', 'Hadir di weekly meeting dan monthly presentation', 'Kehadiran pada meeting terjadwal dan penyampaian progres.', 'weekly', 'team', '*', 5::NUMERIC, 210),
-    ('initiative', 'Brainstorming dan koordinasi antar tim', 'Berpartisipasi aktif dalam diskusi, brainstorming, dan sinkronisasi lintas divisi.', 'weekly', 'team', '*', 5::NUMERIC, 220),
-    ('initiative', 'Individual daily reporting minimal tiga pekerjaan', 'Laporkan minimal tiga aktivitas atau progres kerja setiap hari.', 'daily', 'team', '*', 10::NUMERIC, 230)
-) AS seed(item_type, title, description, cadence, scope_type, scope_value, weight, sort_order)
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM public.app_performance_items existing
-  WHERE existing.workspace_id = 'bilik-strategi'
-    AND existing.item_type = seed.item_type
-    AND existing.title = seed.title
-    AND existing.scope_type = seed.scope_type
-    AND existing.scope_value = seed.scope_value
-);
+-- KPI items begin empty in each new team installation.
 
 DO $$
 BEGIN

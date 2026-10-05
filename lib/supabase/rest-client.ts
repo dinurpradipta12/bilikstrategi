@@ -1,13 +1,5 @@
-const DEFAULT_SUPABASE_URL = 'https://spnawjvexcwhhyfavvew.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseUrl = rawUrl.includes('placeholder') ? DEFAULT_SUPABASE_URL : rawUrl;
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.includes('placeholder')
-    ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    : DEFAULT_SUPABASE_ANON_KEY;
+import 'server-only';
+import { getSupabaseAdminConfig } from '@/lib/supabase/admin-rest-client';
 
 type QueryResult<T = any> = {
   data: T | null;
@@ -99,13 +91,15 @@ class SupabaseRestQuery<T = any> implements PromiseLike<QueryResult<T>> {
   }
 
   private async execute(): Promise<QueryResult<T>> {
-    const url = `${supabaseUrl}/rest/v1/${this.table}?${this.params.toString()}`;
     try {
+      const config = getSupabaseAdminConfig();
+      if (!config) throw new Error('Database tim belum dikonfigurasi.');
+      const url = `${config.url}/rest/v1/${this.table}?${this.params.toString()}`;
       const response = await fetch(url, {
         method: this.method,
         headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
+          apikey: config.key,
+          Authorization: `Bearer ${config.key}`,
           'Content-Type': 'application/json',
           ...(this.prefer ? { Prefer: this.prefer } : {}),
         },

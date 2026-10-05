@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
-import SyncUpButton from '@/components/syncup/SyncUpButton';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 
 type ProjectTab = 'overview' | 'tasks' | 'timeline' | 'team' | 'files' | 'activity' | 'feedback';
@@ -261,7 +260,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
     // Fetch ClickUp team members & sync profile pictures
     async function fetchClickUpMembers() {
       try {
-        const res = await fetch('/api/clickup/teams');
+        const res = await fetch('/api/native/teams');
         if (res.ok) {
           const data = await res.json();
           if (data.members && data.members.length > 0) {
@@ -355,7 +354,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
     };
   }, []);
 
-  // Fetch Supabase projects, ClickUp projects & tasks
+  // Fetch projects and tasks from the team database.
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -374,8 +373,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   id: String(apiProject.id),
                   clickup_list_id: String(apiProject.clickup_list_id || apiProject.id),
                   name: apiProject.name || 'Project',
-                  description: apiProject.description || 'Project Bilik Strategi',
-                  client_name: apiProject.client_name || 'Bilik Strategi Workspace',
+                  description: apiProject.description || 'Project Team Workspace',
+                  client_name: apiProject.client_name || 'Team Workspace',
                   status: apiProject.status || 'in_progress',
                   start_date: apiProject.start_date || new Date().toISOString().split('T')[0],
                   due_date: apiProject.due_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -383,7 +382,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   total_tasks: apiProject.total_tasks || 0,
                   completed_tasks: apiProject.completed_tasks || 0,
                   overdue_tasks: apiProject.overdue_tasks || 0,
-                  team_lead_name: apiProject.team_lead_name || 'Dinur Pradipta',
+                  team_lead_name: apiProject.team_lead_name || 'Owner Tim',
                 };
               }
             }
@@ -391,20 +390,9 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
         } catch {}
       }
 
-      // 2. Try fetching from ClickUp API
-      if (!foundProject) {
-        try {
-          const res = await fetch('/api/clickup/projects');
-          if (res.ok) {
-            const data = await res.json();
-            foundProject = data.projects?.find((p: any) => p.id === projectId || p.clickup_list_id === projectId);
-          }
-        } catch {}
-      }
-
       if (foundProject) {
         setRealProject(foundProject);
-        if (foundProject.description && foundProject.description !== 'Project di ClickUp Workspace') {
+        if (foundProject.description && foundProject.description !== 'Project di aplikasi Workspace') {
           setMeta((prev) => ({ ...prev, description: foundProject.description }));
         }
       } else {
@@ -420,11 +408,11 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
           total_tasks: 0,
           completed_tasks: 0,
           overdue_tasks: 0,
-          team_lead_name: 'Dinur Pradipta',
+          team_lead_name: 'Owner Tim',
         });
       }
 
-      // Fetch app tasks first. ClickUp sync runs in the background from task actions.
+      // Fetch tasks for this project.
       try {
         const taskRes = await fetch(`/api/supabase/tasks?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         if (taskRes.ok) {
@@ -511,22 +499,18 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
     if (!deleteTargetTask) return;
 
     const target = deleteTargetTask;
-    const taskId = String(target.clickup_task_id || target.id);
+    const taskId = String(target.id);
     setIsDeletingTask(true);
-    setRealTasks((prev) => prev.filter((task) => {
-      const sameAppTask = task.id === target.id;
-      const sameClickUpTask = Boolean(target.clickup_task_id) && task.clickup_task_id === target.clickup_task_id;
-      return !sameAppTask && !sameClickUpTask;
-    }));
 
     try {
-      await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
-      if (target.clickup_task_id && !String(target.clickup_task_id).startsWith('app-')) {
-        await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(target.clickup_task_id)}`, { method: 'DELETE' }).catch(() => {});
-      }
+      const response = await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Tugas gagal dihapus.');
+      setRealTasks((prev) => prev.filter((task) => task.id !== target.id));
       setDeleteTargetTask(null);
       setIsTaskDrawerOpen(false);
       setSelectedTask(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Tugas gagal dihapus.');
     } finally {
       setIsDeletingTask(false);
     }
@@ -565,15 +549,13 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               <span className="px-2.5 py-0.5 text-[10px] font-bold bg-[#FFF0ED] text-[#F26B5E] rounded uppercase">
                 {meta.clientInfo.company_name || currentProject.client_name}
               </span>
-              <span className="text-xs text-[#737680] font-mono">ClickUp List ID: {currentProject.clickup_list_id}</span>
+              <span className="text-xs text-[#737680] font-mono">ID Project: {currentProject.id}</span>
             </div>
             <h1 className="text-2xl font-extrabold text-[#24324A]">{currentProject.name}</h1>
             <p className="text-xs text-[#737680] max-w-3xl leading-relaxed">{meta.description || currentProject.description}</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <SyncUpButton variant="header" roomTitle={`SyncUp - ${currentProject.name}`} />
-
             <button
               onClick={() => setIsEditOverviewOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E8EC] text-xs font-semibold text-[#24324A] rounded-xl hover:bg-[#F7F7F8] transition-colors cursor-pointer"
@@ -581,15 +563,6 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               <Edit3 className="w-3.5 h-3.5 text-[#F26B5E]" />
               <span>Edit Project Overview</span>
             </button>
-            <a
-              href={`https://app.clickup.com/v/l/${currentProject.clickup_list_id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-xl hover:bg-[#1A2536] transition-colors shadow-xs"
-            >
-              <span>Buka di ClickUp</span>
-              <ExternalLink className="w-3.5 h-3.5 text-white" />
-            </a>
           </div>
         </div>
 
@@ -617,8 +590,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                 const newStatus = e.target.value as any;
                 const newLog = {
                   id: 'act-' + Date.now(),
-                  user_name: 'Dinur Pradipta',
-                  user_avatar: 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+                  user_name: 'Owner Tim',
+                  user_avatar: '/api/branding/icon',
                   action: 'UBAH STATUS',
                   entity_name: currentProject.name,
                   details: `Status project diubah menjadi "${newStatus.replace('_', ' ').toUpperCase()}"`,
@@ -772,7 +745,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-[#24324A]">Task Project ({realTasks.length})</h3>
-              <p className="text-xs text-[#737680]">Task disinkronkan real-time dari aplikasi. ClickUp berjalan di latar belakang.</p>
+              <p className="text-xs text-[#737680]">Task disinkronkan real-time dari aplikasi. aplikasi berjalan di latar belakang.</p>
             </div>
             <button
               onClick={() => setIsTaskModalOpen(true)}
@@ -850,7 +823,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                         onClick={(event) => event.stopPropagation()}
                         className="text-[#F26B5E] hover:underline text-[11px] flex items-center gap-1"
                       >
-                        <span>ClickUp</span>
+                        <span>aplikasi</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
@@ -1889,7 +1862,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               <div className="flex items-center justify-between px-6 py-4 border-b border-[#E8E8EC] bg-[#F7F7F8]">
                 <h2 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-[#F26B5E]" />
-                  <span>Tambah Anggota Tim (Pilih dari ClickUp)</span>
+                  <span>Tambah Anggota Tim (Pilih dari aplikasi)</span>
                 </h2>
                 <button onClick={() => setIsEditTeamOpen(false)} className="p-1 text-[#737680] hover:text-[#202124]">
                   <X className="w-4 h-4" />
@@ -1919,7 +1892,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               >
                 <div>
                   <label className="block font-semibold text-[#202124] mb-1">
-                    Pilih Anggota Tim ClickUp Workspace *
+                    Pilih Anggota Tim aplikasi Workspace *
                   </label>
                   <select
                     value={selectedClickUpMemberId}
@@ -1927,7 +1900,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                     className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg bg-[#FFFFFF] focus:outline-none focus:border-[#24324A]"
                   >
                     {clickupMembers.length === 0 ? (
-                      <option value="">Memuat anggota tim ClickUp...</option>
+                      <option value="">Memuat anggota tim aplikasi...</option>
                     ) : (
                       clickupMembers.map((u) => (
                         <option key={u.id} value={u.id}>
@@ -1961,7 +1934,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                     type="submit"
                     className="px-5 py-2 font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs cursor-pointer"
                   >
-                    Tambah Member ClickUp
+                    Tambah Member aplikasi
                   </button>
                 </div>
               </form>
@@ -2125,8 +2098,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
 
                   const newLog: ActivityLogItem = {
                     id: 'act-' + Date.now(),
-                    user_name: chosenMember?.name || form.userSelect.value || 'Dinur Pradipta',
-                    user_avatar: chosenMember?.avatar || 'https://attachments.clickup.com/profilePictures/276885530_r2L.jpg',
+                    user_name: chosenMember?.name || form.userSelect.value || 'Owner Tim',
+                    user_avatar: chosenMember?.avatar || '/api/branding/icon',
                     action: form.actionType.value,
                     entity_name: form.entityName.value,
                     details: form.details.value,
@@ -2224,7 +2197,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       <ConfirmModal
         isOpen={Boolean(deleteTargetTask)}
         title="Hapus Task"
-        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.name || deleteTargetTask.task_name}" dari aplikasi dan ClickUp?` : ''}
+        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.name || deleteTargetTask.task_name}"?` : ''}
         confirmText="Hapus Task"
         cancelText="Batal"
         confirmVariant="danger"

@@ -3,19 +3,22 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BadgeCheck, Calculator, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
+import { BadgeCheck, Calculator, Clock, CheckSquare, FolderKanban, MessageCircle, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import { teamModuleForPage } from '@/lib/branding/types';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
+  const { branding } = useBranding();
   const [pageAccess, setPageAccess] = useState(DEFAULT_PAGE_ACCESS);
   const [hasUnrestrictedPageAccess, setHasUnrestrictedPageAccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    fetch('/api/clickup/user', { cache: 'no-store' })
+    fetch('/api/native/user', { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (cancelled || !data?.user) return;
@@ -63,6 +66,14 @@ export default function MobileBottomNav() {
       activeColor: '#3B82F6',
     },
     {
+      id: 'chat',
+      accessKey: 'chat',
+      label: 'Chat',
+      href: '/chat',
+      icon: MessageCircle,
+      activeColor: '#10B981',
+    },
+    {
       id: 'performance',
       accessKey: 'performance',
       label: 'KPI',
@@ -87,9 +98,11 @@ export default function MobileBottomNav() {
       activeColor: '#62B58D',
     },
   ];
-  const visibleNavItems = navItems.filter(
-    (item) => hasUnrestrictedPageAccess || pageAccess[item.accessKey] !== false
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    const moduleKey = teamModuleForPage(item.accessKey);
+    return (!moduleKey || branding.modules_enabled[moduleKey] !== false)
+      && (hasUnrestrictedPageAccess || pageAccess[item.accessKey] !== false);
+  });
 
   return (
     <>

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import type { TeamBranding } from '@/lib/branding/types';
 import {
   CalendarDays,
   Check,
@@ -124,7 +126,7 @@ function dateParts(value: string) {
   return { year: String(today.getFullYear()), day: String(today.getDate()).padStart(2, '0'), month: String(today.getMonth() + 1).padStart(2, '0') };
 }
 
-function generateAgreementNumber(agencyName = 'Bilik Strategi', issueDate = dateValue(new Date())) {
+function generateAgreementNumber(agencyName = 'Team', issueDate = dateValue(new Date())) {
   const { year, day, month } = dateParts(issueDate);
   return `CA/${generateAgreementId()}/${abbreviateAgencyName(agencyName)}/${day}${month}/${year}`;
 }
@@ -138,11 +140,11 @@ function toText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : value == null ? fallback : String(value);
 }
 
-function createDefaultAgreement(initialAgreementNumber?: string): AgreementData {
+function createDefaultAgreement(initialAgreementNumber?: string, brand?: TeamBranding): AgreementData {
   const today = new Date();
   const todayValue = dateValue(today);
   return {
-    agreementNumber: initialAgreementNumber || generateAgreementNumber('Bilik Strategi', todayValue),
+    agreementNumber: initialAgreementNumber || generateAgreementNumber(brand?.company_name || brand?.name || 'Team', todayValue),
     documentTitle: 'SURAT KETERANGAN',
     agreementTitle: 'COLLABORATION AGREEMENT',
     issueDate: todayValue,
@@ -150,16 +152,16 @@ function createDefaultAgreement(initialAgreementNumber?: string): AgreementData 
     fontFamily: FONT_OPTIONS[0].value,
     backgroundColor: '#FFFFFF',
     backgroundImageUrl: '',
-    accentColor: '#24324A',
+    accentColor: brand?.primary_color || '#24324A',
     textColor: '#202124',
-    logoUrl: '',
+    logoUrl: brand?.logo_url || '',
     signatureImageUrl: '',
     clientBlockTitle: 'Teruntuk Klien di bawah ini:',
     recipientBlockTitle: 'Akan menyerahkan kepada:',
-    issuerName: 'Bilik Strategi',
-    issuerAddress: 'Tuliskan alamat bisnis Anda',
-    issuerEmail: 'hello@bilikstrategi.com',
-    issuerPhone: '',
+    issuerName: brand?.company_name || brand?.name || 'Team',
+    issuerAddress: brand?.company_address || '',
+    issuerEmail: brand?.company_email || '',
+    issuerPhone: brand?.company_phone || '',
     clientName: 'a.n Nama Klien',
     clientBusinessType: 'Tipe usaha',
     clientAddress: 'Alamat klien',
@@ -241,7 +243,7 @@ function normalizeAgreementData(value: unknown, agreementNumber?: string): Agree
 
 function normalizeRecord(value: any, fallbackWorkspaceId: string): AgreementRecord {
   const rawData = value?.data && typeof value.data === 'object' && !Array.isArray(value.data) ? value.data : {};
-  const fallbackNumber = generateAgreementNumber(toText(rawData.issuerName, 'Bilik Strategi'), toText(rawData.issueDate, dateValue(new Date())));
+  const fallbackNumber = generateAgreementNumber(toText(rawData.issuerName, 'Team'), toText(rawData.issueDate, dateValue(new Date())));
   const status = ['draft', 'sent', 'signed', 'archived'].includes(value?.status) ? value.status : 'draft';
   return {
     id: toText(value?.id, `local-${Date.now()}`),
@@ -256,15 +258,12 @@ function normalizeRecord(value: any, fallbackWorkspaceId: string): AgreementReco
 }
 
 function getWorkspaceId() {
-  if (typeof document === 'undefined') return 'bilik-strategi';
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith('app_workspace_id='));
-  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) || 'bilik-strategi' : 'bilik-strategi';
+  return 'bilik-strategi';
 }
 
-function getCurrentEmail() {
-  if (typeof document === 'undefined') return '';
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith('clickup_user_email='));
-  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+async function getCurrentEmail() {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.email || '';
 }
 
 function formatDate(value: string) {
@@ -318,12 +317,13 @@ function InputLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?
 const inputClass = 'w-full rounded-lg border border-[#DDE1E7] bg-white px-3 py-2.5 text-xs text-[#202124] outline-none transition focus:border-[#24324A] focus:ring-2 focus:ring-[#24324A]/10';
 
 export default function AgreementsPage() {
+  const { branding } = useBranding();
   const previewRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [workspaceId, setWorkspaceId] = useState('bilik-strategi');
   const [records, setRecords] = useState<AgreementRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
-  const [draft, setDraft] = useState<AgreementData>(() => createDefaultAgreement(INITIAL_AGREEMENT_NUMBER));
+  const [draft, setDraft] = useState<AgreementData>(() => createDefaultAgreement(INITIAL_AGREEMENT_NUMBER, branding));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -434,7 +434,7 @@ export default function AgreementsPage() {
     setDraft(normalizedDraft);
     setSaving(true);
     setMessage(null);
-    const payload = { workspace_id: workspaceId, agreement_number: agreementNumber, status: 'draft', data: normalizedDraft, created_by_email: getCurrentEmail() || null, updated_at: new Date().toISOString() };
+    const payload = { workspace_id: workspaceId, agreement_number: agreementNumber, status: 'draft', data: normalizedDraft, created_by_email: await getCurrentEmail() || null, updated_at: new Date().toISOString() };
     const selectedRecord = records.find((item) => item.id === selectedId);
     try {
       const result = selectedRecord && !selectedId.startsWith('local-') ? await supabase.from('app_agreements').update(payload).eq('id', selectedId).select('*').single() : await supabase.from('app_agreements').insert(payload).select('*').single();

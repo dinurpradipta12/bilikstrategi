@@ -1,27 +1,26 @@
-const DEFAULT_SUPABASE_URL = 'https://spnawjvexcwhhyfavvew.supabase.co';
-
 type SupabaseAdminConfig = {
   url: string;
   key: string;
 };
 
-function getConfig(): SupabaseAdminConfig | null {
+export function getSupabaseAdminConfig(): SupabaseAdminConfig | null {
   const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-  if (!key || key === 'your-service-role-key' || key.includes('placeholder')) return null;
+  if (!key || /^(YOUR_|REPLACE_)/i.test(key) || key.includes('placeholder')) return null;
 
-  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const rawUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+  if (!/^https:\/\/[^/]+\.supabase\.co\/?$/.test(rawUrl) || /YOUR_|REPLACE_|placeholder/i.test(rawUrl)) return null;
   return {
-    url: rawUrl.includes('placeholder') ? DEFAULT_SUPABASE_URL : rawUrl,
+    url: rawUrl.replace(/\/$/, ''),
     key,
   };
 }
 
 export function isSupabaseAdminConfigured() {
-  return getConfig() !== null;
+  return getSupabaseAdminConfig() !== null;
 }
 
 export async function supabaseAdminFetch(path: string, init: RequestInit = {}) {
-  const config = getConfig();
+  const config = getSupabaseAdminConfig();
   if (!config) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di environment server.');
   }

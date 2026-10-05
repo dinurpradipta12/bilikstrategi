@@ -30,12 +30,12 @@ import {
   Zap,
   Lightbulb,
   Calculator,
+  MessageCircle,
 } from 'lucide-react';
-import { hasUnrestrictedPageAccess, isSuperuserEmail } from '@/lib/auth/app-role';
+import { hasUnrestrictedPageAccess } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
-import { useTheme } from '@/lib/theme';
-import darkExpandedLogo from '@/src/lcputihbilik.png';
-import darkCollapsedLogo from '@/src/whitebilik.png';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import { teamModuleForPage } from '@/lib/branding/types';
 
 function subscribeSidebarState(onStoreChange: () => void) {
   window.addEventListener('sidebar-toggle', onStoreChange);
@@ -73,21 +73,14 @@ function getNotificationCountSnapshot() {
   return Number(localStorage.getItem('bilik_notif_unread_count') || '0');
 }
 
-type SavedTeamMember = {
-  email?: unknown;
-  name?: unknown;
-  role?: unknown;
-  page_access?: unknown;
-};
-
 export default function Sidebar() {
   const pathname = usePathname();
-  const { isDark } = useTheme();
+  const { branding } = useBranding();
   const collapsed = useSyncExternalStore(subscribeSidebarState, getSidebarStateSnapshot, () => false);
   const [userProfile, setUserProfile] = useState({
-    name: 'Bilik Strategi',
+    name: 'Pengguna',
     role: 'member',
-    avatar: 'https://ui-avatars.com/api/?name=Bilik%20Strategi&background=24324A&color=fff',
+    avatar: '',
     unrestrictedPageAccess: false,
     ownerAccount: false,
     managerAccount: false,
@@ -115,9 +108,9 @@ export default function Sidebar() {
   };
 
   useEffect(() => {
-    async function loadClickUpProfile() {
-      let username = 'Dinur Pradipta';
-      let email = 'snllabsarchive@gmail.com';
+    async function loadProfile() {
+      let username = 'Pengguna';
+      let email = '';
       let avatar = '';
       let serverAppRole = '';
       let serverIsSuperuser = false;
@@ -134,7 +127,7 @@ export default function Sidebar() {
       }
 
       try {
-        const userRes = await fetch('/api/clickup/user');
+        const userRes = await fetch('/api/native/user');
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
@@ -147,51 +140,29 @@ export default function Sidebar() {
           }
         }
       } catch (err) {
-        console.warn('[Sidebar] ClickUp profile fetch failed, using default workspace profile.', err);
+        console.warn('[Sidebar] aplikasi profile fetch failed, using default workspace profile.', err);
       }
 
-      const isSuperOwner = serverIsSuperuser || isSuperuserEmail(email);
-      let resolvedRole = isSuperOwner ? 'Owner' : serverAppRole === 'owner' ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
-
-      if (!isSuperOwner && !serverAppRole) {
-        const savedTeamStr = localStorage.getItem('bilik_team_members');
-        if (savedTeamStr) {
-          try {
-            const parsed = JSON.parse(savedTeamStr);
-            if (Array.isArray(parsed)) {
-              const found = (parsed as SavedTeamMember[]).find(
-                (member) =>
-                  (member.email && String(member.email).toLowerCase().trim() === email.toLowerCase().trim()) ||
-                  (member.name && String(member.name).toLowerCase().trim() === username.toLowerCase().trim())
-              );
-              if (found && found.role) {
-                resolvedRole = String(found.role);
-              }
-              if (found?.page_access) {
-                resolvedPageAccess = normalizePageAccess(found.page_access);
-              }
-            }
-          } catch {}
-        }
-      }
+      const isSuperOwner = serverIsSuperuser || serverAppRole === 'owner';
+      const resolvedRole = isSuperOwner ? 'Owner' : serverAppRole === 'admin' ? 'Admin' : 'Member';
 
       setUserProfile({
         name: username,
         role: resolvedRole,
         avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=24324A&color=fff`,
         unrestrictedPageAccess: hasUnrestrictedPageAccess({
-          appRole: serverAppRole || resolvedRole,
+          appRole: serverAppRole,
           isSuperuser: isSuperOwner,
         }),
-        ownerAccount: isSuperuserEmail(email),
-        managerAccount: isSuperOwner || ['owner', 'admin'].includes(serverAppRole) || ['owner', 'admin'].includes(String(resolvedRole).toLowerCase()),
+        ownerAccount: isSuperOwner,
+        managerAccount: ['owner', 'admin'].includes(serverAppRole),
       });
       setPageAccess(resolvedPageAccess);
     }
 
-    loadClickUpProfile();
+    loadProfile();
 
-    const handleStorage = () => loadClickUpProfile();
+    const handleStorage = () => loadProfile();
     window.addEventListener('storage', handleStorage);
     window.addEventListener('bilik-role-updated', handleStorage);
 
@@ -210,7 +181,7 @@ export default function Sidebar() {
   }, [pathname]);
 
   const navItems: Array<{
-    key: PageAccessKey | 'finance' | 'salary_slips';
+    key: PageAccessKey;
     name: string;
     href: string;
     icon: typeof LayoutDashboard;
@@ -220,13 +191,14 @@ export default function Sidebar() {
   }> = [
     { key: 'dashboard', name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'projects', name: 'Projects', href: '/projects', icon: Briefcase },
-    { key: 'tasks', name: 'ClickUp Tasks', href: '/tasks', icon: CheckSquare },
+    { key: 'tasks', name: 'Tugas', href: '/tasks', icon: CheckSquare },
     { key: 'my_tasks', name: 'My Tasks', href: '/my-tasks', icon: ListTodo },
     { key: 'timeline', name: 'Timeline', href: '/timeline', icon: GanttChartSquare },
     { key: 'team', name: 'Team Workload', href: '/team', icon: Users },
+    { key: 'chat', name: 'Chat Tim', href: '/chat', icon: MessageCircle },
     { key: 'performance', name: 'KPI & Daily Activity', href: '/performance', icon: Target },
     { key: 'approvals', name: 'Approval Center', href: '/approvals', icon: BadgeCheck },
-    { key: 'profitability', name: 'Project Profitability', href: '/profitability', icon: ChartNoAxesCombined, managerOnly: true },
+    { key: 'profitability', name: 'Project Profitability', href: '/profitability', icon: ChartNoAxesCombined, ownerOnly: true },
     { key: 'automations', name: 'Automation Center', href: '/automations', icon: Zap, managerOnly: true },
     { key: 'attendance', name: 'Presensi Live', href: '/attendance', icon: Clock },
     { key: 'clients', name: 'Client Listing', href: '/clients', icon: Building2 },
@@ -243,6 +215,8 @@ export default function Sidebar() {
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
   ];
   const visibleNavItems = navItems.filter((item) => {
+    const moduleKey = teamModuleForPage(item.key);
+    if (moduleKey && branding.modules_enabled[moduleKey] === false) return false;
     if (item.ownerOnly) return userProfile.ownerAccount;
     if (item.managerOnly) return userProfile.managerAccount;
     return userProfile.unrestrictedPageAccess || pageAccess[item.key as PageAccessKey] !== false;
@@ -259,7 +233,7 @@ export default function Sidebar() {
       id: 'team-performance',
       name: 'Tim & Performa',
       icon: Users,
-      keys: ['team', 'performance', 'approvals', 'attendance'],
+      keys: ['team', 'chat', 'performance', 'approvals', 'attendance'],
     },
     {
       id: 'operations-documents',
@@ -355,21 +329,11 @@ export default function Sidebar() {
       <div className={`h-16 flex items-center justify-between border-b border-[#E8E8EC] ${collapsed ? 'px-2' : 'px-4'}`}>
         {!collapsed ? (
           <Link href="/dashboard" className="flex items-center gap-2.5 overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={isDark ? darkExpandedLogo.src : '/landscape.png'}
-              alt="Bilik Strategi Workspace"
-              className="h-9 max-w-[170px] object-contain"
-            />
+            {branding.logo_url ? <img src={branding.logo_url} alt={`Logo ${branding.name}`} className="h-9 max-w-[170px] object-contain" /> : <span className="truncate text-sm font-bold" style={{ color: branding.primary_color }}>{branding.name}</span>}
           </Link>
         ) : (
-          <Link href="/dashboard" className="flex items-center justify-center p-1 rounded-lg hover:bg-[#F7F7F8] transition-colors flex-shrink-0" title="Bilik Strategi Workspace">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={isDark ? darkCollapsedLogo.src : '/logobilik-hitam.png'}
-              alt="Bilik Strategi Workspace"
-              className="w-7 h-7 object-contain"
-            />
+          <Link href="/dashboard" className="flex items-center justify-center p-1 rounded-lg hover:bg-[#F7F7F8] transition-colors flex-shrink-0" title={branding.name}>
+            {branding.icon_url || branding.logo_url ? <img src={branding.icon_url || branding.logo_url} alt={`Ikon ${branding.name}`} className="h-7 w-7 object-contain" /> : <span className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold text-white" style={{ backgroundColor: branding.primary_color }}>{branding.short_name.charAt(0).toUpperCase()}</span>}
           </Link>
         )}
         <button

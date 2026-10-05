@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/clickup/users';
-import { isSuperuserEmail, normalizeIdentityEmail } from '@/lib/auth/app-role';
+import { getServerWorkspaceContext, DEFAULT_APP_WORKSPACE_ID } from '@/lib/auth/server-workspace-context';
+import { normalizeIdentityEmail } from '@/lib/auth/app-role';
 import { isSupabaseAdminConfigured, supabaseAdminFetch } from '@/lib/supabase/admin-rest-client';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const WORKSPACE_ID = 'bilik-strategi';
-const OWNER_EMAIL = 'snllabsarchive@gmail.com';
+const WORKSPACE_ID = DEFAULT_APP_WORKSPACE_ID;
 
 type RequestIdentity = { email: string; name: string };
-
-function decodeCookie(value: string | undefined) {
-  if (!value) return '';
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : value == null ? fallback : String(value).trim();
@@ -53,30 +43,10 @@ function dateOnly(value: unknown, fallback = new Date().toISOString().slice(0, 1
   return /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : fallback;
 }
 
-async function getRequestIdentity(req: NextRequest): Promise<RequestIdentity> {
-  const cookieEmail = normalizeIdentityEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
-  const cookieName = decodeCookie(req.cookies.get('clickup_user_name')?.value);
-  if (cookieEmail) return { email: cookieEmail, name: cookieName || cookieEmail.split('@')[0] };
-
-  const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (accessToken) {
-    try {
-      const authenticated = await getAuthenticatedUser(accessToken);
-      const user = authenticated?.user || {};
-      const email = normalizeIdentityEmail(user.email);
-      if (email) return { email, name: text(user.username, email.split('@')[0]) };
-    } catch {
-      // The app session remains the fallback when ClickUp has expired.
-    }
-  }
-
-  return { email: '', name: cookieName || 'Pengguna' };
-}
-
 async function requireOwner(req: NextRequest) {
-  const identity = await getRequestIdentity(req);
-  const allowed = isSuperuserEmail(identity.email) && identity.email === OWNER_EMAIL;
-  return { identity, allowed };
+  const context = await getServerWorkspaceContext(req);
+  const identity: RequestIdentity = { email: context.identity.email, name: context.identity.name };
+  return { identity, allowed: context.isActive && context.appRole === 'owner' };
 }
 
 function errorResponse(error: unknown, fallback: string, status = 500) {

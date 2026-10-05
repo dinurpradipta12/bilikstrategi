@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import type { TeamBranding } from '@/lib/branding/types';
 import {
   CalendarDays,
   Check,
@@ -152,7 +154,7 @@ function quoteDateParts(value: string) {
   };
 }
 
-function generateQuoteNumber(agencyName = 'Bilik Strategi', issueDate = dateValue(new Date())) {
+function generateQuoteNumber(agencyName = 'Team', issueDate = dateValue(new Date())) {
   const { year, day, month } = quoteDateParts(issueDate);
   return `QTN/${generateQuoteId()}/${abbreviateAgencyName(agencyName)}/${day}${month}/${year}`;
 }
@@ -171,11 +173,11 @@ function toText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : value == null ? fallback : String(value);
 }
 
-function createDefaultQuote(initialQuoteNumber?: string): QuoteData {
+function createDefaultQuote(initialQuoteNumber?: string, brand?: TeamBranding): QuoteData {
   const today = new Date();
   const todayValue = dateValue(today);
   return {
-    quoteNumber: initialQuoteNumber || generateQuoteNumber('Bilik Strategi', todayValue),
+    quoteNumber: initialQuoteNumber || generateQuoteNumber(brand?.company_name || brand?.name || 'Team', todayValue),
     title: 'PENAWARAN HARGA',
     issueDate: todayValue,
     validUntil: addDays(today, 14),
@@ -183,13 +185,13 @@ function createDefaultQuote(initialQuoteNumber?: string): QuoteData {
     fontFamily: FONT_OPTIONS[0].value,
     backgroundColor: '#FFFFFF',
     backgroundImageUrl: '',
-    accentColor: '#F26B5E',
-    textColor: '#24324A',
-    logoUrl: '',
-    issuerName: 'Bilik Strategi',
-    issuerAddress: 'Tuliskan alamat bisnis Anda',
-    issuerEmail: 'hello@bilikstrategi.com',
-    issuerPhone: '',
+    accentColor: brand?.accent_color || '#F26B5E',
+    textColor: brand?.primary_color || '#24324A',
+    logoUrl: brand?.logo_url || '',
+    issuerName: brand?.company_name || brand?.name || 'Team',
+    issuerAddress: brand?.company_address || '',
+    issuerEmail: brand?.company_email || '',
+    issuerPhone: brand?.company_phone || '',
     recipientName: 'Nama Penerima',
     recipientCompany: 'Nama Perusahaan Klien',
     recipientAddress: 'Alamat penerima',
@@ -281,7 +283,7 @@ function normalizeQuoteData(value: unknown, quoteNumber?: string): QuoteData {
 function normalizeRecord(value: any, fallbackWorkspaceId: string): QuoteRecord {
   const rawData = value?.data && typeof value.data === 'object' && !Array.isArray(value.data) ? value.data : {};
   const fallbackQuoteNumber = generateQuoteNumber(
-    toText(rawData.issuerName, 'Bilik Strategi'),
+    toText(rawData.issuerName, 'Team'),
     toText(rawData.issueDate, dateValue(new Date())),
   );
   const status = ['draft', 'sent', 'accepted', 'rejected'].includes(value?.status) ? value.status : 'draft';
@@ -298,15 +300,12 @@ function normalizeRecord(value: any, fallbackWorkspaceId: string): QuoteRecord {
 }
 
 function getWorkspaceId() {
-  if (typeof document === 'undefined') return 'bilik-strategi';
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith('app_workspace_id='));
-  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) || 'bilik-strategi' : 'bilik-strategi';
+  return 'bilik-strategi';
 }
 
-function getCurrentEmail() {
-  if (typeof document === 'undefined') return '';
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith('clickup_user_email='));
-  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+async function getCurrentEmail() {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.email || '';
 }
 
 function formatCurrency(amount: number, currency: string) {
@@ -411,6 +410,7 @@ const inputClass =
   'w-full rounded-lg border border-[#DDE1E7] bg-white px-3 py-2.5 text-xs text-[#202124] outline-none transition focus:border-[#24324A] focus:ring-2 focus:ring-[#24324A]/10';
 
 export default function QuotesPage() {
+  const { branding } = useBranding();
   const previewRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef('');
   const protectImportedDraftRef = useRef(false);
@@ -418,7 +418,7 @@ export default function QuotesPage() {
   const [workspaceId, setWorkspaceId] = useState('bilik-strategi');
   const [records, setRecords] = useState<QuoteRecord[]>([]);
   const [selectedId, setSelectedId] = useState('');
-  const [draft, setDraft] = useState<QuoteData>(() => createDefaultQuote(INITIAL_QUOTE_NUMBER));
+  const [draft, setDraft] = useState<QuoteData>(() => createDefaultQuote(INITIAL_QUOTE_NUMBER, branding));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -669,7 +669,7 @@ export default function QuotesPage() {
       quote_number: quoteNumber,
       status: 'draft',
       data: normalizedDraft,
-      created_by_email: getCurrentEmail() || null,
+      created_by_email: await getCurrentEmail() || null,
       updated_at: new Date().toISOString(),
     };
     const selectedRecord = records.find((item) => item.id === selectedId);

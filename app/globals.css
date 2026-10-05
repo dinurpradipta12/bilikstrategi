@@ -5,13 +5,15 @@
 
 @layer base {
   :root {
+    --brand-primary: #24324A;
+    --brand-accent: #F26B5E;
     --bg-main: #F7F7F8;
     --surface: #FFFFFF;
     --border: #E8E8EC;
     --text-primary: #202124;
     --text-secondary: #737680;
-    --primary-navy: #24324A;
-    --accent-coral: #F26B5E;
+    --primary-navy: var(--brand-primary);
+    --accent-coral: var(--brand-accent);
     --soft-coral: #FFF0ED;
     --soft-navy: #EEF2F7;
     --success: #4F9D78;
@@ -37,8 +39,8 @@
   --color-border-custom: #E8E8EC;
   --color-text-primary: #202124;
   --color-text-secondary: #737680;
-  --color-primary-navy: #24324A;
-  --color-accent-coral: #F26B5E;
+  --color-primary-navy: var(--brand-primary);
+  --color-accent-coral: var(--brand-accent);
   --color-soft-coral: #FFF0ED;
   --color-soft-navy: #EEF2F7;
   --color-success: #4F9D78;

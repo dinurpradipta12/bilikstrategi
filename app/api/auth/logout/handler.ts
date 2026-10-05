@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clearClickUpSessionCookies } from '@/lib/auth/clickup-session';
+import { createSupabaseServerClient } from '@/lib/supabase/server-client';
 
 export const runtime = 'edge';
 
 export async function GET(req: NextRequest) {
   const response = NextResponse.redirect(new URL('/login', req.url));
+  const { supabase, applyAuthCookies } = createSupabaseServerClient(req);
 
-  // Clear all session cookies
-  clearClickUpSessionCookies(response, req);
+  await supabase.auth.signOut().catch(() => null);
 
-  return response;
+  return applyAuthCookies(response);
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isSuperuserEmail, normalizeAppRole, normalizeIdentityEmail, type AppRole } from '@/lib/auth/app-role';
-import { getAuthenticatedUser } from '@/lib/clickup/users';
+import { normalizeAppRole, normalizeIdentityEmail, type AppRole } from '@/lib/auth/app-role';
+import { DEFAULT_APP_WORKSPACE_ID, getServerWorkspaceContext, type ServerWorkspaceIdentity } from '@/lib/auth/server-workspace-context';
 import { isSupabaseAdminConfigured, supabaseAdminFetch } from '@/lib/supabase/admin-rest-client';
 import type {
   PerformanceBootstrap,
@@ -22,40 +22,19 @@ export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const DEFAULT_WORKSPACE_ID = 'bilik-strategi';
+const DEFAULT_WORKSPACE_ID = DEFAULT_APP_WORKSPACE_ID;
 const ITEM_TYPES: PerformanceItemType[] = ['job_description', 'daily_activity', 'objective', 'key_result', 'initiative'];
 const CADENCES: PerformanceCadence[] = ['daily', 'weekly', 'monthly', 'quarterly', 'per_activity'];
 const SCOPES: PerformanceScopeType[] = ['team', 'division', 'role', 'user'];
 const UPDATE_STATUSES: PerformanceUpdateStatus[] = ['todo', 'in_progress', 'completed', 'blocked'];
 
-type RequestIdentity = {
-  email: string;
-  name: string;
-  avatarUrl: string;
-};
-
 type RequestContext = {
-  identity: RequestIdentity;
+  identity: ServerWorkspaceIdentity;
   workspaceId: string;
   roleRecord: PerformanceRoleRecord | null;
   appRole: AppRole;
   canManage: boolean;
 };
-
-function decodeCookie(value: string | undefined) {
-  if (!value) return '';
-  let decoded = value;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const next = decodeURIComponent(decoded);
-      if (next === decoded) break;
-      decoded = next;
-    } catch {
-      break;
-    }
-  }
-  return decoded.trim();
-}
 
 function cleanText(value: unknown, fallback = '', maxLength = 2000) {
   const text = String(value ?? fallback).trim();
@@ -75,47 +54,6 @@ function cleanNumber(value: unknown, fallback: number, min: number, max: number)
 function cleanDate(value: unknown, fallback: string) {
   const date = cleanText(value, fallback, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : fallback;
-}
-
-function getWorkspaceId(req: NextRequest) {
-  const candidate = cleanText(req.cookies.get('app_workspace_id')?.value, DEFAULT_WORKSPACE_ID, 80);
-  return /^[a-zA-Z0-9_-]+$/.test(candidate) ? candidate : DEFAULT_WORKSPACE_ID;
-}
-
-async function getRequestIdentity(req: NextRequest): Promise<RequestIdentity> {
-  const cookieEmail = cleanEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
-  const cookieName = decodeCookie(req.cookies.get('clickup_user_name')?.value);
-  const cookieAvatar = decodeCookie(req.cookies.get('clickup_user_avatar')?.value);
-
-  if (cookieEmail) {
-    const name = cookieName || cookieEmail.split('@')[0];
-    return {
-      email: cookieEmail,
-      name,
-      avatarUrl: cookieAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=24324A&color=fff`,
-    };
-  }
-
-  const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (accessToken) {
-    try {
-      const authenticated = await getAuthenticatedUser(accessToken);
-      const user = authenticated?.user;
-      const email = cleanEmail(user?.email);
-      if (email) {
-        const name = cleanText(user?.username, email.split('@')[0], 160);
-        return {
-          email,
-          name,
-          avatarUrl: cleanText(user?.profilePicture, `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=24324A&color=fff`, 1200),
-        };
-      }
-    } catch {
-      // Continue to the unauthenticated response below.
-    }
-  }
-
-  return { email: '', name: cookieName || 'Pengguna', avatarUrl: cookieAvatar };
 }
 
 async function adminJson(path: string, init: RequestInit = {}) {
@@ -155,13 +93,15 @@ async function getRoleRecord(email: string): Promise<PerformanceRoleRecord | nul
 }
 
 async function getRequestContext(req: NextRequest): Promise<RequestContext> {
-  const identity = await getRequestIdentity(req);
-  const workspaceId = getWorkspaceId(req);
-  const roleRecord = await getRoleRecord(identity.email).catch(() => null);
-  const superuser = isSuperuserEmail(identity.email) || roleRecord?.is_superuser === true;
-  const appRole = superuser ? 'owner' : normalizeAppRole(roleRecord?.role);
-  const canManage = roleRecord?.status !== 'inactive' && (superuser || appRole === 'owner' || appRole === 'admin');
-  return { identity, workspaceId, roleRecord, appRole, canManage };
+  const context = await getServerWorkspaceContext(req);
+  const roleRecord = await getRoleRecord(context.identity.email).catch(() => null);
+  return {
+    identity: context.identity,
+    workspaceId: context.workspaceId,
+    roleRecord,
+    appRole: context.appRole,
+    canManage: context.canManage,
+  };
 }
 
 function defaultProfile(context: RequestContext): PerformanceProfile {

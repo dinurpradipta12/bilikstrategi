@@ -41,8 +41,6 @@ export interface ContentSheetItem {
   updated_at?: string;
 }
 
-const DEFAULT_SHEETS: ContentSheetItem[] = [];
-
 const generateContentSheetId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -118,12 +116,8 @@ export default function ContentPlanPage() {
       updated_at: new Date().toISOString().split('T')[0],
     };
 
-    const updatedList = sheets.map((s) => (s.id === editingSheet.id ? updatedSheet : s));
-    setSheets(updatedList);
-    localStorage.setItem('bilik_content_sheets', JSON.stringify(updatedList));
-
     try {
-      await supabase
+      const { data, error } = await supabase
         .from('content_plan_sheets')
         .update({
           client_name: updatedSheet.client_name,
@@ -134,10 +128,16 @@ export default function ContentPlanPage() {
           logo_url: updatedSheet.logo_url,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', editingSheet.id);
+        .eq('id', editingSheet.id)
+        .select('id');
+      if (error) throw error;
+      if (!data?.length) throw new Error('Content Plan tidak ditemukan.');
     } catch (err) {
-      console.warn('[ContentPlan] Supabase update error:', err);
+      setToastMessage(err instanceof Error ? err.message : 'Content Plan gagal diperbarui.');
+      return;
     }
+
+    setSheets((current) => current.map((sheet) => sheet.id === editingSheet.id ? updatedSheet : sheet));
 
     setEditingSheet(null);
     setFormClientName('');
@@ -158,18 +158,18 @@ export default function ContentPlanPage() {
     if (!deletingSheet) return;
     const sheetToDelete = deletingSheet;
 
+    try {
+      const { data, error } = await supabase.from('content_plan_sheets').delete().eq('id', sheetToDelete.id).select('id');
+      if (error) throw error;
+      if (!data?.length) throw new Error('Content Plan tidak ditemukan.');
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : 'Content Plan gagal dihapus.');
+      return;
+    }
+
     const remaining = sheets.filter((s) => s.id !== sheetToDelete.id);
     setSheets(remaining);
-    if (selectedSheetId === sheetToDelete.id && remaining.length > 0) {
-      setSelectedSheetId(remaining[0].id);
-    }
-    localStorage.setItem('bilik_content_sheets', JSON.stringify(remaining));
-
-    try {
-      await supabase.from('content_plan_sheets').delete().eq('id', sheetToDelete.id);
-    } catch (err) {
-      console.warn('[ContentPlan] Supabase delete error:', err);
-    }
+    if (selectedSheetId === sheetToDelete.id) setSelectedSheetId(remaining[0]?.id || '');
 
     setDeletingSheet(null);
     if (editingSheet?.id === sheetToDelete.id) setEditingSheet(null);
@@ -195,7 +195,7 @@ export default function ContentPlanPage() {
 
   // Convert normal Google Sheets URL to embed URL
   const convertToEmbedUrl = (url: string) => {
-    if (!url) return 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/htmlembed?widget=true&headers=false';
+    if (!url) return '';
     
     // Extract Spreadsheet ID
     const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -207,7 +207,7 @@ export default function ContentPlanPage() {
     return url;
   };
 
-  // Fetch Sheets from Supabase or Fallback
+  // The shared team database is the source of truth for every member.
   const fetchSheetsFromSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -215,8 +215,8 @@ export default function ContentPlanPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        const mapped: ContentSheetItem[] = data.map((item: any) => ({
+      if (error) throw error;
+      const mapped: ContentSheetItem[] = (data || []).map((item: any) => ({
           id: String(item.id),
           client_name: item.client_name,
           title: item.title,
@@ -226,31 +226,11 @@ export default function ContentPlanPage() {
           status: item.status || 'active',
           logo_url: item.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.client_name)}&background=FFF0ED&color=F26B5E&font-size=0.4`,
           updated_at: item.updated_at || new Date().toISOString().split('T')[0],
-        }));
-        setSheets(mapped);
-        if (!selectedSheetId && mapped.length > 0) {
-          setSelectedSheetId(mapped[0].id);
-        }
-        localStorage.setItem('bilik_content_sheets', JSON.stringify(mapped));
-        return;
-      }
+      }));
+      setSheets(mapped);
+      setSelectedSheetId((current) => mapped.some((sheet) => sheet.id === current) ? current : mapped[0]?.id || '');
     } catch (err) {
-      console.warn('[ContentPlan] Supabase fetch error, fallback to local storage.', err);
-    }
-
-    const saved = localStorage.getItem('bilik_content_sheets');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setSheets(parsed);
-        if (parsed.length > 0 && !selectedSheetId) setSelectedSheetId(parsed[0].id);
-      } catch {
-        setSheets(DEFAULT_SHEETS);
-        setSelectedSheetId('');
-      }
-    } else {
-      setSheets(DEFAULT_SHEETS);
-      setSelectedSheetId('');
+      setToastMessage(err instanceof Error ? err.message : 'Content Plan gagal dimuat.');
     }
   };
 
@@ -307,11 +287,6 @@ export default function ContentPlanPage() {
       updated_at: new Date().toISOString().split('T')[0],
     };
 
-    const updated = [newSheet, ...sheets];
-    setSheets(updated);
-    setSelectedSheetId(newSheet.id);
-    localStorage.setItem('bilik_content_sheets', JSON.stringify(updated));
-
     const { error: insertError } = await supabase.from('content_plan_sheets').insert([
       {
         id: newSheet.id,
@@ -326,14 +301,13 @@ export default function ContentPlanPage() {
     ]);
 
     if (insertError) {
-      console.warn('[ContentPlan] Supabase insert error:', insertError);
-      setSheets(sheets);
-      setSelectedSheetId(sheets[0]?.id || '');
-      localStorage.setItem('bilik_content_sheets', JSON.stringify(sheets));
-      setToastMessage('Sheet gagal disimpan ke database. Periksa koneksi Supabase lalu coba lagi.');
+      setToastMessage(insertError.message || 'Sheet gagal disimpan ke database.');
       setTimeout(() => setToastMessage(null), 4000);
       return;
     }
+
+    setSheets((current) => [newSheet, ...current]);
+    setSelectedSheetId(newSheet.id);
 
     setShowAddModal(false);
     setFormClientName('');

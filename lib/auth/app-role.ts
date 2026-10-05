@@ -1,7 +1,7 @@
 export type AppRole = 'owner' | 'admin' | 'member' | 'client';
 
-// This account is the application owner, independent of the active ClickUp session.
-export const SUPERUSER_EMAIL = 'snllabsarchive@gmail.com';
+// Owner authority comes from the server-side profile and role record.
+export const SUPERUSER_EMAIL = '';
 
 /**
  * Cookie/query values can arrive URL-encoded, especially after OAuth redirects.
@@ -24,7 +24,8 @@ export function normalizeIdentityEmail(value: unknown) {
 }
 
 export function isSuperuserEmail(email?: unknown) {
-  return normalizeIdentityEmail(email) === SUPERUSER_EMAIL;
+  void email;
+  return false;
 }
 
 export function normalizeAppRole(value: unknown): AppRole {

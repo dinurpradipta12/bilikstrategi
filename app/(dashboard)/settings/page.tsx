@@ -1,342 +1,178 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import {
-  Settings,
-  Link2,
-  CheckCircle2,
-  RefreshCw,
-  AlertCircle,
-  Shield,
-  Key,
-  Database,
-  Users,
-  Bell,
-  Sparkles,
-  Plus,
-} from 'lucide-react';
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import { TEAM_MODULE_OPTIONS, type TeamBranding, type TeamModuleKey } from '@/lib/branding/types';
 
-type SettingsTab = 'general' | 'clickup' | 'users' | 'security';
-
-type AppWorkspace = {
-  id: string;
-  name: string;
-  slug: string;
-  clickup_workspace_id?: string | null;
-  clickup_space_id?: string | null;
-  clickup_sync_enabled?: boolean;
-  clickup_sync_status?: string;
-};
+type UserRow = { id: string; full_name: string; email: string; username: string; role: string; status: string };
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('clickup');
-  const [testingConnection, setTestingConnection] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [workspaces, setWorkspaces] = useState<AppWorkspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState('bilik-strategi');
-  const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [newClickUpWorkspaceId, setNewClickUpWorkspaceId] = useState('');
-  const [newClickUpSpaceId, setNewClickUpSpaceId] = useState('');
-  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
-  const [workspaceMessage, setWorkspaceMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { branding, refreshBranding } = useBranding();
+  const [form, setForm] = useState<TeamBranding>(branding);
+  const [isManager, setIsManager] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [newUser, setNewUser] = useState({ full_name: '', username: '', email: '', password: '', role: 'member' });
 
-  const loadWorkspaces = async () => {
-    try {
-      const res = await fetch('/api/app/workspaces', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal mengambil workspace');
-      setWorkspaces(data.workspaces || []);
-      setActiveWorkspaceId(data.current_workspace_id || 'bilik-strategi');
-    } catch (err: any) {
-      setWorkspaceMessage({ type: 'error', text: err.message || 'Gagal mengambil workspace' });
-    }
-  };
-
+  useEffect(() => { setForm(branding); }, [branding]);
   useEffect(() => {
-    loadWorkspaces();
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => {
+        setIsManager(['owner', 'admin'].includes(data.user?.app_role));
+        setIsOwner(data.user?.app_role === 'owner');
+      })
+      .catch(() => setIsManager(false));
   }, []);
+  useEffect(() => {
+    if (!isManager) return;
+    fetch('/api/admin/users', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => setUsers(Array.isArray(data.users) ? data.users : []))
+      .catch(() => {});
+  }, [isManager]);
 
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    setTestResult(null);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setTestingConnection(false);
-    setTestResult({
-      success: true,
-      message: 'Koneksi ClickUp API berhasil! Workspace "Bilik Strategi Main Workspace" terhubung dengan token terenkripsi.',
-    });
-  };
+  function field(key: Exclude<keyof TeamBranding, 'modules_enabled'>, label: string, hint = '') {
+    return (
+      <label className="block text-sm font-semibold" key={key}>
+        {label}
+        {hint && <span className="ml-2 text-xs font-normal text-[#737680]">{hint}</span>}
+        <input
+          type={key.endsWith('_color') ? 'color' : key === 'company_email' ? 'email' : 'text'}
+          value={form[key]}
+          disabled={!isManager}
+          onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+          className={`mt-1 block w-full rounded-lg border border-[#E8E8EC] bg-white px-3 py-2.5 font-normal disabled:opacity-60 ${key.endsWith('_color') ? 'h-11' : ''}`}
+        />
+      </label>
+    );
+  }
 
-  const handleCreateWorkspace = async () => {
-    const name = newWorkspaceName.trim();
-    if (!name) {
-      setWorkspaceMessage({ type: 'error', text: 'Nama workspace wajib diisi.' });
-      return;
-    }
-
-    setCreatingWorkspace(true);
-    setWorkspaceMessage(null);
+  async function save() {
+    setBusy(true);
+    setMessage('');
     try {
-      const res = await fetch('/api/app/workspaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          clickup_workspace_id: newClickUpWorkspaceId.trim() || null,
-          clickup_space_id: newClickUpSpaceId.trim() || null,
-          clickup_sync_enabled: Boolean(newClickUpWorkspaceId.trim() || newClickUpSpaceId.trim()),
-        }),
+      const brandFields = { ...form };
+      delete (brandFields as Partial<TeamBranding>).modules_enabled;
+      const response = await fetch('/api/branding', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isOwner ? form : brandFields),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal membuat workspace');
-      setNewWorkspaceName('');
-      setNewClickUpWorkspaceId('');
-      setNewClickUpSpaceId('');
-      setWorkspaceMessage({ type: 'success', text: 'Workspace baru dibuat dan dipilih sebagai workspace aktif.' });
-      await loadWorkspaces();
-      window.dispatchEvent(new Event('bilik-workspace-updated'));
-    } catch (err: any) {
-      setWorkspaceMessage({ type: 'error', text: err.message || 'Gagal membuat workspace' });
-    } finally {
-      setCreatingWorkspace(false);
-    }
-  };
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Gagal menyimpan branding.');
+      await refreshBranding();
+      setMessage('Identitas aplikasi berhasil disimpan.');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Gagal menyimpan branding.'); }
+    finally { setBusy(false); }
+  }
 
-  const handleSelectWorkspace = async (workspaceId: string) => {
-    setWorkspaceMessage(null);
+  async function upload(kind: 'logo' | 'icon', event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMessage('');
     try {
-      const res = await fetch('/api/app/workspaces', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_id: workspaceId }),
+      const body = new FormData();
+      body.set('kind', kind);
+      body.set('file', file);
+      const response = await fetch('/api/branding/upload', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Gagal mengunggah gambar.');
+      await refreshBranding();
+      setMessage(kind === 'logo' ? 'Logo berhasil diperbarui.' : 'Ikon berhasil diperbarui.');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Gagal mengunggah gambar.'); }
+    finally { setBusy(false); event.target.value = ''; }
+  }
+
+  async function createUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newUser),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Gagal memilih workspace');
-      setActiveWorkspaceId(workspaceId);
-      setWorkspaceMessage({ type: 'success', text: `Workspace aktif: ${data.workspace?.name || workspaceId}.` });
-      window.dispatchEvent(new Event('bilik-workspace-updated'));
-    } catch (err: any) {
-      setWorkspaceMessage({ type: 'error', text: err.message || 'Gagal memilih workspace' });
-    }
-  };
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Gagal membuat pengguna.');
+      setNewUser({ full_name: '', username: '', email: '', password: '', role: 'member' });
+      const list = await fetch('/api/admin/users', { cache: 'no-store' }).then((result) => result.json());
+      setUsers(Array.isArray(list.users) ? list.users : []);
+      setMessage('Pengguna berhasil dibuat.');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Gagal membuat pengguna.'); }
+    finally { setBusy(false); }
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Workspace Settings</h1>
-        <p className="text-xs text-[#737680] mt-1">
-          Pengaturan aplikasi, status integrasi ClickUp, manajemen peran pengguna, dan sinkronisasi.
-        </p>
-      </div>
+    <main className="mx-auto max-w-5xl space-y-6 pb-10">
+      <header>
+        <h1 className="text-2xl font-bold text-[#24324A]">Pengaturan Aplikasi</h1>
+        <p className="mt-1 text-sm text-[#737680]">Atur identitas visual dan anggota tim untuk aplikasi ini.</p>
+      </header>
+      {message && <p role="status" className="rounded-lg border border-[#E8E8EC] bg-white p-3 text-sm">{message}</p>}
 
-      {/* Tabs Header */}
-      <div className="flex items-center gap-2 border-b border-[#E8E8EC]">
-        {[
-          { id: 'clickup', label: 'ClickUp Integration', icon: Link2 },
-          { id: 'general', label: 'General & Workspace', icon: Settings },
-          { id: 'users', label: 'Users & Roles', icon: Users },
-          { id: 'security', label: 'Security & Webhooks', icon: Shield },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as SettingsTab)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs font-semibold border-b-2 transition-all ${
-                isActive ? 'border-[#F26B5E] text-[#F26B5E]' : 'border-transparent text-[#737680] hover:text-[#202124]'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* CLICKUP INTEGRATION TAB */}
-      {activeTab === 'clickup' && (
-        <div className="space-y-6">
-          {/* Connection Status Card */}
-          <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#EEF2F7] flex items-center justify-center text-[#24324A] font-bold">
-                  CU
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#24324A] flex items-center gap-2">
-                    ClickUp Workspace Connection Status
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-[#EEF2F7] text-[#4F9D78] rounded flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Connected
-                    </span>
-                  </h3>
-                  <p className="text-xs text-[#737680]">Metode: Personal Access Token (Encrypted Service Layer)</p>
-                </div>
+      <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 md:p-7">
+        <h2 className="text-lg font-bold">Branding</h2>
+        <p className="mt-1 text-sm text-[#737680]">Nama, logo, warna, dan identitas dokumen berlaku untuk aplikasi tim ini.</p>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          {(['logo', 'icon'] as const).map((kind) => (
+            <div key={kind} className="rounded-xl border border-[#E8E8EC] p-4">
+              <p className="text-sm font-semibold">{kind === 'logo' ? 'Logo aplikasi' : 'Ikon aplikasi / favicon'}</p>
+              <div className="mt-3 flex h-24 items-center justify-center rounded-lg bg-[#F7F7F8]">
+                {form[kind === 'logo' ? 'logo_url' : 'icon_url'] ? (
+                  <img src={form[kind === 'logo' ? 'logo_url' : 'icon_url']} alt={kind === 'logo' ? 'Pratinjau logo' : 'Pratinjau ikon'} className="max-h-20 max-w-full object-contain" />
+                ) : <span className="text-xs text-[#737680]">Belum ada gambar</span>}
               </div>
-
-              <button
-                onClick={handleTestConnection}
-                disabled={testingConnection}
-                className="px-4 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-xl hover:bg-[#1A2536] transition-colors flex items-center gap-1.5 shadow-2xs"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-[#F26B5E] ${testingConnection ? 'animate-spin' : ''}`} />
-                <span>{testingConnection ? 'Menguji...' : 'Test Connection'}</span>
-              </button>
+              {isManager && <input aria-label={`Unggah ${kind}`} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => void upload(kind, event)} className="mt-3 block w-full text-xs" />}
+              <p className="mt-2 text-xs text-[#737680]">PNG, JPG, atau WebP; maksimal 2 MB. Ikon sebaiknya berbentuk persegi.</p>
             </div>
-
-            {testResult && (
-              <div className="p-4 bg-[#EEF2F7] border border-[#4F9D78] text-[#4F9D78] text-xs rounded-xl flex items-center">
-                <CheckCircle2 className="w-4 h-4 mr-2 flex-shrink-0" />
-                {testResult.message}
-              </div>
-            )}
-
-            {/* Info Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[#E8E8EC] text-xs">
-              <div>
-                <span className="text-[#737680] block text-[11px]">Workspace ID</span>
-                <span className="font-mono font-bold text-[#24324A]">90001122</span>
-              </div>
-              <div>
-                <span className="text-[#737680] block text-[11px]">Token Security Status</span>
-                <span className="font-mono text-[#737680]">pk_1234****_secured_in_env</span>
-              </div>
-              <div>
-                <span className="text-[#737680] block text-[11px]">Terakhir Disinkronkan</span>
-                <span className="font-semibold text-[#202124]">Baru saja (Live Sync)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Webhook Status Box */}
-          <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
-            <h3 className="text-sm font-bold text-[#24324A]">Status Webhook ClickUp</h3>
-            <p className="text-xs text-[#737680]">
-              Webhook mendengarkan event <code>taskCreated</code>, <code>taskUpdated</code>, <code>taskStatusUpdated</code>, dan <code>taskCommentPosted</code>.
-            </p>
-            <div className="p-3 bg-[#F7F7F8] border border-[#E8E8EC] rounded-xl text-xs flex items-center justify-between">
-              <span className="font-mono text-[#24324A]">https://bilikstrategi.com/api/webhooks/clickup</span>
-              <span className="px-2 py-0.5 bg-[#EEF2F7] text-[#4F9D78] font-bold rounded text-[10px]">Active & Verified</span>
-            </div>
-          </div>
+          ))}
         </div>
-      )}
-
-      {/* GENERAL TAB */}
-      {activeTab === 'general' && (
-        <div className="space-y-6">
-          <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-[#24324A]">Workspace Aplikasi</h3>
-              <p className="text-xs text-[#737680] mt-1">
-                Workspace aplikasi menjadi sumber utama data realtime. ClickUp hanya disiapkan sebagai sinkronisasi latar belakang.
-              </p>
-            </div>
-
-            {workspaceMessage && (
-              <div
-                className={`p-3 rounded-xl border text-xs ${
-                  workspaceMessage.type === 'success'
-                    ? 'bg-[#EEF8F3] border-[#B8E1CB] text-[#2F7D58]'
-                    : 'bg-[#FFF0ED] border-[#FFC7BE] text-[#C94D43]'
-                }`}
-              >
-                {workspaceMessage.text}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="block font-semibold mb-1 text-xs text-[#202124]">Nama Workspace</label>
-                <input
-                  type="text"
-                  value={newWorkspaceName}
-                  onChange={(e) => setNewWorkspaceName(e.target.value)}
-                  placeholder="Contoh: Brand Client A"
-                  className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg text-xs"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1 text-xs text-[#202124]">ClickUp Workspace ID</label>
-                <input
-                  type="text"
-                  value={newClickUpWorkspaceId}
-                  onChange={(e) => setNewClickUpWorkspaceId(e.target.value)}
-                  placeholder="Opsional"
-                  className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg text-xs"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1 text-xs text-[#202124]">ClickUp Space ID</label>
-                <input
-                  type="text"
-                  value={newClickUpSpaceId}
-                  onChange={(e) => setNewClickUpSpaceId(e.target.value)}
-                  placeholder="Opsional"
-                  className="w-full px-3 py-2 border border-[#E8E8EC] rounded-lg text-xs"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleCreateWorkspace}
-              disabled={creatingWorkspace}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-lg hover:bg-[#1A2536] disabled:opacity-60"
-            >
-              <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
-              {creatingWorkspace ? 'Membuat...' : 'Buat Workspace'}
-            </button>
+        <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="mt-6 space-y-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {field('name', 'Nama aplikasi')}
+            {field('short_name', 'Nama singkat', 'Untuk ikon aplikasi')}
+            {field('tagline', 'Deskripsi singkat')}
+            {field('company_name', 'Nama perusahaan')}
+            {field('primary_color', 'Warna utama')}
+            {field('accent_color', 'Warna aksen')}
+            {field('company_email', 'Email perusahaan')}
+            {field('company_phone', 'Telepon perusahaan')}
           </div>
+          {field('company_address', 'Alamat perusahaan')}
+          {isManager && <button type="submit" disabled={busy} className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ backgroundColor: branding.primary_color }}>{busy ? 'Menyimpan…' : 'Simpan branding'}</button>}
+        </form>
+      </section>
 
-          <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-3">
-            <h3 className="text-sm font-bold text-[#24324A]">Daftar Workspace</h3>
-            <div className="divide-y divide-[#E8E8EC] border border-[#E8E8EC] rounded-xl overflow-hidden">
-              {workspaces.length === 0 && (
-                <div className="p-4 text-xs text-[#737680]">Belum ada workspace tersimpan.</div>
-              )}
-              {workspaces.map((workspace) => (
-                <div key={workspace.id} className="p-4 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-[#24324A] truncate">{workspace.name}</p>
-                    <p className="text-[11px] text-[#737680] font-mono truncate">
-                      {workspace.slug} {workspace.clickup_space_id ? `• ClickUp Space ${workspace.clickup_space_id}` : ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleSelectWorkspace(workspace.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-                      activeWorkspaceId === workspace.id
-                        ? 'bg-[#EEF8F3] border-[#B8E1CB] text-[#2F7D58]'
-                        : 'bg-white border-[#E8E8EC] text-[#24324A] hover:bg-[#F7F7F8]'
-                    }`}
-                  >
-                    {activeWorkspaceId === workspace.id ? 'Aktif' : 'Pilih'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+      {isOwner && <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 md:p-7">
+        <h2 className="text-lg font-bold">Fitur Aplikasi</h2>
+        <p className="mt-1 text-sm text-[#737680]">Semua fitur aktif sejak awal. Fitur yang dinonaktifkan disembunyikan dari navigasi dan akses datanya ditutup untuk tim ini.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {TEAM_MODULE_OPTIONS.map(({ key, label }) => <label key={key} className="flex items-center justify-between gap-3 rounded-lg border border-[#E8E8EC] px-4 py-3 text-sm">
+            <span>{label}</span>
+            <input type="checkbox" checked={form.modules_enabled[key]} onChange={(event) => {
+              const enabled = event.target.checked;
+              setForm((current) => ({ ...current, modules_enabled: { ...current.modules_enabled, [key as TeamModuleKey]: enabled } }));
+            }} className="size-4 accent-[#24324A]" />
+          </label>)}
         </div>
-      )}
+        <button type="button" onClick={() => void save()} disabled={busy} className="mt-5 rounded-lg bg-[#24324A] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60">Simpan pengaturan fitur</button>
+      </section>}
 
-      {/* USERS & ROLES TAB */}
-      {activeTab === 'users' && (
-        <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-          <h3 className="text-sm font-bold text-[#24324A]">Manajemen Hak Akses & Peran Pengguna</h3>
-          <div className="space-y-2 text-xs">
-            <p className="text-[#737680]">Peran yang tersedia: Owner, Admin, Team Lead, Member, dan Client Portal.</p>
-          </div>
+      {isManager && <section className="rounded-2xl border border-[#E8E8EC] bg-white p-5 md:p-7">
+        <h2 className="text-lg font-bold">Anggota Tim</h2>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-[#E8E8EC]">
+          <table className="w-full min-w-[500px] text-left text-sm">
+            <thead className="bg-[#F7F7F8]"><tr><th className="p-3">Nama</th><th className="p-3">Email</th><th className="p-3">Peran</th><th className="p-3">Status</th></tr></thead>
+            <tbody>{users.map((user) => <tr key={user.id} className="border-t border-[#E8E8EC]"><td className="p-3">{user.full_name}</td><td className="p-3">{user.email}</td><td className="p-3">{user.role}</td><td className="p-3">{user.status}</td></tr>)}</tbody>
+          </table>
         </div>
-      )}
-
-      {/* SECURITY TAB */}
-      {activeTab === 'security' && (
-        <div className="p-6 bg-[#FFFFFF] border border-[#E8E8EC] rounded-2xl shadow-2xs space-y-4">
-          <h3 className="text-sm font-bold text-[#24324A]">Keamanan & Row Level Security (RLS)</h3>
-          <p className="text-xs text-[#737680]">Token ClickUp tidak pernah dipublikasikan ke browser dan selalu dilindungi oleh proxy API Backend Next.js.</p>
-        </div>
-      )}
-    </div>
+        <form onSubmit={createUser} className="mt-5 grid gap-3 sm:grid-cols-2">
+          {(['full_name', 'username', 'email', 'password'] as const).map((key) => <label key={key} className="text-sm font-semibold">{({ full_name: 'Nama lengkap', username: 'Username', email: 'Email', password: 'Password awal' })[key]}<input required type={key === 'email' ? 'email' : key === 'password' ? 'password' : 'text'} value={newUser[key]} onChange={(event) => setNewUser((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 block w-full rounded-lg border border-[#E8E8EC] px-3 py-2.5 font-normal" /></label>)}
+          <label className="text-sm font-semibold">Peran<select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))} className="mt-1 block w-full rounded-lg border border-[#E8E8EC] px-3 py-2.5 font-normal"><option value="member">Member</option><option value="admin">Admin</option><option value="client">Client</option>{isOwner && <option value="owner">Owner</option>}</select></label>
+          <div className="flex items-end"><button type="submit" disabled={busy} className="w-full rounded-lg bg-[#24324A] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">Tambah anggota</button></div>
+        </form>
+      </section>}
+    </main>
   );
 }

@@ -814,7 +814,7 @@ function ManagerWorkspace({ data, saveAction }: { data: PerformanceBootstrap; sa
               <label><span className={labelClass}>Jabatan / Role</span><input list="performance-roles" required value={profileDraft.role_title} onChange={(event) => setProfileDraft({ ...profileDraft, role_title: event.target.value })} className={inputClass} placeholder="Social Media Specialist" /><datalist id="performance-roles">{Array.from(new Set(data.profiles.map((profile) => profile.role_title))).map((value) => <option key={value} value={value} />)}<option value="Social Media Specialist" /></datalist></label>
               <label><span className={labelClass}>Manager</span><select value={profileDraft.manager_email} onChange={(event) => setProfileDraft({ ...profileDraft, manager_email: event.target.value })} className={inputClass}><option value="">Belum ditentukan</option>{data.profiles.filter((profile) => profile.user_email !== profileDraft.user_email).map((profile) => <option key={profile.user_email} value={profile.user_email}>{profile.display_name}</option>)}</select></label>
             </div>
-            <div className="rounded-xl border border-[#D9E5F5] bg-[#F2F7FF] px-3 py-3 text-[11px] leading-5 text-[#49617F] dark:border-[#33445B] dark:bg-[#1B2635] dark:text-[#AFC3DE]">Avatar otomatis mengikuti foto profil ClickUp berdasarkan Email Login. Ubah foto langsung dari profil ClickUp jika diperlukan.</div>
+            <div className="rounded-xl border border-[#D9E5F5] bg-[#F2F7FF] px-3 py-3 text-[11px] leading-5 text-[#49617F] dark:border-[#33445B] dark:bg-[#1B2635] dark:text-[#AFC3DE]">Avatar otomatis mengikuti foto profil aplikasi berdasarkan Email Login. Ubah foto langsung dari profil aplikasi jika diperlukan.</div>
             <label><span className={labelClass}>Ringkasan Pekerjaan</span><textarea value={profileDraft.job_summary} onChange={(event) => setProfileDraft({ ...profileDraft, job_summary: event.target.value })} className={`${inputClass} min-h-28 resize-y`} placeholder="Jelaskan fokus utama dan outcome yang diharapkan dari role ini..." /></label>
             <label className="flex items-center gap-3 rounded-xl border border-[#E5E7EB] px-3 py-3 text-xs font-bold text-[#4A5568] dark:border-[#303742] dark:text-[#CBD2DC]"><input type="checkbox" checked={profileDraft.active} onChange={(event) => setProfileDraft({ ...profileDraft, active: event.target.checked })} className="h-4 w-4 accent-[#F26B5E]" /> Profil aktif dan masuk perhitungan team</label>
             <div className="rounded-xl bg-[#F7F7F8] px-3 py-3 text-[11px] leading-5 text-[#737680] dark:bg-[#252B34] dark:text-[#AAB2BF]">Hak dashboard owner mengikuti role aplikasi Owner/Admin yang diatur pada halaman Team. Field profil ini tidak dapat menaikkan hak akses sendiri.</div>
@@ -1058,7 +1058,7 @@ function ManagerWorkspaceSwitcher({ data, saveAction }: { data: PerformanceBoots
 
 export default function PerformanceWorkspace() {
   const [data, setData] = useState<PerformanceBootstrap | null>(null);
-  const [clickUpAvatars, setClickUpAvatars] = useState<Record<string, string>>({});
+  const [teamAvatars, setTeamAvatars] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -1080,9 +1080,9 @@ export default function PerformanceWorkspace() {
     }
   }, []);
 
-  const loadClickUpAvatars = useCallback(async () => {
+  const loadTeamAvatars = useCallback(async () => {
     try {
-      const response = await fetch('/api/clickup/teams', { cache: 'no-store' });
+      const response = await fetch('/api/native/teams', { cache: 'no-store' });
       if (!response.ok) return;
       const payload = await response.json().catch(() => ({}));
       const members = Array.isArray(payload.members) ? payload.members : [];
@@ -1092,19 +1092,19 @@ export default function PerformanceWorkspace() {
         const avatar = String(member?.profilePicture || '').trim();
         if (email && avatar) next[email] = avatar;
       });
-      setClickUpAvatars(next);
+      setTeamAvatars(next);
     } catch {
-      // Keep the existing avatar map when ClickUp is temporarily unavailable.
+      // Keep the existing avatar map when the team directory is unavailable.
     }
   }, []);
 
   useEffect(() => {
     loadData();
-    loadClickUpAvatars();
+    loadTeamAvatars();
     const refreshPerformance = () => loadData(true);
     const refreshAll = () => {
       loadData(true);
-      loadClickUpAvatars();
+      loadTeamAvatars();
     };
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') refreshPerformance();
@@ -1116,7 +1116,7 @@ export default function PerformanceWorkspace() {
       window.removeEventListener('focus', refreshAll);
       window.removeEventListener('bilik-workspace-updated', refreshAll);
     };
-  }, [loadClickUpAvatars, loadData]);
+  }, [loadTeamAvatars, loadData]);
 
   const saveAction = useCallback<SaveAction>(async (payload) => {
     const response = await fetch('/api/performance', {
@@ -1141,7 +1141,7 @@ export default function PerformanceWorkspace() {
     if (!data) return null;
     const syncProfile = (profile: PerformanceProfile): PerformanceProfile => ({
       ...profile,
-      avatar_url: clickUpAvatars[profile.user_email.trim().toLowerCase()]
+      avatar_url: teamAvatars[profile.user_email.trim().toLowerCase()]
         || profile.avatar_url
         || (profile.user_email.trim().toLowerCase() === data.viewer.email.trim().toLowerCase()
           ? data.viewer.avatar_url || null
@@ -1152,7 +1152,7 @@ export default function PerformanceWorkspace() {
       profile: syncProfile(data.profile),
       profiles: data.profiles.map(syncProfile),
     };
-  }, [clickUpAvatars, data]);
+  }, [teamAvatars, data]);
 
   if (loading || !syncedData) {
     return (
@@ -1164,7 +1164,7 @@ export default function PerformanceWorkspace() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] pb-6">
-      <PageHeader data={syncedData} refreshing={refreshing} onRefresh={() => { loadData(); loadClickUpAvatars(); }} />
+      <PageHeader data={syncedData} refreshing={refreshing} onRefresh={() => { loadData(); loadTeamAvatars(); }} />
       {!syncedData.storage_ready && <StorageWarning message={syncedData.warning} />}
       {error && <div className="mb-4 flex items-start gap-2 rounded-xl border border-[#F4C7C2] bg-[#FFF5F3] px-4 py-3 text-xs font-semibold text-[#A6463D] dark:border-[#6B3834] dark:bg-[#351F1E] dark:text-[#F4AAA3]"><AlertCircle className="h-4 w-4 flex-shrink-0" />{error}</div>}
       {notice && <div className="fixed bottom-24 left-1/2 z-[140] flex -translate-x-1/2 items-center gap-2 rounded-xl bg-[#24324A] px-4 py-3 text-xs font-extrabold text-white shadow-2xl md:bottom-6"><CheckCircle2 className="h-4 w-4 text-[#78C59A]" />{notice}</div>}

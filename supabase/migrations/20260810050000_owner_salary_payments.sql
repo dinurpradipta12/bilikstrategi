@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.app_owner_salary_payments (
   reference_number TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('paid', 'cancelled')),
-  created_by_email TEXT NOT NULL DEFAULT 'snllabsarchive@gmail.com',
+  created_by_email TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (workspace_id, month_key, user_email)

@@ -6,14 +6,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.app_owner_salary_slip_branding (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   workspace_id TEXT NOT NULL DEFAULT 'bilik-strategi' UNIQUE,
-  company_name TEXT NOT NULL DEFAULT 'Bilik Strategi',
+  company_name TEXT NOT NULL DEFAULT 'Team Workspace',
   company_address TEXT NOT NULL DEFAULT '',
   company_email TEXT NOT NULL DEFAULT '',
   company_phone TEXT NOT NULL DEFAULT '',
-  logo_url TEXT NOT NULL DEFAULT '/landscape.png',
+  logo_url TEXT NOT NULL DEFAULT '',
   footer_text TEXT NOT NULL DEFAULT 'Slip gaji ini bersifat rahasia dan hanya ditujukan untuk penerima yang tercantum.',
   currency TEXT NOT NULL DEFAULT 'IDR',
-  created_by_email TEXT NOT NULL DEFAULT 'snllabsarchive@gmail.com',
+  created_by_email TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.app_owner_salary_slips (
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'paid')),
   payment_date DATE,
   notes TEXT NOT NULL DEFAULT '',
-  created_by_email TEXT NOT NULL DEFAULT 'snllabsarchive@gmail.com',
+  created_by_email TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (workspace_id, month_key, user_email)

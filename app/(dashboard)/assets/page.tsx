@@ -47,106 +47,6 @@ interface AssetItem {
   downloadsCount: number;
 }
 
-const DEFAULT_ASSETS: AssetItem[] = [
-  {
-    id: 'ast-001',
-    title: 'Rate Card Official Bilik Strategi 2026',
-    category: 'ratecard',
-    description: 'Daftar harga resmi layanan Social Media Retainer, Digital Ads, Branding, dan Video Production Q1-Q4 2026.',
-    format: 'pdf',
-    size: '4.2 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Dinur Pradipta (Owner)',
-    uploadedDate: '2026-07-28',
-    tags: ['Pricing', 'Retainer', 'Official 2026', 'Ratecard'],
-    downloadsCount: 142,
-  },
-  {
-    id: 'ast-002',
-    title: 'Brand Guideline & Logo Assets Pack',
-    category: 'brand_guideline',
-    description: 'Panduan identitas visual resmi, kode warna HSL/HEX, logo SVG/PNG resolusi tinggi, dan font typography agency.',
-    format: 'zip',
-    size: '18.5 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Creative Lead',
-    uploadedDate: '2026-07-20',
-    tags: ['Branding', 'Logo', 'Typography', 'Vector'],
-    downloadsCount: 98,
-  },
-  {
-    id: 'ast-003',
-    title: 'Master Pitch Deck & Client Proposal Template 2026',
-    category: 'proposal',
-    description: 'Template presentasi PowerPoint (.PPTX) standar Bilik Strategi dengan animasi modern, slide studi kasus & rincian biaya.',
-    format: 'pptx',
-    size: '12.8 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Strategy Lead',
-    uploadedDate: '2026-07-15',
-    tags: ['Pitch Deck', 'Proposal', 'PowerPoint', 'Client Pitch'],
-    downloadsCount: 215,
-  },
-  {
-    id: 'ast-004',
-    title: 'Influencer Media Kit & KOL Benchmarks 2026',
-    category: 'media_kit',
-    description: 'Katalog rate & engagement rate 150+ Influencer TikTok & Instagram terverifikasi mitra Bilik Strategi.',
-    format: 'pdf',
-    size: '6.5 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Digital Marketing Specialist',
-    uploadedDate: '2026-07-25',
-    tags: ['Influencer', 'KOL Ratecard', 'Media Kit', 'Engagement'],
-    downloadsCount: 87,
-  },
-  {
-    id: 'ast-005',
-    title: 'Standard Service Agreement & Contract Retainer',
-    category: 'contract',
-    description: 'Draft kontrak kerja sama legal agency-client lengkap dengan pasal Scope of Work, SLA, dan ketentuan pembayaran.',
-    format: 'docx',
-    size: '1.1 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Legal & Operations',
-    uploadedDate: '2026-06-30',
-    tags: ['Contract', 'Legal', 'SLA', 'Agreement'],
-    downloadsCount: 64,
-  },
-  {
-    id: 'ast-006',
-    title: 'Social Media Safe Zones & Content Specs Guide',
-    category: 'brand_guideline',
-    description: 'Panduan ukuran resolusi dan area aman (safe zone) untuk Reels 9:16, TikTok, Carousel IG, dan Billboard Digital.',
-    format: 'png',
-    size: '3.4 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Senior Graphic Designer',
-    uploadedDate: '2026-07-10',
-    tags: ['Specs', 'Social Media', 'Reels', 'Safe Zone'],
-    downloadsCount: 176,
-  },
-  {
-    id: 'ast-007',
-    title: 'Agency Company Profile Video Reel 2026',
-    category: 'proposal',
-    description: 'Video showcase showreel portfolio hasil karya terbaik tim Bilik Strategi 4K resolusi tinggi.',
-    format: 'mp4',
-    size: '45.0 MB',
-    fileUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=1200&auto=format&fit=crop&q=80',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=600&auto=format&fit=crop&q=80',
-    uploadedBy: 'Video Editor & Motion Lead',
-    uploadedDate: '2026-07-02',
-    tags: ['Showreel', 'Video 4K', 'Portfolio', 'Showcase'],
-    downloadsCount: 310,
-  },
-];
 
 export default function AssetManagementPage() {
   const [mounted, setMounted] = useState(false);
@@ -193,7 +93,8 @@ export default function AssetManagementPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (error) throw error;
+      if (data) {
         const mapped: AssetItem[] = data.map((item: any) => ({
           id: String(item.id),
           title: item.title,
@@ -209,23 +110,10 @@ export default function AssetManagementPage() {
           downloadsCount: item.downloads_count || 1,
         }));
         setAssets(mapped);
-        localStorage.setItem('bilik_asset_items', JSON.stringify(mapped));
         return;
       }
-    } catch (err) {
-      console.warn('[Assets] Supabase fetch error, fallback to local storage.', err);
-    }
-
-    // Local storage fallback
-    const savedAssets = localStorage.getItem('bilik_asset_items');
-    if (savedAssets) {
-      try {
-        setAssets(JSON.parse(savedAssets));
-      } catch {
-        setAssets(DEFAULT_ASSETS);
-      }
-    } else {
-      setAssets(DEFAULT_ASSETS);
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Aset gagal dimuat.');
     }
   };
 
@@ -254,7 +142,6 @@ export default function AssetManagementPage() {
 
   const saveAssetsToStateAndStorage = (updated: AssetItem[]) => {
     setAssets(updated);
-    localStorage.setItem('bilik_asset_items', JSON.stringify(updated));
   };
 
   // Image Upload File Handler (Converts File to Data URL)
@@ -308,7 +195,7 @@ export default function AssetManagementPage() {
       id: 'ast-' + Date.now(),
       title: newTitle.trim(),
       category: newCategory,
-      description: newDescription.trim() || 'Aset resmi Bilik Strategi Workspace.',
+      description: newDescription.trim() || 'Aset resmi Team Workspace.',
       format: newFormat,
       size: newSize.trim() || '3.0 MB',
       fileUrl: newFileUrl.trim() || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=1200&auto=format&fit=crop&q=80',
@@ -319,13 +206,8 @@ export default function AssetManagementPage() {
       downloadsCount: 1,
     };
 
-    // Save to local state first
-    const updated = [created, ...assets];
-    saveAssetsToStateAndStorage(updated);
-
-    // Save to Supabase Database
     try {
-      await supabase.from('agency_assets').insert([
+      const { error } = await supabase.from('agency_assets').insert([
         {
           id: created.id,
           title: created.title,
@@ -341,8 +223,11 @@ export default function AssetManagementPage() {
           downloads_count: created.downloadsCount,
         },
       ]);
-    } catch (err) {
-      console.warn('[Assets] Could not insert to Supabase table agency_assets.', err);
+      if (error) throw error;
+      saveAssetsToStateAndStorage([created, ...assets]);
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Aset gagal disimpan.');
+      return;
     }
 
     setShowUploadModal(false);
@@ -395,11 +280,8 @@ export default function AssetManagementPage() {
       return ast;
     });
 
-    saveAssetsToStateAndStorage(updatedList);
-
-    // Save update to Supabase Database
     try {
-      await supabase
+      const { error } = await supabase
         .from('agency_assets')
         .update({
           title: editTitle.trim(),
@@ -412,8 +294,11 @@ export default function AssetManagementPage() {
           tags: tagList.length > 0 ? tagList : editingAsset.tags,
         })
         .eq('id', editingAsset.id);
-    } catch (err) {
-      console.warn('[Assets] Could not update Supabase table agency_assets.', err);
+      if (error) throw error;
+      saveAssetsToStateAndStorage(updatedList);
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Aset gagal diperbarui.');
+      return;
     }
 
     setEditingAsset(null);
@@ -425,14 +310,13 @@ export default function AssetManagementPage() {
   const handleDeleteAssetConfirm = async () => {
     if (!deletingAsset) return;
 
-    const updatedList = assets.filter((ast) => ast.id !== deletingAsset.id);
-    saveAssetsToStateAndStorage(updatedList);
-
-    // Delete from Supabase Database
     try {
-      await supabase.from('agency_assets').delete().eq('id', deletingAsset.id);
-    } catch (err) {
-      console.warn('[Assets] Could not delete from Supabase table agency_assets.', err);
+      const { error } = await supabase.from('agency_assets').delete().eq('id', deletingAsset.id);
+      if (error) throw error;
+      saveAssetsToStateAndStorage(assets.filter((asset) => asset.id !== deletingAsset.id));
+    } catch (error) {
+      setToastMessage(error instanceof Error ? error.message : 'Aset gagal dihapus.');
+      return;
     }
 
     if (viewingAsset?.id === deletingAsset.id) {
@@ -515,7 +399,7 @@ export default function AssetManagementPage() {
             <div>
               <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Asset Management & Gallery</h1>
               <p className="text-xs text-[#737680] mt-0.5">
-                Kelola dan bagikan rate card agency, brand guideline, template pitch deck, dan file media resmi Bilik Strategi.
+                Kelola dan bagikan rate card agency, brand guideline, template pitch deck, dan file media resmi Team Workspace.
               </p>
             </div>
           </div>

@@ -4,8 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Search, PlusCircle, CheckSquare, Briefcase, Calculator, FileText, FileSignature, Users, Settings, ReceiptText, Wallet, X, ArrowRight, Target } from 'lucide-react';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
+import { useBranding } from '@/components/branding/BrandingProvider';
+import { teamModuleForPage } from '@/lib/branding/types';
 
 interface CommandMenuProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ interface CommandMenuProps {
 
 export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: CommandMenuProps) {
   const router = useRouter();
+  const { branding } = useBranding();
   const [query, setQuery] = useState('');
   const [mounted, setMounted] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -29,13 +31,13 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
   }, []);
 
   useEffect(() => {
-    fetch('/api/clickup/user', { cache: 'no-store' })
+    fetch('/api/native/user', { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
         if (!data?.user) return;
         const role = String(data.user.app_role || '').toLowerCase();
         setHasUnrestrictedPageAccess(data.user.is_superuser === true || role === 'owner');
-        setIsOwnerAccount(isSuperuserEmail(data.user.email));
+        setIsOwnerAccount(data.user.is_superuser === true || role === 'owner');
         setPageAccess(normalizePageAccess(data.user.page_access));
       })
       .catch(() => {});
@@ -102,7 +104,11 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
 
   if (!isOpen || !mounted) return null;
 
-  const canSeePage = (pageKey: PageAccessKey) => hasUnrestrictedPageAccess || pageAccess[pageKey] !== false;
+  const canSeePage = (pageKey: PageAccessKey) => {
+    const moduleKey = teamModuleForPage(pageKey);
+    return (!moduleKey || branding.modules_enabled[moduleKey] !== false)
+      && (hasUnrestrictedPageAccess || pageAccess[pageKey] !== false);
+  };
 
   const toSafeString = (value: unknown) => {
     if (typeof value === 'string') return value;
@@ -176,7 +182,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                   <span>Buka Invoice Studio</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
-                {isOwnerAccount && <button
+                {isOwnerAccount && canSeePage('finance') && <button
                   onClick={() => handleNavigate('/finance')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
@@ -184,7 +190,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                   <span>Buka Finance &amp; Budget Owner</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
-                {isOwnerAccount && <button
+                {isOwnerAccount && canSeePage('salary_slips') && <button
                   onClick={() => handleNavigate('/salary-slips')}
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
@@ -237,7 +243,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
                   className="w-full flex items-center px-3 py-2 text-sm rounded-lg hover:bg-[#EEF2F7] transition-colors text-left"
                 >
                   <Settings className="w-4 h-4 text-[#737680] mr-3" />
-                  <span>Pengaturan ClickUp Integration</span>
+                  <span>Pengaturan Tim dan Branding</span>
                   <ArrowRight className="w-3.5 h-3.5 ml-auto text-[#737680]" />
                 </button>}
               </div>
@@ -312,7 +318,7 @@ export default function CommandMenu({ isOpen, onClose, onOpenCreateTask }: Comma
         {/* Footer */}
         <div className="px-4 py-2 bg-[#F7F7F8] border-t border-[#E8E8EC] text-xs text-[#737680] flex items-center justify-between">
           <span>Tekan <kbd className="px-1.5 py-0.5 bg-white border border-[#E8E8EC] rounded text-[10px]">Esc</kbd> untuk menutup</span>
-          <span>Bilik Strategi Workspace v1.0</span>
+          <span>Team Workspace v1.0</span>
         </div>
       </div>
     </div>,

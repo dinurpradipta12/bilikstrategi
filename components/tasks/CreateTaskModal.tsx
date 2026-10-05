@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { X, AlertCircle, CheckCircle2, Briefcase, RefreshCw } from 'lucide-react';
-import { AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/types/agency';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface CreateTaskModalProps {
   onTaskCreated?: (task: AgencyTask) => void;
 }
 
-interface ClickUpMember {
+interface TeamMember {
   id: string;
   name: string;
   email: string;
@@ -25,8 +25,6 @@ interface ProjectOption {
   id: string;
   name: string;
   client_name?: string;
-  clickup_list_id?: string;
-  source: 'app' | 'clickup';
 }
 
 export default function CreateTaskModal({
@@ -39,7 +37,7 @@ export default function CreateTaskModal({
   const [successToast, setSuccessToast] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [members, setMembers] = useState<ClickUpMember[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
@@ -65,20 +63,16 @@ export default function CreateTaskModal({
     },
   });
 
-  // Fetch app projects first, then merge ClickUp lists when available.
+  // Project and member options come from this team's database.
   useEffect(() => {
     if (isOpen) {
       async function fetchProjects() {
         setLoadingProjects(true);
         try {
-          const [appRes, clickupRes] = await Promise.all([
-            fetch('/api/supabase/projects', { cache: 'no-store' }).catch(() => null),
-            fetch('/api/clickup/projects', { cache: 'no-store' }).catch(() => null),
-          ]);
-
+          const appRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
           const projectMap = new Map<string, ProjectOption>();
 
-          if (appRes?.ok) {
+          if (appRes.ok) {
             const data = await appRes.json();
             const appProjects = Array.isArray(data.projects) ? data.projects : [];
             appProjects.forEach((p: any) => {
@@ -88,24 +82,6 @@ export default function CreateTaskModal({
                 id,
                 name: p.name || 'Project Aplikasi',
                 client_name: p.client_name || p.status || 'Aplikasi',
-                clickup_list_id: p.clickup_list_id ? String(p.clickup_list_id) : undefined,
-                source: 'app',
-              });
-            });
-          }
-
-          if (clickupRes?.ok) {
-            const data = await clickupRes.json();
-            const clickupProjects = Array.isArray(data.projects) ? data.projects : [];
-            clickupProjects.forEach((p: any) => {
-              const id = String(p.clickup_list_id || p.id || '');
-              if (!id || projectMap.has(id)) return;
-              projectMap.set(id, {
-                id,
-                name: p.name || 'Project ClickUp',
-                client_name: p.client_name || 'ClickUp',
-                clickup_list_id: id,
-                source: 'clickup',
               });
             });
           }
@@ -119,33 +95,6 @@ export default function CreateTaskModal({
             setValue('project_id', mergedProjects[0].id);
           }
 
-          if (mergedProjects.length === 0) {
-            const cachedProjectsRaw = localStorage.getItem('bilik_agency_projects_db');
-            if (cachedProjectsRaw) {
-              try {
-                const cachedProjects = JSON.parse(cachedProjectsRaw);
-                if (Array.isArray(cachedProjects)) {
-                  const cachedOptions: ProjectOption[] = cachedProjects
-                    .map((p: any) => ({
-                      id: String(p.id || p.clickup_list_id || ''),
-                      name: p.name || 'Project Aplikasi',
-                      client_name: p.client_name || p.status || 'Aplikasi',
-                      clickup_list_id: p.clickup_list_id ? String(p.clickup_list_id) : undefined,
-                      source: 'app' as const,
-                    }))
-                    .filter((p) => p.id);
-                  setProjects(cachedOptions);
-                  if (defaultListId) {
-                    setValue('project_id', defaultListId);
-                  } else if (cachedOptions[0]?.id) {
-                    setValue('project_id', cachedOptions[0].id);
-                  }
-                }
-              } catch {
-                // ignore malformed cache
-              }
-            }
-          }
         } catch {
           // ignore
         } finally {
@@ -156,11 +105,11 @@ export default function CreateTaskModal({
       async function fetchMembers() {
         setLoadingMembers(true);
         try {
-          const res = await fetch('/api/clickup/teams');
+          const res = await fetch('/api/native/teams');
           if (res.ok) {
             const data = await res.json();
             if (data.members && data.members.length > 0) {
-              const formatted: ClickUpMember[] = data.members.map((m: any) => ({
+              const formatted: TeamMember[] = data.members.map((m: any) => ({
                 id: String(m.id),
                 name: m.username || (m.email ? m.email.split('@')[0] : 'Team Member'),
                 email: m.email || '',
@@ -242,51 +191,6 @@ export default function CreateTaskModal({
         onTaskCreated(savedTask);
       }
 
-      // ClickUp is deliberately background-only. The app task above remains
-      // the single visible record while its ClickUp id is attached in place.
-      void (async () => {
-        try {
-          const clickupRes = await fetch('/api/clickup/tasks', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              listId: selectedProject?.clickup_list_id || data.project_id,
-              name: data.task_name,
-              description: data.description,
-              priority: data.priority,
-              assignees: data.assignee_id ? [data.assignee_id] : undefined,
-              due_date: data.due_date,
-              notification_silent: true,
-            }),
-          });
-          if (!clickupRes.ok) return;
-
-          const resData = await clickupRes.json();
-          if (!resData?.task?.id) return;
-
-          const appUpdateRes = await fetch('/api/supabase/tasks', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...savedTask,
-              ...resData.task,
-              id: savedTask.id,
-              clickup_task_id: resData.task.clickup_task_id || resData.task.id,
-              project_id: data.project_id,
-              project_name: selectedProject?.name || savedTask.project_name,
-              notification_silent: true,
-            }),
-          });
-
-          if (appUpdateRes.ok && onTaskCreated) {
-            const appUpdateData = await appUpdateRes.json();
-            if (appUpdateData?.task) onTaskCreated(appUpdateData.task);
-          }
-        } catch {
-          // The app record remains usable when ClickUp is unavailable.
-        }
-      })();
-
       setSuccessToast(true);
       setTimeout(() => {
         setSuccessToast(false);
@@ -354,7 +258,7 @@ export default function CreateTaskModal({
                 ) : (
                   projects.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.client_name || (p.source === 'app' ? 'Aplikasi' : 'ClickUp')})
+                      {p.name} ({p.client_name || 'Tim'})
                     </option>
                   ))
                 )}
@@ -363,14 +267,14 @@ export default function CreateTaskModal({
 
             <div>
               <label className="block text-xs font-semibold text-[#202124] mb-1">
-                PIC / Assignee ClickUp * {loadingMembers && <RefreshCw className="w-3 h-3 inline animate-spin text-[#F26B5E] ml-1" />}
+                PIC / Assignee aplikasi * {loadingMembers && <RefreshCw className="w-3 h-3 inline animate-spin text-[#F26B5E] ml-1" />}
               </label>
               <select
                 {...register('assignee_id')}
                 className="w-full px-3 py-2 text-sm border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A] bg-[#FFFFFF]"
               >
                 {members.length === 0 ? (
-                  <option value="">Tidak ada assignee ClickUp</option>
+                  <option value="">Tidak ada assignee aplikasi</option>
                 ) : (
                   members.map((u) => (
                     <option key={u.id} value={u.id}>

@@ -112,7 +112,7 @@ export default function AttendanceRealtimeAlerts() {
     }
 
     const controller = new AbortController();
-    fetch('/api/clickup/user', { cache: 'no-store', signal: controller.signal })
+    fetch('/api/native/user', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => (response.ok ? response.json() : null))
       .then((data) => {
         if (!data?.user) return;
@@ -168,7 +168,7 @@ export default function AttendanceRealtimeAlerts() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'active_sessions' },
-        (payload) => {
+        (payload: any) => {
           const eventType = payload.eventType;
           const currentRow = (payload.new || {}) as ActiveSessionRow;
           const previousRow = (payload.old || {}) as ActiveSessionRow;
@@ -200,7 +200,7 @@ export default function AttendanceRealtimeAlerts() {
             type,
             userName,
             userAvatar: stringValue(sourceRow.user_avatar),
-            projectName: stringValue(sourceRow.selected_project) || 'Bilik Strategi Workspace',
+            projectName: stringValue(sourceRow.selected_project) || 'Team Workspace',
             occurredAt: new Date().toISOString(),
           });
         }

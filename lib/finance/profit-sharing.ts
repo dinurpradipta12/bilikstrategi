@@ -393,7 +393,7 @@ function buildProjects(input: ProfitShareInput) {
   const clients = new Map((input.operational.clients || []).map((client: any) => [text(client?.id), client]));
   const add = (source: any, fallbackName = '') => {
     const name = text(source?.name || source?.project_name || fallbackName);
-    if (!name || normalize(name) === normalize('Bilik Strategi Workspace')) return;
+    if (!name || normalize(name) === normalize('Team Workspace')) return;
     const explicitProjectId = (source?.name ? source?.id : '') || source?.project_key || source?.project_id || source?.clickup_list_id || source?.clickup_folder_id || source?.clickup_space_id;
     const key = text(explicitProjectId, `name:${normalize(name)}`);
     const sourceAliases = [

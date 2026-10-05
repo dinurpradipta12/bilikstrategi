@@ -27,7 +27,6 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
 import {
   calculateProjectProfitShares,
   type ProfitShareMemberIdentity,
@@ -355,7 +354,7 @@ export default function OwnerFinancePage() {
     try {
       const [financeResponse, teamResponse] = await Promise.all([
         fetch(`/api/owner/finance?month=${encodeURIComponent(selectedMonth)}`, { cache: 'no-store' }),
-        fetch('/api/clickup/teams', { cache: 'no-store' }).catch(() => null),
+        fetch('/api/native/teams', { cache: 'no-store' }).catch(() => null),
       ]);
 
       const payload = await financeResponse.json().catch(() => ({}));
@@ -438,10 +437,9 @@ export default function OwnerFinancePage() {
     let cancelled = false;
     async function authorize() {
       try {
-        const response = await fetch('/api/clickup/user', { cache: 'no-store' });
+        const response = await fetch('/api/native/user', { cache: 'no-store' });
         const payload = await response.json().catch(() => ({}));
-        const email = toText(payload.user?.email).toLowerCase();
-        if (!cancelled && isSuperuserEmail(email) && email === 'snllabsarchive@gmail.com') {
+        if (!cancelled && payload.user?.is_active && payload.user?.app_role === 'owner') {
           setAccess('allowed');
         } else if (!cancelled) {
           setAccess('denied');

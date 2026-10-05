@@ -1,25 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/clickup/users';
-import { isSuperuserEmail, normalizeIdentityEmail } from '@/lib/auth/app-role';
+import { normalizeIdentityEmail } from '@/lib/auth/app-role';
+import { getServerWorkspaceContext, DEFAULT_APP_WORKSPACE_ID } from '@/lib/auth/server-workspace-context';
+import { readTeamBranding } from '@/lib/branding/server';
 import { isSupabaseAdminConfigured, supabaseAdminFetch } from '@/lib/supabase/admin-rest-client';
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const WORKSPACE_ID = 'bilik-strategi';
-const OWNER_EMAIL = 'snllabsarchive@gmail.com';
+const WORKSPACE_ID = DEFAULT_APP_WORKSPACE_ID;
 
 type RequestIdentity = { email: string; name: string };
-
-function decodeCookie(value: string | undefined) {
-  if (!value) return '';
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : value == null ? fallback : String(value).trim();
@@ -44,7 +35,7 @@ function cleanLongText(value: unknown, fallback = '', maxLength = 500) {
   return text(value, fallback).slice(0, maxLength);
 }
 
-function cleanImage(value: unknown, fallback = '/landscape.png') {
+function cleanImage(value: unknown, fallback = '') {
   const candidate = text(value, fallback);
   if (candidate.length > 3_000_000) throw new Error('Logo terlalu besar. Kompres atau gunakan gambar di bawah 2 MB.');
   if (candidate.startsWith('data:image/') || candidate.startsWith('/') || /^https?:\/\//i.test(candidate)) return candidate;
@@ -66,29 +57,10 @@ function cleanLineItems(value: unknown) {
     .filter((item) => item.label || item.amount > 0);
 }
 
-async function getRequestIdentity(req: NextRequest): Promise<RequestIdentity> {
-  const cookieEmail = normalizeIdentityEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
-  const cookieName = decodeCookie(req.cookies.get('clickup_user_name')?.value);
-  if (cookieEmail) return { email: cookieEmail, name: cookieName || cookieEmail.split('@')[0] };
-
-  const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (accessToken) {
-    try {
-      const authenticated = await getAuthenticatedUser(accessToken);
-      const user = authenticated?.user || {};
-      const email = normalizeIdentityEmail(user.email);
-      if (email) return { email, name: text(user.username, email.split('@')[0]) };
-    } catch {
-      // Fall through to the cookie identity when ClickUp has expired.
-    }
-  }
-
-  return { email: '', name: cookieName || 'Pengguna' };
-}
-
 async function requireOwner(req: NextRequest) {
-  const identity = await getRequestIdentity(req);
-  return { identity, allowed: isSuperuserEmail(identity.email) && identity.email === OWNER_EMAIL };
+  const context = await getServerWorkspaceContext(req);
+  const identity: RequestIdentity = { email: context.identity.email, name: context.identity.name };
+  return { identity, allowed: context.isActive && context.appRole === 'owner' };
 }
 
 function errorResponse(error: unknown, fallback: string, status = 500) {
@@ -121,20 +93,21 @@ export async function GET(req: NextRequest) {
 
     const month = encodeURIComponent(monthKey(new URL(req.url).searchParams.get('month')));
     const workspace = encodeURIComponent(WORKSPACE_ID);
-    const [branding, slips] = await Promise.all([
+    const [branding, slips, teamBrand] = await Promise.all([
       readRows(`app_owner_salary_slip_branding?workspace_id=eq.${workspace}&select=*`),
       readRows(`app_owner_salary_slips?workspace_id=eq.${workspace}&month_key=eq.${month}&order=display_name.asc&select=*`),
+      readTeamBranding(),
     ]);
 
     return NextResponse.json({
       workspaceId: WORKSPACE_ID,
       branding: branding[0] || {
         workspace_id: WORKSPACE_ID,
-        company_name: 'Bilik Strategi',
+        company_name: teamBrand.company_name || teamBrand.name,
         company_address: '',
-        company_email: 'hello@bilikstrategi.com',
+        company_email: teamBrand.company_email,
         company_phone: '',
-        logo_url: '/landscape.png',
+        logo_url: teamBrand.logo_url,
         footer_text: 'Slip gaji ini bersifat rahasia dan hanya ditujukan untuk penerima yang tercantum.',
         currency: 'IDR',
       },
@@ -159,7 +132,7 @@ export async function POST(req: NextRequest) {
     if (action === 'save_branding') {
       const payload = {
         workspace_id: WORKSPACE_ID,
-        company_name: cleanLongText(body.company_name, 'Bilik Strategi', 160),
+        company_name: cleanLongText(body.company_name, 'Tim', 160),
         company_address: cleanLongText(body.company_address, '', 500),
         company_email: cleanLongText(body.company_email, '', 160),
         company_phone: cleanLongText(body.company_phone, '', 80),

@@ -42,7 +42,7 @@ const PAGE_LABELS: Array<[string, string]> = [
   ['/dashboard', 'Dashboard'],
   ['/projects', 'Projects'],
   ['/my-tasks', 'My Tasks'],
-  ['/tasks', 'ClickUp Tasks'],
+  ['/tasks', 'Tugas'],
   ['/timeline', 'Timeline'],
   ['/team', 'Team Workload'],
   ['/clients', 'Client Listing'],

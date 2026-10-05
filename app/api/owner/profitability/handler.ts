@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
     }
     for (const source of [...entriesResult.rows, ...attendanceResult.rows]) {
       const name = text(source?.project_name || source?.selected_project);
-      if (!name || normalizeKey(name) === normalizeKey('Bilik Strategi Workspace')) continue;
+      if (!name || normalizeKey(name) === normalizeKey('Team Workspace')) continue;
       const exists = Array.from(projectMap.values()).some((project) => looseMatch(project.name, name));
       if (!exists) projectMap.set(`name:${normalizeKey(name)}`, { id: `name:${normalizeKey(name)}`, name, clientName: text(source?.customer_name, 'Internal / belum diatur'), status: 'active' });
     }

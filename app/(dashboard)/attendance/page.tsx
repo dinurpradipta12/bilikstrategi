@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isSuperuserEmail } from '@/lib/auth/app-role';
+import { useBranding } from '@/components/branding/BrandingProvider';
 import {
   type AttendanceAccessRequest,
   type AttendanceSchedule,
@@ -205,6 +206,7 @@ const PRESENCE_VISUALS: Record<PresenceState, {
 };
 
 export default function AttendancePage() {
+  const { branding } = useBranding();
   const [currentUser, setCurrentUser] = useState<{
     id: string;
     username: string;
@@ -232,10 +234,10 @@ export default function AttendancePage() {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   // Form Inputs
-  const [selectedProject, setSelectedProject] = useState<string>('Bilik Strategi Workspace');
+  const [selectedProject, setSelectedProject] = useState<string>('Team Workspace');
   const [notesInput, setNotesInput] = useState<string>('');
   const [projectsList, setProjectsList] = useState<string[]>([
-    'Bilik Strategi Workspace',
+    'Team Workspace',
     'Media Brand Campaign',
     'Client Strategy Consulting',
     'Internal System R&D',
@@ -292,7 +294,7 @@ export default function AttendancePage() {
     const emailClean = (userEmail || '').toLowerCase().trim();
     const roleClean = (userRole || '').toLowerCase().trim();
 
-    // The role returned by /api/clickup/user is backed by app_user_roles.
+    // The role returned by /api/native/user is backed by app_user_roles.
     // Ignore stale localStorage role flags so every device gets the same access.
     return isSuperuserEmail(emailClean) || roleClean === 'owner' || roleClean === 'admin';
   };
@@ -318,7 +320,7 @@ export default function AttendancePage() {
       isPaused: active.isPaused === true,
       pausedAt: active.pausedAt || undefined,
       accumulatedSeconds: Number(active.accumulatedSeconds || 0),
-      project: active.selectedProject || 'Bilik Strategi Workspace',
+      project: active.selectedProject || 'Team Workspace',
       statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
       lastSeenAt: active.lastSeenAt,
       lastActivityAt: active.lastActivityAt,
@@ -432,7 +434,7 @@ export default function AttendancePage() {
         let resolvedUserRole: 'Owner' | 'Admin' | 'Member' = 'Member';
         let hasServerAppRole = false;
 
-        const userRes = await fetch('/api/clickup/user');
+        const userRes = await fetch('/api/native/user');
         if (userRes.ok) {
           const userData = await userRes.json();
           if (userData.user) {
@@ -459,7 +461,7 @@ export default function AttendancePage() {
           }
         }
 
-        const projRes = await fetch('/api/clickup/projects');
+        const projRes = await fetch('/api/native/projects');
         if (projRes.ok) {
           const projData = await projRes.json();
           if (Array.isArray(projData.projects) && projData.projects.length > 0) {
@@ -471,7 +473,7 @@ export default function AttendancePage() {
         }
 
         // Fetch ClickUp team members for Admin panel & Role resolution
-        const teamRes = await fetch('/api/clickup/teams');
+        const teamRes = await fetch('/api/native/teams');
 
         if (teamRes.ok) {
           const teamData = await teamRes.json();
@@ -554,7 +556,7 @@ export default function AttendancePage() {
           setIsPaused(parsed.isPaused === true);
           setPausedAt(parsed.pausedAt || null);
           setAccumulatedSeconds(Number(parsed.accumulatedSeconds || 0));
-          setSelectedProject(parsed.selectedProject || 'Bilik Strategi Workspace');
+          setSelectedProject(parsed.selectedProject || 'Team Workspace');
           setNotesInput(parsed.notesInput || '');
         } catch {
           localStorage.removeItem('bilik_active_attendance');
@@ -643,31 +645,13 @@ export default function AttendancePage() {
   // Master Admin Reset Handler: Clear All Attendance History Across All Users
   const handleAdminMasterResetAll = async () => {
     try {
-      await fetch('/api/attendance', {
+      const resetResponse = await fetch('/api/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reset_all' }),
+        body: JSON.stringify({ action: 'reset_all', confirm: 'RESET' }),
       });
-
-      try {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-        await fetch(`${url}/rest/v1/attendance_logs?created_at=gt.1970-01-01T00:00:00Z`, {
-          method: 'DELETE',
-          headers: { apikey: key, Authorization: `Bearer ${key}` },
-        }).catch(() => {});
-
-        await fetch(`${url}/rest/v1/active_sessions?updated_at=gt.1970-01-01T00:00:00Z`, {
-          method: 'DELETE',
-          headers: { apikey: key, Authorization: `Bearer ${key}` },
-        }).catch(() => {});
-
-        await supabase.from('attendance_logs').delete().gt('created_at', '1970-01-01T00:00:00Z');
-        await supabase.from('active_sessions').delete().gt('updated_at', '1970-01-01T00:00:00Z');
-      } catch (dbErr) {
-        console.warn('[Attendance] Supabase delete error', dbErr);
-      }
+      const resetPayload = await resetResponse.json().catch(() => ({}));
+      if (!resetResponse.ok) throw new Error(resetPayload.error || 'Reset presensi gagal.');
 
       localStorage.removeItem('bilik_attendance_history');
       localStorage.removeItem('bilik_timesheet_recap');
@@ -727,7 +711,8 @@ export default function AttendancePage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Rekap_Presensi_Bilik_Strategi_${new Date().toISOString().split('T')[0]}.csv`);
+    const teamFileName = branding.short_name.replace(/[^a-z0-9_-]+/gi, '_') || 'Tim';
+    link.setAttribute('download', `Rekap_Presensi_${teamFileName}_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -774,27 +759,21 @@ export default function AttendancePage() {
       let supabaseActiveList: ActiveSessionSnapshot[] = [];
       let hasAuthoritativeServerSnapshot = false;
       try {
-        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-        const restRes = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
-          headers: { apikey: key, Authorization: `Bearer ${key}` },
-          cache: 'no-store',
-        });
+        const restRes = await fetch('/api/attendance?active_only=1', { cache: 'no-store' });
         if (restRes.ok) {
           hasAuthoritativeServerSnapshot = true;
-          const restData = await restRes.json();
+          const restData = (await restRes.json()).activeCheckIns;
           if (Array.isArray(restData)) {
             supabaseActiveList = (restData as Array<Record<string, unknown>>).map((row) => ({
               user_name: String(row.user_name || ''),
               user_avatar: String(row.user_avatar || ''),
-              checkInTime: String(row.check_in_time || ''),
-              checkInTimestamp: Number(row.check_in_timestamp),
-              isPaused: row.is_paused === true,
-              pausedAt: row.paused_at ? String(row.paused_at) : undefined,
-              accumulatedSeconds: Number(row.accumulated_seconds || 0),
-              selectedProject: String(row.selected_project || 'Bilik Strategi Workspace'),
-              notesInput: String(row.notes_input || ''),
+              checkInTime: String(row.checkInTime || ''),
+              checkInTimestamp: Number(row.checkInTimestamp),
+              isPaused: row.isPaused === true,
+              pausedAt: row.pausedAt ? String(row.pausedAt) : undefined,
+              accumulatedSeconds: Number(row.accumulatedSeconds || 0),
+              selectedProject: String(row.selectedProject || 'Team Workspace'),
+              notesInput: String(row.notesInput || ''),
             }));
           }
         }
@@ -872,14 +851,14 @@ export default function AttendancePage() {
         setPausedAt(currentActiveSession.pausedAt || null);
         setAccumulatedSeconds(sessionAccumulated);
         setElapsedSeconds(sessionElapsed);
-        setSelectedProject(currentActiveSession.selectedProject || 'Bilik Strategi Workspace');
+        setSelectedProject(currentActiveSession.selectedProject || 'Team Workspace');
         setNotesInput(currentActiveSession.notesInput || '');
         localStorage.setItem('bilik_active_attendance', JSON.stringify({
           user_name: currentActiveSession.user_name,
           user_avatar: currentActiveSession.user_avatar || currentUser.avatar,
           checkInTime: currentActiveSession.checkInTime,
           checkInTimestamp: sessionStartedAt,
-          selectedProject: currentActiveSession.selectedProject || 'Bilik Strategi Workspace',
+          selectedProject: currentActiveSession.selectedProject || 'Team Workspace',
           notesInput: currentActiveSession.notesInput || '',
           isPaused: sessionIsPaused,
           pausedAt: currentActiveSession.pausedAt || null,
@@ -973,7 +952,7 @@ export default function AttendancePage() {
               isPaused: active.isPaused === true,
               pausedAt: active.pausedAt || undefined,
               accumulatedSeconds: Number(active.accumulatedSeconds || 0),
-              project: active.selectedProject || 'Bilik Strategi Workspace',
+              project: active.selectedProject || 'Team Workspace',
               statusText: active.isPaused ? 'Paused / Dijeda' : 'Online & Bekerja',
               email: active.user_email || m.email,
               lastSeenAt: active.lastSeenAt,
@@ -1304,7 +1283,7 @@ export default function AttendancePage() {
   };
 
   // 3. Handle Check-In
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     const now = new Date();
     const startTimeStr = now.toLocaleTimeString('id-ID', {
       hour: '2-digit',
@@ -1313,6 +1292,19 @@ export default function AttendancePage() {
       hour12: false,
     });
     const startTimestamp = now.getTime();
+
+    try {
+      const response = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'checkin', selectedProject, notesInput }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Check-in gagal.');
+    } catch (error) {
+      setLastCheckOutNotice({ type: 'warning', message: error instanceof Error ? error.message : 'Check-in gagal.' });
+      return;
+    }
 
     setIsCheckedIn(true);
     setCheckInTime(startTimeStr);
@@ -1356,54 +1348,10 @@ export default function AttendancePage() {
       }
     }
 
-    // Write directly to Supabase REST API (100% reliable cross-browser/device)
-    try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-      fetch(`${url}/rest/v1/active_sessions`, {
-        method: 'POST',
-        headers: {
-          apikey: key,
-          Authorization: `Bearer ${key}`,
-          'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          user_name: currentUser.username,
-          user_avatar: currentUser.avatar,
-          check_in_time: startTimeStr,
-          check_in_timestamp: startTimestamp,
-          is_paused: false,
-          paused_at: null,
-          accumulated_seconds: 0,
-          selected_project: selectedProject,
-          notes_input: notesInput,
-          updated_at: new Date().toISOString(),
-        }),
-      }).catch(() => {});
-    } catch {}
-
-    // Broadcast check-in to shared server API for cross-browser & cross-device sync
-    fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'checkin',
-        user_name: currentUser.username,
-        user_avatar: currentUser.avatar,
-        selectedProject,
-        notesInput,
-        checkInTime: startTimeStr,
-        checkInTimestamp: startTimestamp,
-        isPaused: false,
-        pausedAt: null,
-        accumulatedSeconds: 0,
-      }),
-    }).catch(() => {});
   };
 
   // 4. Handle Check-Out (Includes Minimum 1 Hour Threshold + Overtime Logic)
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if (!checkInTimestamp) return;
 
     const now = new Date();
@@ -1468,7 +1416,22 @@ export default function AttendancePage() {
       notes: notesInput || (status === 'ALPHA' ? 'Alpha: Durasi kerja kurang dari 1 jam' : 'Presensi Harian Kerja'),
     };
 
-    const updatedHistory = [newRecord, ...history];
+    let committedRecord = newRecord;
+    try {
+      const response = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'checkout', record: newRecord }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Check-out gagal.');
+      if (payload.record) committedRecord = payload.record as AttendanceRecord;
+    } catch (error) {
+      setLastCheckOutNotice({ type: 'warning', message: error instanceof Error ? error.message : 'Check-out gagal.' });
+      return;
+    }
+
+    const updatedHistory = [committedRecord, ...history];
     setHistory(updatedHistory);
     localStorage.setItem('bilik_attendance_history', JSON.stringify(updatedHistory));
 
@@ -1481,12 +1444,12 @@ export default function AttendancePage() {
       existingRecap[currentUser.username] = {};
     }
 
-    const currentEntry = existingRecap[currentUser.username][dayName] || { regular: 0, overtime: 0, status: 'HADIR', notes: '' };
-    existingRecap[currentUser.username][dayName] = {
-      regular: parseFloat((currentEntry.regular + regularHours).toFixed(2)),
-      overtime: parseFloat((currentEntry.overtime + overtimeHours).toFixed(2)),
-      status: status,
-      notes: notesInput || 'Presensi Harian',
+    const currentEntry = existingRecap[currentUser.username][committedRecord.day_name] || { regular: 0, overtime: 0, status: 'HADIR', notes: '' };
+    existingRecap[currentUser.username][committedRecord.day_name] = {
+      regular: parseFloat((currentEntry.regular + committedRecord.regular_hours).toFixed(2)),
+      overtime: parseFloat((currentEntry.overtime + committedRecord.overtime_hours).toFixed(2)),
+      status: committedRecord.status,
+      notes: committedRecord.notes || 'Presensi Harian',
     };
 
     localStorage.setItem('bilik_timesheet_recap', JSON.stringify(existingRecap));
@@ -1521,33 +1484,6 @@ export default function AttendancePage() {
         // ignore
       }
     }
-
-    // Delete active session directly from Supabase REST API & SDK (100% reliable)
-    try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-      fetch(`${url}/rest/v1/active_sessions?user_name=ilike.${encodeURIComponent(currentUser.username)}`, {
-        method: 'DELETE',
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-      }).catch(() => {});
-    } catch {}
-
-    try {
-      supabase.from('active_sessions').delete().ilike('user_name', currentUser.username).then(() => {
-        syncRealTimeTeamAttendance();
-      });
-    } catch {}
-
-    // Broadcast checkout to shared server API
-    fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'checkout',
-        user_name: currentUser.username,
-        record: newRecord,
-      }),
-    }).catch(() => {});
 
     // Immediately trigger local real-time sync update
     setTimeout(() => {
@@ -1636,9 +1572,6 @@ export default function AttendancePage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Presensi & Live Tracker</h1>
-            <span className="px-2 py-0.5 text-[10px] font-mono bg-[#EEF2F7] text-[#24324A] rounded-md border border-[#E8E8EC]">
-              @bilik-strategi
-            </span>
           </div>
           <p className="text-xs text-[#737680] mt-1">
             Min 1 jam bekerja (dibawah 1 jam = Alpha). Lebih dari 8 jam masuk Rekap Lembur. Panel khusus Admin menampilkan daftar anggota tim online secara live!
@@ -2011,7 +1944,7 @@ export default function AttendancePage() {
               />
               <div className="flex-1 min-w-0">
                 <h4 className="text-xs font-bold text-[#24324A] truncate">{currentUser.username || 'User'}</h4>
-                <p className="text-[10px] text-[#737680]">Bilik Strategi ({currentUser.role})</p>
+                <p className="text-[10px] text-[#737680]">Team Workspace ({currentUser.role})</p>
               </div>
             </div>
 
@@ -2079,7 +2012,7 @@ export default function AttendancePage() {
 
             <p className="text-[11px] leading-5 text-[#737680] dark:text-[#98A2B3]">
               {isAdminOrOwner
-                ? 'Check-in menunjukkan presensi aktif. Status Aktif, Idle, dan Away menunjukkan aktivitas di aplikasi Bilik Strategi secara terpisah.'
+                ? 'Check-in menunjukkan presensi aktif. Status Aktif, Idle, dan Away menunjukkan aktivitas di aplikasi Team Workspace secara terpisah.'
                 : 'Daftar anggota yang sedang check-in. Detail aktivitas aplikasi hanya tersedia untuk Admin dan Owner.'}
             </p>
 
@@ -2182,7 +2115,7 @@ export default function AttendancePage() {
                         </div>
                         <div className="min-w-0 sm:col-span-2">
                           <span className="font-bold text-[#24324A] dark:text-[#F4F6FA]">Fokus:</span>{' '}
-                          <span className="text-[#737680] dark:text-[#98A2B3]">{m.project || 'Bilik Strategi Workspace'}</span>
+                          <span className="text-[#737680] dark:text-[#98A2B3]">{m.project || 'Team Workspace'}</span>
                         </div>
                       </div>
                     )}
@@ -2210,7 +2143,7 @@ export default function AttendancePage() {
                     {isAdminOrOwner && expandedActivityMemberId === m.id && (
                       <div className="mt-3 rounded-xl border border-[#DDE2EA] bg-white p-3 dark:border-[#3A414D] dark:bg-[#20242C]">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#24324A] dark:text-[#F4F6FA]">Aktivitas di Bilik Strategi</p>
+                          <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#24324A] dark:text-[#F4F6FA]">Aktivitas di Team Workspace</p>
                           <span className="text-[9px] text-[#8A8E98]">30 aktivitas terakhir</span>
                         </div>
                         {activityLoadingId === m.id ? (

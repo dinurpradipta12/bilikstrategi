@@ -33,8 +33,8 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { isSuperuserEmail } from '@/lib/auth/app-role';
 import { normalizePageAccess, PAGE_ACCESS_OPTIONS, type PageAccessMap } from '@/lib/auth/page-access';
+import { useBranding } from '@/components/branding/BrandingProvider';
 
 interface TeamMemberWorkload {
   id: string;
@@ -58,6 +58,7 @@ interface TeamMemberWorkload {
 }
 
 export default function TeamWorkloadPage() {
+  const { branding } = useBranding();
   const [activeTab, setActiveTab] = useState<'workload' | 'team_list' | 'analytics' | 'priorities' | 'timesheet'>('workload');
   const [mounted, setMounted] = useState(false);
   const [members, setMembers] = useState<TeamMemberWorkload[]>([]);
@@ -335,7 +336,7 @@ export default function TeamWorkloadPage() {
     setFormRole(member.custom_role || member.role);
     setFormDivision(member.division || 'Agency Team');
     setFormEmail(member.email);
-    setFormPhone(member.phone || '+62 812-3456-7890');
+    setFormPhone(member.phone || '');
     setFormCapacity(member.capacity_hours);
     setFormPageAccess(normalizePageAccess(member.page_access));
 
@@ -354,11 +355,9 @@ export default function TeamWorkloadPage() {
     e.preventDefault();
     if (!editingMember || !isAdminOrOwner || savingMemberInfo) return;
 
-    // Role and page access must follow the member's ClickUp login identity.
-    // The editable contact email is presentation data and may be different.
     const targetEmail = (editingMember.clickup_email || formEmail).trim().toLowerCase();
     if (!targetEmail) {
-      setMemberSaveError('Email login ClickUp pengguna wajib tersedia agar akses dapat disimpan lintas perangkat.');
+      setMemberSaveError('Email login aplikasi pengguna wajib tersedia agar akses dapat disimpan lintas perangkat.');
       return;
     }
 
@@ -366,16 +365,16 @@ export default function TeamWorkloadPage() {
     setMemberSaveError('');
 
     try {
-      // The database role is authoritative. localStorage below is only kept as
-      // an optimistic compatibility cache for older pages in this application.
-      const roleResponse = await fetch('/api/app/user-roles', {
-        method: 'PUT',
+      const roleResponse = await fetch('/api/admin/users', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: targetEmail,
-          display_name: editingMember.full_name,
-          role: formIsAdmin ? 'admin' : 'member',
-          is_admin: formIsAdmin,
+          user_id: editingMember.id,
+          role: editingMember.role === 'Owner' ? 'owner' : formIsAdmin ? 'admin' : 'member',
+          job_title: formRole,
+          division: formDivision,
+          phone: formPhone,
+          capacity_hours: formCapacity,
           page_access: formPageAccess,
         }),
       });
@@ -384,70 +383,7 @@ export default function TeamWorkloadPage() {
         throw new Error(roleData.error || 'Role gagal disimpan ke database.');
       }
 
-      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
-      let customInfoMap: Record<string, any> = {};
-      if (savedCustomInfoStr) {
-        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
-      }
-
-      const updatedRoleStr = formIsAdmin ? 'Admin' : 'Member';
-
-      const updatedInfo = {
-        custom_role: formRole,
-        role: updatedRoleStr,
-        division: formDivision,
-        email: formEmail.trim().toLowerCase(),
-        phone: formPhone,
-        capacity: formCapacity,
-        is_admin: formIsAdmin,
-        page_access: formPageAccess,
-      };
-
-      customInfoMap[editingMember.full_name] = updatedInfo;
-      customInfoMap[editingMember.id] = updatedInfo;
-      localStorage.setItem('bilik_team_custom_info', JSON.stringify(customInfoMap));
-
-      // Keep the legacy local cache in sync for pages that have not migrated yet.
-      const savedTeamStr = localStorage.getItem('bilik_team_members');
-      let teamList: any[] = [];
-      if (savedTeamStr) {
-        try { teamList = JSON.parse(savedTeamStr); } catch {}
-      }
-
-      const memberIdx = teamList.findIndex(
-        (m: any) => m.id === editingMember.id || m.full_name === editingMember.full_name || (m.email && m.email === targetEmail)
-      );
-
-      const newTeamMemberObj = {
-        id: editingMember.id,
-        name: editingMember.full_name,
-        full_name: editingMember.full_name,
-        email: formEmail.trim().toLowerCase(),
-        clickup_email: targetEmail,
-        role: updatedRoleStr,
-        custom_role: formRole,
-        division: formDivision,
-        capacity: formCapacity,
-        is_admin: formIsAdmin,
-        page_access: formPageAccess,
-      };
-
-      if (memberIdx >= 0) {
-        teamList[memberIdx] = { ...teamList[memberIdx], ...newTeamMemberObj };
-      } else {
-        teamList.push(newTeamMemberObj);
-      }
-      localStorage.setItem('bilik_team_members', JSON.stringify(teamList));
-
-      // Also update capacities map.
-      const savedCapsStr = localStorage.getItem('bilik_member_capacities');
-      let currentCaps: Record<string, number> = {};
-      if (savedCapsStr) {
-        try { currentCaps = JSON.parse(savedCapsStr); } catch {}
-      }
-      currentCaps[editingMember.id] = formCapacity;
-      currentCaps[editingMember.full_name] = formCapacity;
-      localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
+      const updatedRoleStr = editingMember.role === 'Owner' ? 'Owner' : formIsAdmin ? 'Admin' : 'Member';
 
       // Update in-memory members list.
       setMembers((prev) =>
@@ -494,7 +430,6 @@ export default function TeamWorkloadPage() {
     accumulatedSeconds?: number;
   }>>({});
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
-  const [capacities, setCapacities] = useState<Record<string, number>>({});
 
   // Check URL query string for ?tab=timesheet
   useEffect(() => {
@@ -506,10 +441,6 @@ export default function TeamWorkloadPage() {
       }
     }
 
-    const savedCap = localStorage.getItem('bilik_member_capacities');
-    if (savedCap) {
-      try { setCapacities(JSON.parse(savedCap)); } catch {}
-    }
   }, []);
 
   // Sync live check-in sessions for real-time AKTIF ticker
@@ -561,25 +492,19 @@ export default function TeamWorkloadPage() {
     }
 
     try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-      const restRes = await fetch(`${url}/rest/v1/active_sessions?select=*`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-        cache: 'no-store',
-      });
+      const restRes = await fetch('/api/attendance?active_only=1', { cache: 'no-store' });
       if (restRes.ok) {
-        const data = await restRes.json();
+        const data = (await restRes.json()).activeCheckIns;
         if (Array.isArray(data)) {
           data.forEach((row: any) => {
-            if (row.user_name && row.check_in_timestamp) {
+            if (row.user_name && row.checkInTimestamp) {
               sessionMap[row.user_name.toLowerCase().trim()] = {
-                checkInTimestamp: Number(row.check_in_timestamp),
-                checkInTime: row.check_in_time || '',
-                projectName: row.selected_project,
-                isPaused: row.is_paused === true,
-                pausedAt: row.paused_at || null,
-                accumulatedSeconds: Number(row.accumulated_seconds || 0),
+                checkInTimestamp: Number(row.checkInTimestamp),
+                checkInTime: row.checkInTime || '',
+                projectName: row.selectedProject,
+                isPaused: row.isPaused === true,
+                pausedAt: row.pausedAt || null,
+                accumulatedSeconds: Number(row.accumulatedSeconds || 0),
               };
             }
           });
@@ -634,16 +559,10 @@ export default function TeamWorkloadPage() {
 
     // 2. Fetch from Supabase attendance_logs table so all domains & devices stay in sync
     try {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://spnawjvexcwhhyfavvew.supabase.co';
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwbmF3anZleGN3aGh5ZmF2dmV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzNjU1NDgsImV4cCI6MjEwMDk0MTU0OH0.IYNTrKH7s5aTBcRREiBgq1SOw5ONBcP0uxWpC_tSznU';
-
-      const res = await fetch(`${url}/rest/v1/attendance_logs?select=*`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` },
-        cache: 'no-store',
-      });
+      const res = await fetch('/api/attendance', { cache: 'no-store' });
 
       if (res.ok) {
-        const logs = await res.json();
+        const logs = (await res.json()).history;
         if (Array.isArray(logs)) {
           logs.forEach((log: any) => {
             const userName = log.user_name;
@@ -725,33 +644,16 @@ export default function TeamWorkloadPage() {
     setLoading(true);
     try {
       // 1. Fetch live ClickUp team members
-      const teamRes = await fetch('/api/clickup/teams');
+      const teamRes = await fetch('/api/native/teams');
       const teamData = await teamRes.json();
       const clickUpMembers = Array.isArray(teamData.members) ? teamData.members : [];
 
-      // Resolve the app role from the authenticated server identity first.
-      // localStorage is only a compatibility fallback for older sessions.
-      const userRes = await fetch('/api/clickup/user', { cache: 'no-store' });
+      // Resolve access from the authenticated server identity.
+      const userRes = await fetch('/api/native/user', { cache: 'no-store' });
       const userData = await userRes.json().catch(() => ({}));
       const authenticatedUser = userData?.user || {};
 
-      const savedUserStr = localStorage.getItem('bilik_current_user');
-      let loggedInEmail = String(authenticatedUser.email || '').trim();
-      if (savedUserStr) {
-        try {
-          const u = JSON.parse(savedUserStr);
-          if (!loggedInEmail && u.email) loggedInEmail = u.email;
-        } catch {}
-      }
-
-      const savedCustomInfoStr = localStorage.getItem('bilik_team_custom_info');
-      let customInfoMap: Record<string, any> = {};
-      if (savedCustomInfoStr) {
-        try { customInfoMap = JSON.parse(savedCustomInfoStr); } catch {}
-      }
-
-      // Durable app roles are loaded for the member list. The local cache is
-      // only a fallback for older records that have not been migrated yet.
+      // Durable app roles are loaded for the member list.
       const persistedRoleByEmail = new Map<string, any>();
       try {
         const roleRes = await fetch('/api/app/user-roles', { cache: 'no-store' });
@@ -764,7 +666,7 @@ export default function TeamWorkloadPage() {
         }
       } catch {}
 
-      const isSuperOwner = authenticatedUser.is_superuser === true || isSuperuserEmail(loggedInEmail);
+      const isSuperOwner = authenticatedUser.is_superuser === true;
       const resolvedAppRole = String(authenticatedUser.app_role || '').toLowerCase();
 
       setIsSuperuserAccount(isSuperOwner);
@@ -786,18 +688,10 @@ export default function TeamWorkloadPage() {
 
       // 3. Map members with workload stats & custom role info
       const now = new Date();
-      const savedCapsStr = localStorage.getItem('bilik_member_capacities');
-      let currentCaps: Record<string, number> = {};
-      if (savedCapsStr) {
-        try { currentCaps = JSON.parse(savedCapsStr); } catch {}
-      }
-
       const mappedMembers: TeamMemberWorkload[] = clickUpMembers.map((m: any) => {
         const memberName = m.username || (m.email ? m.email.split('@')[0] : 'Team Member');
-        const cInfo = customInfoMap[memberName] || customInfoMap[String(m.id)] || {};
         const clickUpEmail = String(m.email || '').trim().toLowerCase();
-        const customEmail = String(cInfo.email || '').trim().toLowerCase();
-        const persistedRole = persistedRoleByEmail.get(clickUpEmail) || persistedRoleByEmail.get(customEmail);
+        const persistedRole = persistedRoleByEmail.get(clickUpEmail);
 
         const assignedTasks = fetchedTasks.filter((t: any) =>
           t.assignee_names?.some((name: string) => name.toLowerCase().includes(memberName.toLowerCase()))
@@ -808,7 +702,7 @@ export default function TeamWorkloadPage() {
         const overdueTasks = activeTasks.filter((t: any) => new Date(t.due_date) < now);
 
         const hoursTracked = assignedTasks.reduce((acc: number, t: any) => acc + (t.time_tracked_hours || 4), 0);
-        const capacity = cInfo.capacity || currentCaps[String(m.id)] || currentCaps[memberName] || 40;
+        const capacity = Number(m.capacity_hours ?? 40);
 
         let workloadStatus: 'low' | 'balanced' | 'high' | 'over_capacity' = 'balanced';
         if (hoursTracked > capacity || activeTasks.length > 8) workloadStatus = 'over_capacity';
@@ -850,7 +744,7 @@ export default function TeamWorkloadPage() {
               ? 'Admin / Operations'
               : 'Agency Team Member';
 
-        const isMemberSuperOwner = persistedRole?.is_superuser === true || isSuperuserEmail(m.email) || isSuperuserEmail(cInfo.email);
+        const isMemberSuperOwner = persistedRole?.is_superuser === true || m.role_key === 'owner';
         const effectiveMemberRole = persistedRole
           ? persistedRole.is_superuser === true || persistedRole.role === 'owner'
             ? 'Owner'
@@ -859,20 +753,18 @@ export default function TeamWorkloadPage() {
               : 'Member'
           : isMemberSuperOwner
             ? 'Owner'
-            : cInfo.is_admin === true || cInfo.role === 'Admin' || (cInfo.custom_role || '').toLowerCase().includes('admin')
-              ? 'Admin'
-              : (m.role === 1 ? 'Owner' : m.role === 2 ? 'Admin' : 'Member');
+            : (m.role === 2 ? 'Admin' : 'Member');
 
         return {
           id: String(m.id),
           full_name: memberName,
-          email: cInfo.email || m.email || persistedRole?.email || '',
-          clickup_email: m.email || persistedRole?.email || cInfo.email || '',
+          email: m.email || persistedRole?.email || '',
+          clickup_email: m.email || persistedRole?.email || '',
           role: effectiveMemberRole,
-          custom_role: cInfo.custom_role || defaultCustomRole,
-          division: cInfo.division || 'Agency Team',
-          phone: cInfo.phone || '+62 812-3456-7890',
-          page_access: normalizePageAccess(persistedRole?.page_access || cInfo.page_access),
+          custom_role: m.job_title || defaultCustomRole,
+          division: m.division || 'Team',
+          phone: m.phone || '',
+          page_access: normalizePageAccess(persistedRole?.page_access),
           avatar_url: m.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=24324A&color=fff`,
           assigned_tasks_count: activeTasks.length,
           overdue_tasks_count: overdueTasks.length,
@@ -898,23 +790,24 @@ export default function TeamWorkloadPage() {
   }, []);
 
   const isAdminOrOwner = currentUserRole === 'Owner' || currentUserRole === 'Admin';
-  const editingMemberIsSuperuser = Boolean(
-    editingMember && (isSuperuserEmail(editingMember.email) || isSuperuserEmail(editingMember.clickup_email))
-  );
+  const editingMemberIsSuperuser = editingMember?.role === 'Owner';
 
-  const handleCapacityChange = (memberId: string, memberName: string, newCapacity: number) => {
+  const handleCapacityChange = async (memberId: string, memberName: string, newCapacity: number) => {
     if (!isAdminOrOwner) return;
-
-    const savedCapsStr = localStorage.getItem('bilik_member_capacities');
-    let currentCaps: Record<string, number> = {};
-    if (savedCapsStr) {
-      try { currentCaps = JSON.parse(savedCapsStr); } catch {}
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: memberId, capacity_hours: newCapacity }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Kapasitas gagal disimpan.');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Kapasitas gagal disimpan.');
+      return;
     }
-
-    currentCaps[memberId] = newCapacity;
-    currentCaps[memberName] = newCapacity;
-    setCapacities(currentCaps);
-    localStorage.setItem('bilik_member_capacities', JSON.stringify(currentCaps));
 
     setMembers((prev) =>
       prev.map((m) => {
@@ -934,13 +827,13 @@ export default function TeamWorkloadPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E8E8EC] pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Team Workspace</h1>
+            <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Tim {branding.name}</h1>
             <span className="px-2 py-0.5 text-[10px] font-mono bg-[#EEF2F7] text-[#24324A] rounded-md border border-[#E8E8EC]">
-              @bilik-strategi
+              @{branding.short_name.toLowerCase().replace(/\s+/g, '-')}
             </span>
           </div>
           <p className="text-xs text-[#737680] mt-1">
-            Pantau distribusi beban kerja tim agency, analitik aktivitas online, prioritas task, struktur organisasi, dan timesheet ClickUp.
+            Pantau distribusi beban kerja tim agency, analitik aktivitas online, prioritas task, struktur organisasi, dan timesheet aplikasi.
           </p>
         </div>
 
@@ -963,12 +856,12 @@ export default function TeamWorkloadPage() {
             className="flex items-center gap-2 px-4 py-2 border border-[#E8E8EC] bg-[#FFFFFF] rounded-xl text-xs font-bold text-[#24324A] hover:bg-[#EEF2F7] transition-colors cursor-pointer shadow-2xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Sync ClickUp</span>
+            <span>Muat ulang</span>
           </button>
         </div>
       </div>
 
-      {/* Sub-Tabs Bar (ClickUp Style) */}
+      {/* Sub-Tabs Bar (aplikasi Style) */}
       <div className="flex items-center gap-2 overflow-x-auto border-b border-[#E8E8EC] pb-2 text-xs font-bold scrollbar-none">
         <button
           onClick={() => setActiveTab('workload')}
@@ -1035,7 +928,7 @@ export default function TeamWorkloadPage() {
       {loading && members.length === 0 && (
         <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-12 text-center space-y-3 shadow-2xs">
           <RefreshCw className="w-8 h-8 text-[#24324A] animate-spin mx-auto opacity-40" />
-          <h3 className="text-sm font-extrabold text-[#24324A]">Mengambil Data Tim ClickUp Workspace…</h3>
+          <h3 className="text-sm font-extrabold text-[#24324A]">Mengambil Data Tim aplikasi Workspace…</h3>
         </div>
       )}
 
@@ -1063,7 +956,7 @@ export default function TeamWorkloadPage() {
           {!loading && members.length === 0 && (
             <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-12 text-center space-y-3 shadow-2xs">
               <Users className="w-10 h-10 text-[#737680] mx-auto opacity-40" />
-              <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Anggota Tim di ClickUp Workspace</h3>
+              <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Anggota Tim di aplikasi Workspace</h3>
             </div>
           )}
 
@@ -1584,7 +1477,7 @@ export default function TeamWorkloadPage() {
                                   )}
                                 </div>
                                 <span className="text-[11px] text-[#737680] font-medium block truncate max-w-[150px]" title={m.custom_role || m.role}>
-                                  {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'ClickUp Team Member')}
+                                  {m.custom_role || (m.role === 'Owner' ? 'Owner / Project Lead' : 'aplikasi Team Member')}
                                 </span>
                               </div>
                             </div>
@@ -1861,9 +1754,9 @@ export default function TeamWorkloadPage() {
                   <label className="block font-bold text-[#24324A] mb-1">Email Kontak</label>
                   <input
                     type="email"
-                    placeholder="name@bilikstrategi.id"
+                    placeholder="nama@perusahaan.com"
                     value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
+                    readOnly
                     className="w-full p-2.5 bg-white border border-[#E8E8EC] rounded-xl font-medium outline-none focus:border-[#24324A]"
                   />
                 </div>

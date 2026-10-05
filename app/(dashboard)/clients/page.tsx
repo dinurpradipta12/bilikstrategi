@@ -21,7 +21,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
-import { AgencyClient, AgencyProject } from '@/lib/mock/data';
+import { AgencyClient, AgencyProject } from '@/lib/types/agency';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export default function ClientsPage() {
@@ -50,69 +50,32 @@ export default function ClientsPage() {
   // Fetch real clients from Supabase database & shared API store
   const fetchClientsFromSupabase = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
-    let supaData: any[] | null = null;
-
     try {
       const res = await fetch('/api/supabase/clients', { cache: 'no-store' });
-      if (res.ok) {
-        const resJson = await res.json();
-        if (Array.isArray(resJson.clients) && resJson.clients.length > 0) {
-          supaData = resJson.clients;
-        }
-      }
-    } catch {}
-
-    if (!supaData || supaData.length === 0) {
-      try {
-        const { data, error } = await supabase
-          .from('clients')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (!error && data && data.length > 0) {
-          supaData = data;
-        }
-      } catch (err) {
-        console.warn('[ClientsPage] Supabase query error', err);
-      }
-    }
-
-    if (supaData && supaData.length > 0) {
-      const mappedClients: AgencyClient[] = supaData.map((sc: any) => ({
+      const resJson = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(resJson.error || 'Client gagal dimuat.');
+      const mappedClients: AgencyClient[] = (Array.isArray(resJson.clients) ? resJson.clients : []).map((sc: any) => ({
         id: String(sc.id),
         name: sc.name || `PIC ${sc.company_name || sc.name}`,
         company_name: sc.company_name || sc.name,
-        email: sc.email || `contact@${(sc.company_name || 'client').toLowerCase().replace(/\s+/g, '')}.id`,
-        phone: sc.phone || '+62 812-0000-0000',
+        email: sc.email || '',
+        phone: sc.phone || '',
         logo_url: sc.logo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sc.company_name || sc.name)}&background=24324A&color=fff`,
         status: sc.status || 'active',
         industry: sc.industry || 'Digital Agency',
-        clickup_folder_id: sc.clickup_folder_id || 'folder_1',
+        clickup_folder_id: sc.clickup_folder_id || '',
         overall_progress: sc.overall_progress || 0,
-        notes: sc.notes || 'Klien resmi Bilik Strategi Workspace.',
+        notes: sc.notes || 'Klien resmi Team Workspace.',
         start_date: sc.start_date || new Date().toISOString().split('T')[0],
-        account_manager_id: 'u1',
+        account_manager_id: sc.account_manager_id || '',
         active_projects_count: sc.active_projects_count || 0,
         completed_projects_count: sc.completed_projects_count || 0,
         total_tasks_count: sc.total_tasks_count || 0,
       }));
 
       setClients(mappedClients);
-      localStorage.setItem('bilik_agency_clients_db', JSON.stringify(mappedClients));
-      if (!isSilent) setLoading(false);
-      return;
-    }
-
-    // Default to local storage or empty array
-    const saved = localStorage.getItem('bilik_agency_clients_db');
-    if (saved) {
-      try {
-        setClients(JSON.parse(saved));
-      } catch {
-        setClients([]);
-      }
-    } else {
-      setClients([]);
+    } catch (error) {
+      console.warn('[ClientsPage] Data client gagal dimuat:', error);
     }
     if (!isSilent) setLoading(false);
   };
@@ -197,28 +160,14 @@ export default function ClientsPage() {
 
     const companyNameClean = formCompany.trim();
     const picNameClean = formPIC.trim() || `PIC ${companyNameClean}`;
-    const emailClean = formEmail.trim() || `contact@${companyNameClean.toLowerCase().replace(/\s+/g, '')}.id`;
-    const phoneClean = formPhone.trim() || '+62 812-0000-0000';
+    const emailClean = formEmail.trim();
+    const phoneClean = formPhone.trim();
     const logoClean = `https://ui-avatars.com/api/?name=${encodeURIComponent(companyNameClean)}&background=24324A&color=fff`;
 
     if (editingClient) {
       // 1. Update in Supabase & Server API
       try {
-        await supabase
-          .from('clients')
-          .update({
-            company_name: companyNameClean,
-            name: picNameClean,
-            email: emailClean,
-            phone: phoneClean,
-            industry: formIndustry,
-            status: formStatus,
-            notes: formNotes.trim() || 'Klien Agency',
-            logo_url: logoClean,
-          })
-          .eq('id', editingClient.id);
-
-        await fetch('/api/supabase/clients', {
+        const response = await fetch('/api/supabase/clients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -234,8 +183,13 @@ export default function ClientsPage() {
             logo_url: logoClean,
           }),
         });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Client gagal diperbarui.');
+        }
       } catch (err) {
-        console.warn('[ClientsPage] Could not update client in Supabase:', err);
+        alert(err instanceof Error ? err.message : 'Client gagal diperbarui.');
+        return;
       }
 
       // Update local state
@@ -278,7 +232,7 @@ export default function ClientsPage() {
         status: formStatus,
         notes: formNotes.trim() || 'Klien Baru Didaftarkan',
         logo_url: logoClean,
-        clickup_folder_id: 'fold_' + Date.now(),
+        clickup_folder_id: '',
         overall_progress: 0,
         start_date: new Date().toISOString().split('T')[0],
         active_projects_count: 0,
@@ -287,14 +241,18 @@ export default function ClientsPage() {
       };
 
       try {
-        await supabase.from('clients').upsert([newClientObj]);
-        await fetch('/api/supabase/clients', {
+        const response = await fetch('/api/supabase/clients', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newClientObj),
         });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Client gagal disimpan.');
+        }
       } catch (err) {
-        console.warn('[ClientsPage] Could not insert client to Supabase:', err);
+        alert(err instanceof Error ? err.message : 'Client gagal disimpan.');
+        return;
       }
 
       const updatedList = [newClientObj as AgencyClient, ...clients];
@@ -324,14 +282,18 @@ export default function ClientsPage() {
     if (!clientToDelete) return;
 
     try {
-      await supabase.from('clients').delete().eq('id', clientToDelete.id);
-      await fetch('/api/supabase/clients', {
+      const response = await fetch('/api/supabase/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id: clientToDelete.id }),
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Client gagal dihapus.');
+      }
     } catch (err) {
-      console.warn('[ClientsPage] Could not delete client from Supabase:', err);
+      alert(err instanceof Error ? err.message : 'Client gagal dihapus.');
+      return;
     }
 
     const updatedList = clients.filter((c) => c.id !== clientToDelete.id);

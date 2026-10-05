@@ -1,197 +1,37 @@
-# Bilik Strategi Workspace
+# Template aplikasi tim mandiri
 
-**Bilik Strategi Workspace** adalah aplikasi web internal agency modern yang terhubung langsung dengan **ClickUp API** sebagai mesin utama project management, task tracking, komentar, dan komunikasi tim, serta didukung oleh **Supabase PostgreSQL & Auth**.
+Cabang ini adalah template aplikasi terpisah untuk **satu tim per instalasi**. Setiap tim mendapat URL deployment dan proyek Supabase sendiri. Bilik Strategi yang sudah berjalan tetap berada di cabang/deployment aslinya dan dapat terus memakai ClickUp. Template ini memakai Supabase Auth dan database tim; tidak memerlukan akun, token, webhook, atau konfigurasi ClickUp.
 
----
+## Modul
 
-## 🌟 Fitur Utama Aplikasi
+Semua modul tersedia sejak instalasi pertama: dashboard, project, tugas dan My Tasks, timeline/kalender, tim, chat, presensi, KPI/performance, approval, automasi, client, aset, content plan, content idea bank, fee calculator, invoice, penawaran, perjanjian, profitabilitas, finance, slip gaji, dan notifikasi. Owner/Admin dapat mengatur nama aplikasi, logo, favicon, warna, identitas perusahaan, anggota, serta hak akses anggota melalui **Settings**. Owner dapat mengatur modul yang aktif. Semua modul aktif secara default. Data tiap instalasi berada dalam proyek Supabase yang berbeda.
 
-1. **Executive Dashboard**: Ringkasan project aktif, pending task, overdue task, total client, grafik Recharts (Created vs Completed, Status Distribution, Workload per Member, Monthly Progress Trend), serta filter multi-dimensi.
-2. **Project Management (4 View Modes)**: List, Board/Kanban, Timeline (Gantt), dan Calendar view untuk seluruh project agency.
-3. **Detail Project (7 Tabs)**: Overview, Tasks, Timeline, Team Members, Files & Assets, Activity Log, dan Client Feedback.
-4. **ClickUp Task Management**: Data task ClickUp real-time, optimistic updates (status, assignee, priority), filter, pencarian, dan Task Detail Drawer.
-5. **Task Detail Drawer**: Detail task, komentar interaktif (sync ke ClickUp), subtasks, checklist, tag, jam kerja tercatat, dan tautan langsung ke ClickUp.
-6. **My Tasks**: Dashboard tugas personal yang dikategorikan berdasarkan Today, Upcoming, Overdue, dan Completed.
-7. **Agency Timeline**: Visualisasi Gantt chart untuk estimasi deliverable dan milestone project.
-8. **Interactive Calendar**: Jadwal due date deliverable berdasarkan tampilan Bulan, Minggu, dan Hari.
-9. **Team Workload & Capacity Planner**: Indikator beban kerja tim (*Low*, *Balanced*, *High*, *Over Capacity*), jam terpakai vs kapasitas max, serta pengaturan kapasitas default per anggota.
-10. **Client Listing**: Katalog klien agency yang tersimpan di Supabase, terhubung dengan Folder ClickUp dan histori retainer.
-11. **Agency Chat**: Channel komunikasi tim terintegrasi ClickUp Chat (dengan fallback) dan *Tab Visibility API polling* untuk menghemat bandwidth.
-12. **Notification Center**: Log notifikasi aktivitas (task baru, deadline mendekat, task overdue, komentar, mention, pesan).
-13. **Settings & ClickUp Integration Diagnostic**: Halaman pengujian koneksi ClickUp API, status token terenkripsi, webhook listener, dan pengaturan peran pengguna.
-14. **Global Command Menu (`Cmd/Ctrl + K`)**: Shortcut navigasi cepat dan pembuatan task dari mana saja.
+Beberapa nama kolom internal masih memakai awalan `clickup_` agar modul lama dapat membaca model data yang sama. Kolom ini dipakai sebagai ID/metadata aplikasi dan tidak memanggil layanan ClickUp.
 
----
+## Membuat instalasi untuk tim baru
 
-## 🏗️ Teknologi Yang Digunakan
+1. Buat **proyek Supabase baru dan kosong** khusus tim tersebut. Jangan gunakan proyek database Bilik Strategi yang aktif.
+2. Buat deployment Next.js baru dengan **cabang template ini** sebagai sumber. Berikan domain atau subdomain unik, misalnya `tim-a.example.com`. Setiap deployment harus memiliki environment miliknya sendiri.
+3. Salin [`.env.team.example`](.env.team.example) ke `.env.local` untuk pengembangan lokal. Isi URL, anon/publishable key, dan service role key dari **proyek Supabase tim yang sama**. Di hosting, set empat variabel yang sama sebagai environment variables. `SUPABASE_SERVICE_ROLE_KEY` dan `TEAM_SETUP_TOKEN` hanya untuk server; jangan berikan kepada anggota atau taruh dalam variabel `NEXT_PUBLIC_*`.
+4. Jalankan seluruh berkas `supabase/migrations/*.sql` secara berurutan pada proyek Supabase tim yang **baru dan kosong**. Migrasi terakhir `20261005000000_standalone_team_template.sql` memasang kebijakan RLS, tabel branding, serta tabel presensi dan aset. Jangan menyalin `seed.sql` atau data dari aplikasi lama.
+5. Jalankan `npm ci` lalu `npm run build`; terbitkan deployment. Atur URL aplikasi tersebut di konfigurasi Auth proyek Supabase tim (Site URL dan URL redirect yang sesuai dengan domain tim).
+6. Buka `https://DOMAIN_TIM/setup`. Masukkan kode dari `TEAM_SETUP_TOKEN`, nama tim, dan akun Owner pertama. Sesudah berhasil, buka `/login`, masuk, lalu atur branding dan anggota di `/settings`.
+7. Ulangi langkah 1–6 untuk tim berikutnya dengan **Supabase project, environment, token setup, deployment, dan URL berbeda**. Jangan memakai satu service role key atau satu database untuk beberapa tim.
 
-- **Frontend & App Framework**: Next.js 15 (App Router, React 19)
-- **Bahasa**: TypeScript (Strict type checking)
-- **Styling**: Tailwind CSS v4 dengan Palet Warna Kustom Agency
-- **Database & Auth**: Supabase PostgreSQL & Supabase Authentication
-- **Data Fetching & Caching**: TanStack Query (React Query v5)
-- **Validasi Form**: React Hook Form & Zod
-- **Ikon**: Lucide Icons
-- **Grafik Dashboard**: Recharts
-- **Integration Engine**: ClickUp API v2 Service Layer Backend
+Contoh lokal:
 
----
-
-## 📁 Struktur Direktori Project
-
-```text
-bilik-strategi/
-├── app/
-│   ├── (auth)/
-│   │   └── login/             # Halaman Login & Reset Password
-│   ├── (dashboard)/
-│   │   ├── dashboard/         # Executive Dashboard + Recharts
-│   │   ├── projects/          # Project Management & Detail Tab
-│   │   ├── tasks/             # ClickUp Task Management
-│   │   ├── my-tasks/          # Dashboard Task Personal
-│   │   ├── timeline/          # Agency Timeline / Gantt
-│   │   ├── calendar/          # Interactive Calendar
-│   │   ├── team/              # Team Workload & Capacity Planner
-│   │   ├── clients/           # Client Directory & ClickUp Folders
-│   │   ├── chat/              # Team Communication & Tab Polling
-│   │   ├── notifications/     # Notification Center
-│   │   ├── settings/          # Integration & Role Settings
-│   │   └── layout.tsx         # Dashboard Shell Layout
-│   ├── api/
-│   │   ├── clickup/           # Backend Proxy Routes (Tasks, Comments)
-│   │   ├── webhooks/          # ClickUp Webhook Event Listener
-│   │   └── health/            # Diagnostic Endpoint
-│   ├── globals.css            # Custom CSS Variables & Color Tokens
-│   ├── layout.tsx             # Root Layout + React Query Provider
-│   └── page.tsx               # Root Redirect
-├── components/
-│   ├── layout/                # Sidebar, Header, CommandMenu (Cmd+K)
-│   └── tasks/                 # CreateTaskModal, TaskDetailDrawer
-├── lib/
-│   ├── clickup/               # ClickUp Service Layer (client, auth, tasks, comments, webhooks, rate-limit, errors)
-│   └── mock/                  # Demo Engine & Realistic Mock Dataset
-├── supabase/
-│   ├── migrations/            # Migration SQL Schema & RLS Policies
-│   └── seed.sql               # Seed Data Klien & Project Initial
-├── .env.example               # Environment Variables Template
-├── .env.local                 # Local Environment Setup (Mock active by default)
-└── package.json
-```
-
----
-
-## 🔐 Matriks Hak Akses & Peran Pengguna (Permissions)
-
-| Peran | Dashboard & Project | Mengelola Task | Ubah Status & PIC | Client Listing | Pengaturan ClickUp & User |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Owner** | Full Access | Full Access | Full Access | Full Access | Full Access |
-| **Admin** | Full Access | Full Access | Full Access | Full Access | Mengelola Project & Task |
-| **Team Lead** | Project Assigned | Full Access | Full Access | Read Only | Non-admin settings |
-| **Member** | Assigned Projects | Assigned Tasks | Sesuai Permission | Read Only | View Only |
-| **Client Portal**| Allowed Project Only | View Allowed Task | View Progress | Own Company Only | Restricted |
-
----
-
-## ⚡ Cara Menjalankan Aplikasi Secara Lokal
-
-### 1. Prasyarat
-Pastikan komputer Anda sudah terinstal **Node.js (v18.x / v20.x / v22.x)** dan **npm**.
-
-### 2. Clone / Buka Directory Project
 ```bash
-cd /Users/dinurm.pradipta/.gemini/antigravity/scratch/bilik-strategi
-```
-
-### 3. Instalasi Dependensi
-```bash
-npm install
-```
-
-### 4. Konfigurasi Environment File
-File `.env.local` sudah disiapkan dengan mode `NEXT_PUBLIC_USE_MOCK_DATA=true` agar aplikasi dapat langsung dijalankan tanpa token ClickUp atau database Supabase awal:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-CLICKUP_CLIENT_ID=your-client-id
-CLICKUP_CLIENT_SECRET=your-client-secret
-CLICKUP_REDIRECT_URI=http://localhost:3000/api/auth/clickup/callback
-
-CLICKUP_PERSONAL_TOKEN=pk_12345678_example_token
-CLICKUP_TEAM_ID=90001122
-
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-CLICKUP_WEBHOOK_SECRET=whsec_example_secret
-
-NEXT_PUBLIC_USE_MOCK_DATA=true
-```
-
-### 5. Jalankan Development Server
-```bash
+cp .env.team.example .env.local
+npm ci
 npm run dev
 ```
-Buka browser di `http://localhost:3000`. Aplikasi akan otomatis mengarahkan ke dashboard.
 
----
+`TEAM_SETUP_TOKEN` harus berupa nilai acak unik minimal 24 karakter. Simpan di secret manager hosting. Hapus atau rotasi setelah Owner pertama dibuat. Pembuatan anggota berikutnya dilakukan Owner/Admin dari aplikasi.
 
-## 🗄️ Panduan Setup Supabase PostgreSQL
+## Hak akses
 
-1. Buat proyek baru di [Supabase Console](https://supabase.com).
-2. Buka **SQL Editor** pada proyek Supabase Anda.
-3. Jalankan skrip migration dari file `supabase/migrations/20260730000000_initial_schema.sql`.
-4. Jalankan skrip seed data dari `supabase/seed.sql`.
-5. Ambil **Project URL** dan **Anon API Key** dari menu `Project Settings -> API`, lalu salin ke `.env.local`:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
-   SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-   ```
+Aplikasi memvalidasi pengguna melalui `supabase.auth.getUser()` lalu memeriksa profil, status, peran, dan izin halaman di database. Owner mengakses finance dan slip gaji. Admin dapat mengelola anggota dan branding. Pengaturan modul di Settings membatasi menu, API, dan kebijakan RLS untuk data modul terkait. Fitur dasar yang diperlukan untuk mengelola instalasi (dashboard, tim, notifikasi, settings) tetap tersedia.
 
----
+## Verifikasi sebelum dipakai tim
 
-## 🔑 Panduan Menghubungkan ClickUp Token & Webhook
-
-### 1. Menggunakan Personal Access Token (Default Versi Awal)
-1. Buka akun ClickUp Anda -> **My Settings -> Apps**.
-2. Generate **Personal Access Token**.
-3. Salin token tersebut (format `pk_...`) ke file `.env.local`:
-   ```env
-   CLICKUP_PERSONAL_TOKEN=pk_12345678_your_actual_token
-   CLICKUP_TEAM_ID=90123456
-   ```
-4. Ubah `NEXT_PUBLIC_USE_MOCK_DATA=false`.
-5. Buka halaman **Settings -> ClickUp Integration** di aplikasi Bilik Strategi dan tekan **Test Connection**.
-
-### 2. Mengaktifkan Webhook Real-time
-1. Pastikan domain aplikasi terpublikasi (misal via Vercel atau Ngrok).
-2. Daftarkan endpoint webhook ke ClickUp Team API:
-   ```text
-   POST https://api.clickup.com/api/v2/team/{team_id}/webhook
-   Endpoint: https://domain-anda.com/api/webhooks/clickup
-   Events: ["taskCreated", "taskUpdated", "taskStatusUpdated", "taskCommentPosted"]
-   ```
-3. Salin `secret` yang diberikan ClickUp ke variable `CLICKUP_WEBHOOK_SECRET`.
-
----
-
-## 🚀 Cara Deploy ke Vercel / Cloudflare
-
-1. Push repository ke GitHub / GitLab.
-2. Impor project ke dashboard Vercel.
-3. Atur Framework Preset: **Next.js**.
-4. Masukkan seluruh environment variables dari `.env.example` ke Vercel Settings.
-5. Klik **Deploy**.
-
----
-
-## 📊 Mapping Data ClickUp & Status Feature
-
-| Modul | Live Sync ClickUp | Demo Mock Mode | Keterangan |
-| :--- | :---: | :---: | :--- |
-| **Tasks & Status** | ✅ Active | ✅ Active | CRUD Task, optimistic status update, priority change |
-| **Task Comments** | ✅ Active | ✅ Active | Post comment syncs to ClickUp Task |
-| **Team Workload** | ✅ Active | ✅ Active | Calculated from ClickUp Time Estimates & Tracked |
-| **Project Lists** | ✅ Active | ✅ Active | Mapped to ClickUp Spaces, Folders, & Lists |
-| **Agency Chat** | 🔄 Adapter Fallback | ✅ Active | Integrated ClickUp Chat API with safe fallback |
+Setelah migrasi dan deployment ke proyek baru, uji login Owner dan anggota, branding/favicon, pembuatan project/tugas, komentar/subtask, chat, check-in/check-out presensi, akses finance Owner, serta penyimpanan invoice/penawaran/perjanjian dari dua akun pada dua browser. `npm run build` hanya memeriksa kode; keberhasilan database, Auth, RLS, realtime, dan deployment perlu diuji pada instalasi tim yang nyata.

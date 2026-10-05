@@ -19,14 +19,10 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { RefreshCw, X, Trash2 } from 'lucide-react';
-import { AgencyProject } from '@/lib/mock/data';
+import { AgencyProject } from '@/lib/types/agency';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
-import {
-  mergeAppProjectWithClickUp,
-  projectsRepresentSameEntity,
-  uniqueProjectsByReference,
-} from '@/lib/projects/dedupe';
+import { uniqueProjectsByReference } from '@/lib/projects/dedupe';
 import ProjectDetailClient from '@/components/projects/ProjectDetailClient';
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar';
@@ -56,14 +52,14 @@ function normalizeAppProject(value: any): AgencyProject {
     id: projectId,
     name: projectText(value?.name, 'Project'),
     description: projectText(value?.description || value?.content, ''),
-    client_id: projectText(value?.client_id, 'c1'),
-    client_name: projectText(value?.client_name || value?.client?.company_name, 'Bilik Strategi Workspace'),
+    client_id: projectText(value?.client_id, ''),
+    client_name: projectText(value?.client_name || value?.client?.company_name, 'Team Workspace'),
     status: PROJECT_STATUSES.has(statusValue) ? statusValue as AgencyProject['status'] : 'planning',
     clickup_space_id: projectText(value?.clickup_space_id, ''),
     clickup_folder_id: projectText(value?.clickup_folder_id, ''),
     clickup_list_id: projectText(value?.clickup_list_id || value?.list_id, projectId),
-    team_lead_id: projectText(value?.team_lead_id, 'u1'),
-    team_lead_name: projectText(value?.team_lead_name, 'Dinur Pradipta'),
+    team_lead_id: projectText(value?.team_lead_id, ''),
+    team_lead_name: projectText(value?.team_lead_name, 'Owner Tim'),
     member_ids: Array.isArray(value?.member_ids) ? value.member_ids.map((id: unknown) => projectText(id)) : [],
     start_date: projectText(value?.start_date, today),
     due_date: projectText(value?.due_date, defaultDueDate),
@@ -88,9 +84,9 @@ function ProjectsListPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [newClientName, setNewClientName] = useState('Bilik Strategi Workspace');
+  const [newClientName, setNewClientName] = useState('Team Workspace');
   const [newStatus, setNewStatus] = useState('in_progress');
-  const [newTeamLeadName, setNewTeamLeadName] = useState('Dinur Pradipta');
+  const [newTeamLeadName, setNewTeamLeadName] = useState('Owner Tim');
   const [newStartDate, setNewStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newDueDate, setNewDueDate] = useState(() => new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]);
   const [clientsList, setClientsList] = useState<any[]>([]);
@@ -116,16 +112,10 @@ function ProjectsListPage() {
     return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  // 1. Fetch Projects (combining Supabase DB, Shared Server Store, and ClickUp)
+  // Fetch projects from this team's database.
   const fetchProjects = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     const appProjects: AgencyProject[] = [];
-    let clickupProjects: AgencyProject[] = [];
-    const deletedIdsRaw = typeof window !== 'undefined' ? localStorage.getItem('bilik_deleted_project_ids') : null;
-    const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
-
-    // The application database is canonical. ClickUp is only used to enrich
-    // matching projects with task/progress data in the background.
     try {
       const apiRes = await fetch('/api/supabase/projects', { cache: 'no-store' });
       if (apiRes.ok) {
@@ -152,31 +142,7 @@ function ProjectsListPage() {
       }
     } catch {}
 
-    // ClickUp lists are kept as fallback records only when no application
-    // project represents the same list/name.
-    try {
-      const cuRes = await fetch('/api/clickup/projects');
-      if (cuRes.ok) {
-        const cuData = await cuRes.json();
-        clickupProjects = Array.isArray(cuData.projects) ? cuData.projects.map(normalizeAppProject) : [];
-      }
-    } catch {}
-
-    const canonicalAppProjects = uniqueProjectsByReference(appProjects);
-    const canonicalClickUpProjects = uniqueProjectsByReference(clickupProjects);
-    const matchedClickUpIds = new Set<string>();
-    const mergedProjects = canonicalAppProjects.map((appProject) => {
-      const clickupProject = canonicalClickUpProjects.find((candidate) => projectsRepresentSameEntity(appProject, candidate));
-      if (!clickupProject) return appProject;
-
-      matchedClickUpIds.add(projectText(clickupProject.id || clickupProject.clickup_list_id));
-      return mergeAppProjectWithClickUp(appProject, clickupProject);
-    });
-
-    const clickupOnlyProjects = canonicalClickUpProjects.filter(
-      (clickupProject) => !matchedClickUpIds.has(projectText(clickupProject.id || clickupProject.clickup_list_id)),
-    );
-    const cleanProjects = [...mergedProjects, ...clickupOnlyProjects].filter((project) => !deletedIds.includes(project.id));
+    const cleanProjects = uniqueProjectsByReference(appProjects);
     setProjects(cleanProjects);
     if (typeof window !== 'undefined') {
       localStorage.setItem('bilik_agency_projects_db', JSON.stringify(cleanProjects));
@@ -229,7 +195,7 @@ function ProjectsListPage() {
     };
   }, []);
 
-  // Create Project: App First Realtime (never fails on ClickUp auth)
+  // Create a project in the team database.
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
@@ -247,13 +213,13 @@ function ProjectsListPage() {
     const newProjectObj: AgencyProject = {
       id: newId,
       name: newProjectName.trim(),
-      client_id: 'c1',
-      client_name: newClientName.trim() || 'Bilik Strategi Workspace',
+      client_id: '',
+      client_name: newClientName.trim() || 'Team Workspace',
       clickup_space_id: '',
       clickup_folder_id: '',
       clickup_list_id: newId,
-      team_lead_id: 'u1',
-      team_lead_name: newTeamLeadName.trim() || 'Dinur Pradipta',
+      team_lead_id: '',
+      team_lead_name: newTeamLeadName.trim() || 'Owner Tim',
       member_ids: [],
       status: newStatus as any,
       progress_percentage: 0,
@@ -262,49 +228,27 @@ function ProjectsListPage() {
       overdue_tasks: 0,
       start_date: newStartDate || new Date().toISOString().split('T')[0],
       due_date: newDueDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      description: newProjectDesc.trim() || 'Project Baru Bilik Strategi',
+      description: newProjectDesc.trim() || 'Project Baru Team Workspace',
     };
 
     // 1. Immediately save to Shared Server Store & DB API
     try {
-      await fetch('/api/supabase/projects', {
+      const response = await fetch('/api/supabase/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProjectObj),
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Project gagal disimpan.');
+      }
     } catch (err) {
-      console.warn('[ProjectsPage] Could not save project to server store:', err);
+      alert(err instanceof Error ? err.message : 'Project gagal disimpan.');
+      setSubmitting(false);
+      return;
     }
 
-    // 2. Fire-and-forget ClickUp sync in background (never blocks the app).
-    // Persist the returned ClickUp list ID so later refreshes merge both records.
-    fetch('/api/clickup/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newProjectName, content: newProjectDesc, due_date: newDueDate }),
-    })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const result = await response.json().catch(() => null);
-        const clickupListId = result?.id || result?.list_id || result?.list?.id;
-        if (!clickupListId) return;
-
-        const normalizedClickUpListId = String(clickupListId);
-        setProjects((current) => {
-          const next = current.map((project) => project.id === newId ? { ...project, clickup_list_id: normalizedClickUpListId } : project);
-          if (typeof window !== 'undefined') localStorage.setItem('bilik_agency_projects_db', JSON.stringify(next));
-          return next;
-        });
-
-        await fetch('/api/supabase/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update', id: newId, clickup_list_id: normalizedClickUpListId, notification_silent: true }),
-        });
-      })
-      .catch(() => {});
-
-    // 3. Update local state & storage
+    // Update local state after the database confirms the write.
     const updated = [newProjectObj, ...projects.filter((p) => p.id !== newId)];
     setProjects(updated);
     if (typeof window !== 'undefined') {
@@ -327,25 +271,22 @@ function ProjectsListPage() {
 
   // Permanently delete project from UI & persist in localStorage
   const handleDeleteProject = async (listId: string, projectName: string) => {
-    const updated = projects.filter((p) => p.id !== listId && p.clickup_list_id !== listId);
-    setProjects(updated);
-
     try {
-      const deletedIdsRaw = localStorage.getItem('bilik_deleted_project_ids');
-      const deletedIds: string[] = deletedIdsRaw ? JSON.parse(deletedIdsRaw) : [];
-      if (!deletedIds.includes(listId)) {
-        deletedIds.push(listId);
-        localStorage.setItem('bilik_deleted_project_ids', JSON.stringify(deletedIds));
-      }
-      localStorage.setItem('bilik_agency_projects_db', JSON.stringify(updated));
-
-      await fetch('/api/supabase/projects', {
+      const response = await fetch('/api/supabase/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id: listId }),
       });
-    } catch {
-      // ignore storage error
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Project gagal dihapus.');
+      }
+      const updated = projects.filter((p) => p.id !== listId && p.clickup_list_id !== listId);
+      setProjects(updated);
+      localStorage.setItem('bilik_agency_projects_db', JSON.stringify(updated));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Project gagal dihapus.');
+      return;
     }
 
     // Broadcast
@@ -357,14 +298,6 @@ function ProjectsListPage() {
       } catch {}
     }
 
-    // 3. Try deleting from ClickUp API in background
-    try {
-      await fetch(`/api/clickup/projects?listId=${encodeURIComponent(listId)}`, {
-        method: 'DELETE',
-      });
-    } catch {
-      // ignore network error
-    }
   };
 
   const filteredProjects = projects.filter((p) => {
@@ -380,7 +313,7 @@ function ProjectsListPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-[#24324A] tracking-tight">Project Management</h1>
           <p className="text-xs text-[#737680] mt-1">
-            Kelola seluruh project agency, progress deliverable, dan hubungan Folder/List ClickUp.
+            Kelola seluruh project agency, progress deliverable, dan hubungan Folder/List aplikasi.
           </p>
         </div>
 
@@ -397,7 +330,7 @@ function ProjectsListPage() {
           <button
             onClick={() => fetchProjects(false)}
             className="p-2 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl text-xs font-semibold text-[#24324A] hover:bg-[#EEF2F7] transition-colors"
-            title="Sync Data ClickUp"
+            title="Sync Data aplikasi"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-[#F26B5E] ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -480,9 +413,9 @@ function ProjectsListPage() {
       {filteredProjects.length === 0 && !loading && (
         <div className="bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl p-12 text-center space-y-3 shadow-2xs">
           <Briefcase className="w-10 h-10 text-[#737680] mx-auto opacity-40" />
-          <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Project di ClickUp</h3>
+          <h3 className="text-sm font-extrabold text-[#24324A]">Belum Ada Project di aplikasi</h3>
           <p className="text-xs text-[#737680] max-w-sm mx-auto">
-            Tidak ada project atau list yang ditemukan. Klik tombol <span className="font-semibold text-[#24324A]">+ Project Baru</span> untuk membuat project baru di ClickUp Workspace.
+            Tidak ada project atau list yang ditemukan. Klik tombol <span className="font-semibold text-[#24324A]">+ Project Baru</span> untuk membuat project baru di aplikasi Workspace.
           </p>
         </div>
       )}
@@ -501,7 +434,7 @@ function ProjectsListPage() {
                   <th className="py-3 px-4">Team Lead</th>
                   <th className="py-3 px-4">Deadline</th>
                   <th className="py-3 px-4 text-center">Tasks</th>
-                  <th className="py-3 px-4 text-right">ClickUp Ref</th>
+                  <th className="py-3 px-4 text-right">aplikasi Ref</th>
                   <th className="py-3 px-4 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -515,7 +448,7 @@ function ProjectsListPage() {
                       </a>
                       <span className="text-[11px] font-normal text-[#737680] block truncate max-w-xs">{project.description}</span>
                     </td>
-                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.client_name || 'Bilik Strategi Workspace'}</td>
+                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.client_name || 'Team Workspace'}</td>
                     <td className="py-3.5 px-4">
                       <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded uppercase ${
                         project.status === 'in_progress' ? 'bg-[#EEF2F7] text-[#24324A]' :
@@ -533,7 +466,7 @@ function ProjectsListPage() {
                         <span className="text-[11px] font-bold text-[#202124]">{project.progress_percentage}%</span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.team_lead_name || 'Dinur Pradipta'}</td>
+                    <td className="py-3.5 px-4 text-[#202124] font-medium">{project.team_lead_name || 'Owner Tim'}</td>
                     <td className="py-3.5 px-4 text-[#737680]">
                       {formatDateDisplay(project.due_date)}
                     </td>
@@ -552,7 +485,7 @@ function ProjectsListPage() {
                       <button
                         onClick={() => setDeleteTargetProject({ id: project.id, name: project.name })}
                         className="p-1.5 text-[#737680] hover:text-[#D95858] hover:bg-[#FFF0ED] rounded-lg transition-colors cursor-pointer"
-                        title="Hapus Project dari ClickUp"
+                        title="Hapus Project dari aplikasi"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -585,7 +518,7 @@ function ProjectsListPage() {
                       href={projectDetailHref(p.id)}
                       className="block p-4 bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl hover:border-[#24324A] transition-all shadow-2xs group cursor-pointer"
                     >
-                      <span className="text-[10px] font-bold text-[#F26B5E] uppercase tracking-wider block">{p.client_name || 'Bilik Strategi Workspace'}</span>
+                      <span className="text-[10px] font-bold text-[#F26B5E] uppercase tracking-wider block">{p.client_name || 'Team Workspace'}</span>
                       <h4 className="text-sm font-bold text-[#24324A] mt-1 group-hover:text-[#F26B5E] transition-colors">{p.name}</h4>
                       <p className="text-xs text-[#737680] mt-1 line-clamp-2">{p.description}</p>
 
@@ -633,7 +566,7 @@ function ProjectsListPage() {
           <CalendarDays className="w-8 h-8 text-[#24324A] mx-auto mb-2" />
           <h3 className="text-sm font-bold text-[#24324A]">Jadwal Calendar Deliverable</h3>
           <p className="text-xs text-[#737680] mt-1 max-w-sm mx-auto">
-            Semua due date project ini disinkronkan secara otomatis dengan ClickUp List & Calendar View.
+            Semua due date project ini disinkronkan secara otomatis dengan aplikasi List & Calendar View.
           </p>
         </div>
       )}
@@ -645,7 +578,7 @@ function ProjectsListPage() {
             <div className="flex items-center justify-between border-b border-[#E8E8EC] pb-3">
               <div>
                 <h3 className="text-sm font-extrabold text-[#24324A]">Buat Project Baru</h3>
-                <p className="text-[11px] text-[#737680]">Lengkapi detail project untuk membuat List di ClickUp & Supabase DB</p>
+                <p className="text-[11px] text-[#737680]">Lengkapi detail project untuk membuat List di aplikasi & Supabase DB</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="text-[#737680] hover:text-[#24324A] p-1 rounded-lg">
                 <X className="w-4 h-4" />
@@ -673,7 +606,7 @@ function ProjectsListPage() {
                     onChange={(e) => setNewClientName(e.target.value)}
                     className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white"
                   >
-                    <option value="Bilik Strategi Workspace">Bilik Strategi Workspace (Internal)</option>
+                    <option value="Team Workspace">Team Workspace (Internal)</option>
                     {clientsList.map((c) => (
                       <option key={c.id || c.company_name} value={c.company_name || c.name}>
                         {c.company_name || c.name}
@@ -705,7 +638,7 @@ function ProjectsListPage() {
                     onChange={(e) => setNewTeamLeadName(e.target.value)}
                     className="w-full px-3 py-2 border border-[#E8E8EC] rounded-xl focus:outline-none focus:border-[#24324A] bg-white font-semibold"
                   >
-                    <option value="Dinur Pradipta">Dinur Pradipta</option>
+                    <option value="Owner Tim">Owner Tim</option>
                   </select>
                 </div>
 
@@ -767,8 +700,8 @@ function ProjectsListPage() {
       {/* Modal Confirm Delete Project */}
       <ConfirmModal
         isOpen={Boolean(deleteTargetProject)}
-        title="Hapus Project dari ClickUp"
-        message={deleteTargetProject ? `Apakah Anda yakin ingin menghapus project "${deleteTargetProject.name}"? Project/List ini beserta task di dalamnya akan terhapus dari ClickUp.` : ''}
+        title="Hapus Project dari aplikasi"
+        message={deleteTargetProject ? `Apakah Anda yakin ingin menghapus project "${deleteTargetProject.name}" beserta tugas di dalamnya?` : ''}
         confirmText="Hapus Project"
         cancelText="Batal"
         confirmVariant="danger"

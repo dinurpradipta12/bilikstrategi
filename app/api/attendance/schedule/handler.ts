@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/lib/clickup/users';
-import {
-  isSuperuserEmail,
-  normalizeAppRole,
-  normalizeIdentityEmail,
-  type AppRole,
-} from '@/lib/auth/app-role';
+import { type AppRole } from '@/lib/auth/app-role';
+import { getServerWorkspaceContext } from '@/lib/auth/server-workspace-context';
 import { supabaseRest } from '@/lib/supabase/rest-client';
 import {
   isSupabaseAdminConfigured,
@@ -36,19 +31,6 @@ type RequestIdentity = {
   isAdmin: boolean;
 };
 
-function decodeCookie(value: string | undefined) {
-  if (!value) return '';
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function normalizeEmail(value: unknown) {
-  return normalizeIdentityEmail(value);
-}
-
 function noStoreJson(payload: unknown, status = 200) {
   return NextResponse.json(payload, {
     status,
@@ -62,45 +44,13 @@ function errorResponse(error: unknown, fallback: string, status = 500) {
 }
 
 async function resolveIdentity(req: NextRequest): Promise<RequestIdentity> {
-  let email = normalizeEmail(decodeCookie(req.cookies.get('clickup_user_email')?.value));
-  let name = decodeCookie(req.cookies.get('clickup_user_name')?.value) || 'Pengguna';
-  let appRole = normalizeAppRole(decodeCookie(req.cookies.get('clickup_user_role')?.value));
-
-  const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (accessToken && !email) {
-    try {
-      const authenticated = await getAuthenticatedUser(accessToken);
-      const user = authenticated?.user || {};
-      email = normalizeEmail(user.email) || email;
-      name = String(user.username || name);
-      appRole = normalizeAppRole(user.role || appRole);
-    } catch {
-      // The cookie identity remains usable if ClickUp is temporarily unavailable.
-    }
-  }
-
-  let isAdmin = false;
-  if (email) {
-    try {
-      const storedRole = await supabaseRest
-        .from('app_user_roles')
-        .select('role,is_superuser,status')
-        .ilike('email', email)
-        .maybeSingle();
-
-      if (!storedRole.error && storedRole.data?.status !== 'inactive') {
-        appRole = normalizeAppRole(storedRole.data?.role || appRole);
-        isAdmin = storedRole.data?.is_superuser === true;
-      }
-    } catch {
-      // The app can still use the ClickUp role while the optional role table is unavailable.
-    }
-  }
-
-  if (isSuperuserEmail(email)) appRole = 'owner';
-  isAdmin = isAdmin || isSuperuserEmail(email) || appRole === 'owner' || appRole === 'admin';
-
-  return { email, name, appRole, isAdmin };
+  const context = await getServerWorkspaceContext(req);
+  return {
+    email: context.isActive ? context.identity.email : '',
+    name: context.identity.name,
+    appRole: context.appRole,
+    isAdmin: context.canManage,
+  };
 }
 
 async function readSchedule() {

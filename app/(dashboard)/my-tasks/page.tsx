@@ -14,7 +14,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import { AgencyTask } from '@/lib/mock/data';
+import { AgencyTask } from '@/lib/types/agency';
 import TaskDetailDrawer from '@/components/tasks/TaskDetailDrawer';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import { supabase } from '@/lib/supabase/client';
@@ -28,11 +28,6 @@ export default function MyTasksPage() {
   const [deleteTargetTask, setDeleteTargetTask] = useState<AgencyTask | null>(null);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
-
-  const resolveClickUpTaskId = (taskId: string) => {
-    const task = tasks.find((item) => item.id === taskId || item.clickup_task_id === taskId);
-    return task?.clickup_task_id || taskId;
-  };
 
   const fetchMyTasks = async () => {
     setLoading(true);
@@ -76,18 +71,15 @@ export default function MyTasksPage() {
       setSelectedTask({ ...selectedTask, status: newStatus });
     }
     try {
-      await fetch('/api/supabase/tasks', {
+      const response = await fetch('/api/supabase/tasks', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId, status: newStatus }),
       });
-      fetch('/api/clickup/tasks', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: resolveClickUpTaskId(taskId), status: newStatus }),
-      }).catch(() => {});
+      if (!response.ok) throw new Error('Status tugas gagal disimpan.');
     } catch {
-      // ignore
+      fetchMyTasks();
+      alert('Status tugas gagal disimpan.');
     }
   };
 
@@ -95,18 +87,16 @@ export default function MyTasksPage() {
     if (!deleteTargetTask) return;
 
     const target = deleteTargetTask;
-    const clickupTaskId = resolveClickUpTaskId(target.id);
     setIsDeletingTask(true);
-    setTasks((prev) => prev.filter((task) => task.id !== target.id && task.clickup_task_id !== clickupTaskId));
-
     try {
-      await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
-      if (!clickupTaskId.startsWith('app-')) {
-        await fetch(`/api/clickup/tasks?taskId=${encodeURIComponent(clickupTaskId)}`, { method: 'DELETE' }).catch(() => {});
-      }
+      const response = await fetch(`/api/supabase/tasks?taskId=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Tugas gagal dihapus.');
+      setTasks((prev) => prev.filter((task) => task.id !== target.id));
       setDeleteTargetTask(null);
       setDrawerOpen(false);
       setSelectedTask(null);
+    } catch {
+      alert('Tugas gagal dihapus.');
     } finally {
       setIsDeletingTask(false);
     }
@@ -378,7 +368,7 @@ export default function MyTasksPage() {
       <ConfirmModal
         isOpen={Boolean(deleteTargetTask)}
         title="Hapus Task"
-        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.task_name}" dari aplikasi dan ClickUp?` : ''}
+        message={deleteTargetTask ? `Apakah Anda yakin ingin menghapus task "${deleteTargetTask.task_name}"?` : ''}
         confirmText="Hapus Task"
         cancelText="Batal"
         confirmVariant="danger"

@@ -5,11 +5,9 @@ export const runtime = 'edge';
 export async function GET() {
   return NextResponse.json({
     status: 'ok',
-    app: 'Bilik Strategi Workspace',
+    app: 'Team Workspace',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
-    mock_mode: process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true',
-    clickup_configured: Boolean(process.env.CLICKUP_PERSONAL_TOKEN),
-    supabase_configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    supabase_configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY),
   });
 }

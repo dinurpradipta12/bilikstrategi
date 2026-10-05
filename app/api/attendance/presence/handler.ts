@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerWorkspaceContext } from '@/lib/auth/server-workspace-context';
-import { normalizeIdentityEmail } from '@/lib/auth/app-role';
-import { getAuthenticatedUser } from '@/lib/clickup/users';
 import {
   isSupabaseAdminConfigured,
   supabaseAdminFetch,
@@ -21,8 +19,6 @@ type VerifiedIdentity = {
   avatarUrl: string;
 };
 
-const verifiedIdentityCache = new Map<string, VerifiedIdentity & { expiresAt: number }>();
-const VERIFIED_IDENTITY_CACHE_MS = 10 * 60 * 1000;
 
 function noStoreJson(payload: unknown, status = 200) {
   return NextResponse.json(payload, {
@@ -56,65 +52,17 @@ function cleanPath(value: unknown) {
   return candidate.startsWith('/') && !candidate.startsWith('//') ? candidate : '/dashboard';
 }
 
-async function tokenFingerprint(token: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-async function getVerifiedIdentity(req: NextRequest): Promise<VerifiedIdentity | null> {
-  const accessToken = req.cookies.get('clickup_access_token')?.value;
-  if (!accessToken) return null;
-
-  const fingerprint = await tokenFingerprint(accessToken);
-  const cached = verifiedIdentityCache.get(fingerprint);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { email: cached.email, name: cached.name, avatarUrl: cached.avatarUrl };
-  }
-
-  try {
-    const authenticated = await getAuthenticatedUser(accessToken);
-    const user = authenticated?.user;
-    const email = normalizeIdentityEmail(user?.email);
-    if (!email) return null;
-
-    const identity = {
-      email,
-      name: text(user?.username, 180) || email.split('@')[0] || 'Pengguna',
-      avatarUrl: text(user?.profilePicture, 1000),
-    };
-    if (verifiedIdentityCache.size >= 100) {
-      const now = Date.now();
-      for (const [key, entry] of verifiedIdentityCache) {
-        if (entry.expiresAt <= now) verifiedIdentityCache.delete(key);
-      }
-      if (verifiedIdentityCache.size >= 100) {
-        const oldestKey = verifiedIdentityCache.keys().next().value;
-        if (oldestKey) verifiedIdentityCache.delete(oldestKey);
-      }
-    }
-    verifiedIdentityCache.set(fingerprint, {
-      ...identity,
-      expiresAt: Date.now() + VERIFIED_IDENTITY_CACHE_MS,
-    });
-    return identity;
-  } catch {
-    verifiedIdentityCache.delete(fingerprint);
-    return null;
-  }
-}
-
 async function getVerifiedWorkspaceContext(req: NextRequest) {
-  const verifiedIdentity = await getVerifiedIdentity(req);
-  if (!verifiedIdentity) return null;
-
   const context = await getServerWorkspaceContext(req);
-  if (context.identity.email && context.identity.email !== verifiedIdentity.email) return null;
+  if (!context.isActive || !context.identity.email) return null;
 
   return {
     ...context,
-    identity: verifiedIdentity,
+    identity: {
+      email: context.identity.email,
+      name: context.identity.name,
+      avatarUrl: context.identity.avatarUrl,
+    } satisfies VerifiedIdentity,
   };
 }
 
@@ -255,7 +203,7 @@ function localDateParts(date: Date) {
 async function handleHeartbeat(req: NextRequest, body: Record<string, unknown>) {
   const context = await getVerifiedWorkspaceContext(req);
   if (!context) {
-    return noStoreJson({ error: 'Sesi ClickUp tidak valid. Silakan login ulang.' }, 401);
+    return noStoreJson({ error: 'Sesi aplikasi tidak valid. Silakan login ulang.' }, 401);
   }
   if (!isSupabaseAdminConfigured()) {
     return noStoreJson({ tracking: false, storage_ready: false }, 503);
@@ -364,7 +312,7 @@ async function handleHeartbeat(req: NextRequest, body: Record<string, unknown>) 
 
 async function handleForceCheckout(req: NextRequest, body: Record<string, unknown>) {
   const context = await getVerifiedWorkspaceContext(req);
-  if (!context) return noStoreJson({ error: 'Sesi ClickUp tidak valid. Silakan login ulang.' }, 401);
+  if (!context) return noStoreJson({ error: 'Sesi aplikasi tidak valid. Silakan login ulang.' }, 401);
   if (!context.canManage) {
     return noStoreJson({ error: 'Hanya Admin atau Owner yang dapat melakukan checkout paksa.' }, 403);
   }
@@ -434,7 +382,7 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
     regular_hours: regularHours,
     overtime_hours: overtimeHours,
     status,
-    project_name: text(session.selected_project, 240) || 'Bilik Strategi Workspace',
+    project_name: text(session.selected_project, 240) || 'Team Workspace',
     notes: auditNote,
   };
   const extendedRecord = {
@@ -542,7 +490,7 @@ async function handleForceCheckout(req: NextRequest, body: Record<string, unknow
 export async function GET(req: NextRequest) {
   try {
     const context = await getVerifiedWorkspaceContext(req);
-    if (!context) return noStoreJson({ error: 'Sesi ClickUp tidak valid. Silakan login ulang.' }, 401);
+    if (!context) return noStoreJson({ error: 'Sesi aplikasi tidak valid. Silakan login ulang.' }, 401);
     if (!context.canManage) {
       return noStoreJson({ error: 'Hanya Admin atau Owner yang dapat melihat log aktivitas.' }, 403);
     }
