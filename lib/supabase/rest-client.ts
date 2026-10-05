@@ -99,7 +99,7 @@ class SupabaseRestQuery<T = any> implements PromiseLike<QueryResult<T>> {
         method: this.method,
         headers: {
           apikey: config.key,
-          Authorization: `Bearer ${config.key}`,
+          ...(config.key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${config.key}` }),
           'Content-Type': 'application/json',
           ...(this.prefer ? { Prefer: this.prefer } : {}),
         },

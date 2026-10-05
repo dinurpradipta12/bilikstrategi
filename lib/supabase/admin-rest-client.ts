@@ -27,7 +27,11 @@ export async function supabaseAdminFetch(path: string, init: RequestInit = {}) {
 
   const headers = new Headers(init.headers);
   headers.set('apikey', config.key);
-  headers.set('Authorization', `Bearer ${config.key}`);
+  // Modern sb_secret keys are API keys, not JWTs. Legacy service_role JWTs
+  // still use Authorization for compatibility with existing installations.
+  if (!config.key.startsWith('sb_secret_')) {
+    headers.set('Authorization', `Bearer ${config.key}`);
+  }
   headers.set('Content-Type', 'application/json');
 
   return fetch(`${config.url}/rest/v1/${path}`, {
