@@ -210,7 +210,7 @@ export default function Sidebar() {
   }, [pathname]);
 
   const navItems: Array<{
-    key: PageAccessKey | 'finance' | 'salary_slips';
+    key: PageAccessKey | 'finance' | 'salary_slips' | 'team_apps';
     name: string;
     href: string;
     icon: typeof LayoutDashboard;
@@ -241,6 +241,7 @@ export default function Sidebar() {
     { key: 'agreements', name: 'Collaboration Agreement', href: '/agreements', icon: FileSignature },
     { key: 'notifications', name: 'Notifications', href: '/notifications', icon: Bell, badge: notifUnread > 0 ? notifUnread : undefined },
     { key: 'settings', name: 'Settings', href: '/settings', icon: Settings },
+    { key: 'team_apps', name: 'Aplikasi Tim', href: '/team-apps', icon: Building2, ownerOnly: true },
   ];
   const visibleNavItems = navItems.filter((item) => {
     if (item.ownerOnly) return userProfile.ownerAccount;
@@ -277,7 +278,7 @@ export default function Sidebar() {
       id: 'owner-admin',
       name: 'Owner / Admin',
       icon: ShieldCheck,
-      keys: ['profitability', 'automations', 'finance', 'salary_slips'],
+      keys: ['profitability', 'automations', 'finance', 'salary_slips', 'team_apps'],
     },
   ].map((group) => ({
     ...group,
