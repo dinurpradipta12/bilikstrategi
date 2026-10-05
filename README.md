@@ -1,6 +1,6 @@
 # Template aplikasi tim mandiri
 
-Cabang ini adalah template aplikasi terpisah untuk **satu tim per instalasi**. Setiap tim mendapat URL deployment dan proyek Supabase sendiri. Bilik Strategi yang sudah berjalan tetap berada di cabang/deployment aslinya dan dapat terus memakai ClickUp. Template ini memakai Supabase Auth dan database tim; tidak memerlukan akun, token, webhook, atau konfigurasi ClickUp.
+Repositori ini adalah template aplikasi terpisah untuk **satu tim per instalasi**. Setiap tim mendapat repositori GitHub, URL deployment, dan proyek Supabase sendiri. Bilik Strategi yang sudah berjalan tetap memakai deployment aslinya dan dapat terus memakai ClickUp. Template ini memakai Supabase Auth dan database tim; tidak memerlukan akun, token, webhook, atau konfigurasi ClickUp.
 
 ## Modul
 
@@ -11,9 +11,9 @@ Beberapa nama kolom internal masih memakai awalan `clickup_` agar modul lama dap
 ## Membuat instalasi untuk tim baru
 
 1. Buat **proyek Supabase baru dan kosong** khusus tim tersebut. Jangan gunakan proyek database Bilik Strategi yang aktif.
-2. Buat deployment Next.js 16 baru dengan **cabang template ini** sebagai sumber, misalnya proyek Vercel atau server Node.js terpisah. Berikan domain atau subdomain unik, misalnya `tim-a.example.com`. Setiap deployment harus memiliki environment miliknya sendiri. Konfigurasi Cloudflare Pages lama tidak dipakai karena adaptor `next-on-pages` gagal membangun `proxy.ts` pada Next.js 16; Cloudflare Workers memerlukan konfigurasi adaptor dan pengujian runtime tersendiri.
+2. Gunakan **Use this template** di GitHub untuk membuat salinan di akun tim, lalu buat deployment Next.js 16 dari repositori baru tersebut, misalnya proyek Vercel atau server Node.js terpisah. Berikan domain atau subdomain unik, misalnya `tim-a.example.com`. Setiap deployment harus memiliki environment miliknya sendiri. Konfigurasi Cloudflare Pages lama tidak dipakai karena adaptor `next-on-pages` gagal membangun `proxy.ts` pada Next.js 16; Cloudflare Workers memerlukan konfigurasi adaptor dan pengujian runtime tersendiri.
 3. Salin [`.env.team.example`](.env.team.example) ke `.env.local` untuk pengembangan lokal. Isi URL, anon/publishable key, dan service role key dari **proyek Supabase tim yang sama**. Di hosting, set empat variabel yang sama sebagai environment variables. `SUPABASE_SERVICE_ROLE_KEY` dan `TEAM_SETUP_TOKEN` hanya untuk server; jangan berikan kepada anggota atau taruh dalam variabel `NEXT_PUBLIC_*`.
-4. Jalankan seluruh berkas `supabase/migrations/*.sql` secara berurutan pada proyek Supabase tim yang **baru dan kosong**. Migrasi terakhir `20261005000000_standalone_team_template.sql` memasang kebijakan RLS, tabel branding, serta tabel presensi dan aset. Jangan menyalin `seed.sql` atau data dari aplikasi lama.
+4. Jalankan `supabase/setup_all.sql` di SQL Editor proyek Supabase tim yang **baru dan kosong**. Berkas ini menggabungkan seluruh 29 migrasi dari `supabase/migrations/*.sql` secara berurutan. Migrasi terakhir `20261005000000_standalone_team_template.sql` memasang kebijakan RLS, tabel branding, serta tabel presensi dan aset. Jangan menyalin `seed.sql` atau data dari aplikasi lama.
 5. Jalankan `npm ci` lalu `npm run build`; terbitkan deployment. Atur URL aplikasi tersebut di konfigurasi Auth proyek Supabase tim (Site URL dan URL redirect yang sesuai dengan domain tim).
 6. Buka `https://DOMAIN_TIM/setup`. Masukkan kode dari `TEAM_SETUP_TOKEN`, nama tim, dan akun Owner pertama. Sesudah berhasil, buka `/login`, masuk, lalu atur branding dan anggota di `/settings`.
 7. Ulangi langkah 1–6 untuk tim berikutnya dengan **Supabase project, environment, token setup, deployment, dan URL berbeda**. Jangan memakai satu service role key atau satu database untuk beberapa tim.
