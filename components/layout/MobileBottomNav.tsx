@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BadgeCheck, Calculator, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
+import { BadgeCheck, Box, Calculator, Clock, CheckSquare, FolderKanban, Target } from 'lucide-react';
 import { DEFAULT_PAGE_ACCESS, normalizePageAccess, type PageAccessKey } from '@/lib/auth/page-access';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
@@ -38,6 +38,7 @@ export default function MobileBottomNav() {
     icon: typeof Clock;
     activeColor: string;
   }> = [
+    { id: 'dashboard', accessKey: 'dashboard', label: 'Kantor', href: '/dashboard', icon: Box, activeColor: '#A3BF81' },
     {
       id: 'attendance',
       accessKey: 'attendance',
