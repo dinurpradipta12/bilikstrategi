@@ -285,3 +285,12 @@ test('deleting an object is not blocked by an unchanged legacy ornament near the
   assert.ok(!saved.ornaments.some(item=>item.id==='lounge-sofa-0'));
   assert.throws(()=>space.applyLayout(current,{layoutRevision:4,desks:current.desks,ornaments:withoutSofa.map(item=>item.id==='legacy-lamp'?{...item,x:5.64}:item)},members.length),/Lampu lantai/);
 });
+
+test('dragging another ornament ignores an unchanged legacy corridor placement',()=>{
+  const base=space.normalizeSpace(null,members),legacy={id:'legacy-lamp',asset:'floor_lamp',x:5.63,z:-5.63,rotation:0,room:0};
+  const current=[...base.ornaments,legacy];
+  const moved=space.moveOrnament(current,'plant-front',{x:-5.25,z:2.8},1,base.desks,false,current);
+  assert.equal(moved.find(item=>item.id==='plant-front').x,-5.25);
+  assert.equal(JSON.stringify(moved.find(item=>item.id==='legacy-lamp')),JSON.stringify(legacy));
+  assert.throws(()=>space.moveOrnament(current,'legacy-lamp',{x:5.64},1,base.desks,false,current),/Lampu lantai/);
+});
