@@ -112,3 +112,22 @@ test('desk transforms require a database admin role and are checked for collisio
   assert.equal(admin.spaceWrites[0].desks[0].x,-4.6);
   assert.equal((await admin.PATCH(admin.request({ action:{ ...action, desks:[{ slot:0,x:0,z:0,rotation:0 }] } }))).status,409);
 });
+test('only database admins can assign or delete desks; assignment requires an active member',async()=>{
+  const member=fixture(),admin=fixture({role:'admin'});
+  for(const action of [{type:'assign',memberId:'1',slot:9},{type:'remove-desk',slot:0}]) {
+    assert.equal((await member.PATCH(member.request({action}))).status,403);
+    assert.equal((await admin.PATCH(admin.request({action}))).status,200);
+  }
+  assert.equal(member.spaceWrites.length,0);
+  assert.equal(admin.spaceWrites[0].claims['1'],9);
+  assert.equal(admin.spaceWrites[1].claims['1'],1);
+  assert.ok(admin.spaceWrites[1].desks[0].removed);
+  assert.equal((await admin.PATCH(admin.request({action:{type:'assign',memberId:'outsider',slot:9}}))).status,409);
+  assert.equal(admin.spaceWrites.length,2);
+});
+test('layout cannot hide occupied desks by bypassing the dedicated deletion action',async()=>{
+  const admin=fixture({role:'owner'}),p=model.deskPosition(0);
+  const action={type:'layout',layoutRevision:0,ornaments:[],desks:[{slot:0,x:p.x,z:p.z,rotation:p.rotation,removed:true}]};
+  assert.equal((await admin.PATCH(admin.request({action}))).status,409);
+  assert.equal(admin.spaceWrites.length,0);
+});

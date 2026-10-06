@@ -1,22 +1,23 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AttendanceSchedule } from '@/lib/attendance/schedule';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import type { DeskLayout } from '@/lib/spatial-office/model';
 import { Hand, Orbit, Minus, Plus, RotateCcw } from 'lucide-react';
 import type { Ornament } from '@/lib/spatial-office/space';
 import type { OfficeMember } from '@/lib/spatial-office/model';
-import { OfficeScene } from '@/lib/spatial-office/scene';
+import { OfficeScene, type ObjectMenuTarget } from '@/lib/spatial-office/scene';
 
 type Props = {
   members: { member: OfficeMember; slot: number }[];
   schedule?: AttendanceSchedule; desks: DeskLayout[];
   room: number; ornaments: Ornament[]; editing: boolean; selectedOrnament: string;
   onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void;
+  onObjectMenu: (target: ObjectMenuTarget) => void; children?: ReactNode;
   motion: boolean; selected: string; onSelect: (id: string) => void;
 };
-export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, desks, schedule }: Props) {
+export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -24,8 +25,8 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
   const [pan, setPan] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const selectCallback = useRef(onSelect);
-  const editCallbacks = useRef({ onSelectDesk, onSelectOrnament, onMoveOrnament });
-  useEffect(() => { editCallbacks.current = { onSelectDesk, onSelectOrnament, onMoveOrnament }; }, [onSelectDesk, onSelectOrnament, onMoveOrnament]);
+  const editCallbacks = useRef({ onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu });
+  useEffect(() => { editCallbacks.current = { onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu }; }, [onSelectDesk, onSelectOrnament, onMoveOrnament,onObjectMenu]);
   useEffect(() => { selectCallback.current = onSelect; }, [onSelect]);
   useEffect(() => {
     if (!host.current || !labels.current) return;
@@ -36,6 +37,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
         onError: error => setState({ loading: false, error }),
         onSelect: id => selectCallback.current(id),
         onSelectDesk: slot => editCallbacks.current.onSelectDesk(slot),
+        onObjectMenu: target=>editCallbacks.current.onObjectMenu(target),
         onSelectOrnament: id => editCallbacks.current.onSelectOrnament(id),
         onMoveOrnament: (id, x, z) => editCallbacks.current.onMoveOrnament(id, x, z),
       });
@@ -55,6 +57,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
   return <div className={`office-viewport ${editing ? 'is-editing' : ''}`}>
     <div className="office-webgl" ref={host} />
     <div className="office-labels" ref={labels} />
+    {children}
     {(state.loading || state.error) && <div className="office-canvas-message" role="status">
       <div><strong>{state.error ? 'Tampilan 3D belum tersedia' : 'Menyiapkan kantor…'}</strong>
         <p>{state.error || 'Memuat karakter dan furnitur kantor Anda.'}</p>

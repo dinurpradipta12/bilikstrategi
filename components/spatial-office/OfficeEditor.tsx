@@ -42,14 +42,15 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
       <label>Kategori<select value={category} onChange={event=>setCategory(event.target.value)}>{['Semua',...new Set(Object.values(ORNAMENTS).map(o=>o.category))].map(c=><option key={c}>{c}</option>)}</select></label>
       <div className="office-library-grid">{Object.entries(ORNAMENTS).filter(([,a])=>(category==='Semua'||a.category===category)&&a.label.toLowerCase().includes(search.toLowerCase())).map(([key,a])=><button type="button" key={key} disabled={saving || items.length >= 120} onClick={()=>add(key as Ornament['asset'])}><Box size={22}/><strong>{a.label}</strong><small>{a.width} × {a.depth} m</small></button>)}</div>
     </section>}
-    <label>Meja & ornamen area {room + 1}<select value={selected} onChange={event => onSelect(event.target.value)}><option value="">Pilih meja atau ornamen…</option>{Array.from({ length: 10 }, (_, i) => <option key={`desk:${room * 10 + i}`} value={`desk:${room * 10 + i}`}>Meja {room * 10 + i + 1}</option>)}{items.filter(item => item.room === room).map((item, i) => <option key={item.id} value={item.id}>{i + 1}. {ORNAMENTS[item.asset].label}</option>)}</select></label>
-    {desk && <fieldset disabled={saving}><legend>Meja {deskSlot! + 1}</legend>
+    <label>Meja & ornamen area {room + 1}<select value={selected} onChange={event => onSelect(event.target.value)}><option value="">Pilih meja atau ornamen…</option>{Array.from({ length: 10 }, (_, i) => <option key={`desk:${room * 10 + i}`} value={`desk:${room * 10 + i}`}>Meja {room * 10 + i + 1}{deskPosition(room*10+i,desks).removed?' (dihapus)':''}</option>)}{items.filter(item => item.room === room).map((item, i) => <option key={item.id} value={item.id}>{i + 1}. {ORNAMENTS[item.asset].label}</option>)}</select></label>
+    {desk && !desk.removed && <fieldset disabled={saving}><legend>Meja {deskSlot! + 1}</legend>
       <label>Kiri / kanan · {desk.x.toFixed(2)} m<input aria-label="Posisi meja X" type="range" min="-5" max="4" step="0.25" value={desk.x} onChange={event => updateDesk({ x: Number(event.target.value) })} /></label>
       <label>Depan / belakang · {desk.z.toFixed(2)} m<input aria-label="Posisi meja Z" type="range" min="-5" max="5" step="0.25" value={desk.z} onChange={event => updateDesk({ z: Number(event.target.value) })} /></label>
       <div className="office-editor-rotate"><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI * 1.5) % (Math.PI * 2) })}>↶ Putar 90°</button><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI / 2) % (Math.PI * 2) })}>Putar 90° ↷</button></div>
       {colorControls(desk.color, color=>updateDesk({color}))}
       <button type="button" onClick={() => onDesksChange(desks.filter(d => d.slot !== deskSlot))}>Posisi meja semula</button>
     </fieldset>}
+    {desk?.removed && <fieldset disabled={saving}><legend>Meja dihapus</legend><p>Posisi tersimpan. Pulihkan untuk menggunakan meja ini kembali.</p><button type="button" onClick={()=>updateDesk({removed:false})}>Pulihkan meja</button></fieldset>}
     {item && <fieldset disabled={saving}>
       <legend>{ORNAMENTS[item.asset].label}</legend>
       <button type="button" onClick={()=>update({},true)}>Tempel ke dinding terdekat</button>

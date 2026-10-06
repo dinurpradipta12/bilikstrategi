@@ -28,6 +28,36 @@ test('11+ users receive additional areas without overlapping claims', () => {
   assert.equal(space.spaceCapacity(current, 25), 30);
   assert.equal(new Set(Object.values(current.claims)).size, 25);
 });
+test('team assignment swaps occupied desks and rejects nonmembers or unavailable desks', () => {
+  const initial=space.normalizeSpace(null,members);
+  const swapped=space.assignDesk(initial,'1',1,3);
+  assert.deepEqual({...swapped.claims},{'1':1,'2':0,'3':2});
+  const free=space.assignDesk(swapped,'1',9,3);
+  assert.equal(free.claims['1'],9); assert.equal(free.claims['2'],0);
+  assert.equal(free.layoutRevision,initial.layoutRevision);
+  for(const [id,slot] of [['outsider',8],['1',NaN],['1',10]]) assert.throws(()=>space.assignDesk(free,id,slot,3));
+  const removed=space.removeDesk(free,8,3);
+  assert.throws(()=>space.assignDesk(removed,'1',8,3),/tidak tersedia/);
+});
+test('desk deletion relocates its owner and survives reload and roster additions', () => {
+  const initial=space.normalizeSpace(null,members),removed=space.removeDesk(initial,0,3);
+  assert.equal(removed.claims['1'],3); assert.equal(removed.claims['2'],1);
+  assert.equal(removed.layoutRevision,1); assert.equal(removed.desks[0].removed,true);
+  const restored=space.normalizeSpace(JSON.parse(JSON.stringify(removed)),[...members,{id:'4'}]);
+  assert.equal(restored.claims['1'],3); assert.equal(restored.claims['4'],4);
+  assert.throws(()=>space.claimDesk(restored,'1',0,4),/dihapus/);
+  assert.doesNotThrow(()=>space.parseDesks(restored.desks,1));
+  const shown=space.moveDesk(restored.desks,0,{removed:false},1,restored.ornaments);
+  assert.equal(shown[0].removed,undefined);
+  assert.equal(space.claimDesk({...restored,desks:shown},'1',0,4).claims['1'],0);
+});
+test('a fully occupied office cannot delete a desk and empty deletions retain their area', () => {
+  const full=space.normalizeSpace(null,Array.from({length:10},(_,i)=>({id:String(i)})));
+  assert.throws(()=>space.removeDesk(full,0,10),/Semua meja terisi/);
+  assert.equal(full.desks.length,0); assert.equal(new Set(Object.values(full.claims)).size,10);
+  const empty=space.normalizeSpace({desks:[{slot:19,x:2,z:1,rotation:0,removed:true}]},[]);
+  assert.equal(space.spaceCapacity(empty,0),20);
+});
 test('ornaments allow saved garden/interior placement and reject walls, corridors and invalid assets', () => {
   assert.doesNotThrow(() => space.parseOrnaments(space.DEFAULT_ORNAMENTS, 1));
   const plant = { id: 'plant', asset: 'floor_plant', x: 15, z: -5, rotation: 0, room: 0 };
@@ -128,6 +158,18 @@ test('independent simultaneous claims both persist after conflict retry', async 
   const outcomes = await Promise.allSettled([['1', 8], ['2', 9]].map(([id, slot]) => store.mutateOfficeSpace('team', members, current => space.claimDesk(current, id, slot, 3))));
   assert.ok(outcomes.every(result => result.status === 'fulfilled'));
   assert.equal(store.state().claims['1'], 8); assert.equal(store.state().claims['2'], 9);
+});
+test('concurrent deletion and claim never leave an owner on a removed desk',async()=>{
+  for(const reverse of [false,true]) {
+    const store=storeFixture(space.normalizeSpace(null,members));
+    const actions=[current=>space.removeDesk(current,9,3),current=>space.claimDesk(current,'1',9,3)];
+    if(reverse) actions.reverse();
+    await Promise.allSettled(actions.map(action=>store.mutateOfficeSpace('team',members,action)));
+    const saved=store.state();
+    assert.ok(saved.desks.some(d=>d.slot===9&&d.removed));
+    assert.ok(!Object.values(saved.claims).includes(9));
+    assert.equal(new Set(Object.values(saved.claims)).size,3);
+  }
 });
 test('layout save and desk claim preserve each other during concurrent updates', async () => {
   const store = storeFixture(space.normalizeSpace(null, members));

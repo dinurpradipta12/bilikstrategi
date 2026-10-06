@@ -2,15 +2,17 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { officeTime, type DeskLayout, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
+import { deskPosition, officeTime, type DeskLayout, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import { normalizeAttendanceSchedule, type AttendanceSchedule } from '@/lib/attendance/schedule';
 import AvatarEditor from './AvatarEditor';
 import OfficeEditor from './OfficeEditor';
-import { normalizeSpace, claimDesk, parseDesks, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
+import OfficeObjectMenu from './OfficeObjectMenu';
+import type { ObjectMenuTarget } from '@/lib/spatial-office/scene';
+import { normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, parseDesks, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
@@ -38,6 +40,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const clock = officeTime(now, schedule);
   const [panel, setPanel] = useState<'team' | 'desks' | 'member' | null>(null);
   const [selectedDesk, setSelectedDesk] = useState<number | null>(null);
+  const [objectMenu,setObjectMenu]=useState<(ObjectMenuTarget & {room:number}) | null>(null);
+  const closeObjectMenu=useCallback(()=>setObjectMenu(null),[setObjectMenu]);
   const [draft, setDraft] = useState<{ ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number } | null>(null);
   const [selectedOrnament, setSelectedOrnament] = useState('');
   const [spaceError, setSpaceError] = useState('');
@@ -206,13 +210,17 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     if (demo) localStorage.setItem('office-demo-space-v3', JSON.stringify(next));
     setData(previous => ({ ...previous, space: next, seats: new Map(Object.entries(next.claims)) }));
   };
-  const saveSpace = async (action: { type: 'claim'; slot: number } | { type: 'activity'; zone: 'auto' | 'garden' | 'pantry' | 'lounge' } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number }) => {
+  const saveSpace = async (action: { type: 'claim'; slot: number } | {type:'assign'; slot:number; memberId:string} | {type:'remove-desk';slot:number} | { type: 'activity'; zone: 'auto' | 'garden' | 'pantry' | 'lounge' } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number }) => {
     setSpaceSaving(true); setSpaceError('');
     try {
       let next: OfficeSpace;
       if (demo) {
         if (action.type === 'activity') next = setActivity(space, viewerId || '', action.zone);
         else if (action.type === 'claim') next = claimDesk(space, viewerId || '', action.slot, data.members.length);
+        else if(action.type==='assign'||action.type==='remove-desk') {
+          if(!canEdit) throw new Error('Hanya admin yang dapat mengatur meja tim.');
+          next=action.type==='assign'?assignDesk(space,action.memberId,action.slot,data.members.length):removeDesk(space,action.slot,data.members.length);
+        }
         else {
           if (!canEdit) throw new Error('Hanya admin yang dapat mengatur kantor.');
           next = { ...space, revision: space.revision + 1, layoutRevision: space.layoutRevision + 1, desks: parseDesks(action.desks, rooms), ornaments: parseOrnaments(action.ornaments, rooms, action.desks) };
@@ -226,17 +234,36 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       applySpace(next);
       if (action.type === 'layout') { setDraft(null); setNotice('Denah kantor tersimpan.'); }
       else if (action.type === 'activity') { setNotice(action.zone === 'auto' ? 'Aktivitas otomatis dilanjutkan.' : 'Avatar berpindah selama 5 menit. Presensi tetap sesuai sesi Anda.'); }
+      else if(action.type==='assign') setNotice('Pemilik meja berhasil diperbarui.');
+      else if(action.type==='remove-desk') setNotice('Meja dihapus. Anda dapat memulihkannya melalui Edit ruangan.');
       else { setNotice(`Meja ${action.slot + 1} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
-    } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); }
+    return true;
+    } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); return false; }
     finally { setSpaceSaving(false); }
   };
-  const selectDesk = (slot: number) => { if (draft) { setSelectedOrnament(`desk:${slot}`); return; } setSelectedDesk(slot); setPanel('desks'); setSpaceError(''); };
+  const selectDesk = (slot: number) => { setObjectMenu({id:`desk:${slot}`,x:45,y:45,room:currentRoom}); setSpaceError(''); };
   const openLayout = () => {
     if (!canEdit || !sharedReady) return;
-    setDraft({ ornaments: structuredClone(space.ornaments), desks: structuredClone(space.desks), layoutRevision: space.layoutRevision }); setSelectedOrnament(''); setPanel(null); setEditing(null); setSpaceError('');
+    setObjectMenu(null); setDraft({ ornaments: structuredClone(space.ornaments), desks: structuredClone(space.desks), layoutRevision: space.layoutRevision }); setSelectedOrnament(''); setPanel(null); setEditing(null); setSpaceError('');
   };
   const deskOwner = selectedDesk === null ? undefined : data.members.find(member => space.claims[member.id] === selectedDesk);
   const shownOrnaments = draft && canEdit ? draft.ornaments : space.ornaments;
+  const menuSlot=objectMenu?.id.startsWith('desk:')?Number(objectMenu.id.slice(5)):null;
+  const menuItem=shownOrnaments.find(item=>item.id===objectMenu?.id);
+  const menuOwner=menuSlot===null?undefined:data.members.find(member=>space.claims[member.id]===menuSlot);
+  const editMenuObject=()=>{
+    if(!objectMenu||!canEdit) return;
+    if(!draft) openLayout();
+    setSelectedOrnament(objectMenu.id); closeObjectMenu();
+  };
+  const deleteMenuObject=async()=>{
+    if(!objectMenu||!canEdit) return;
+    if(menuSlot!==null) { if(await saveSpace({type:'remove-desk',slot:menuSlot})) closeObjectMenu(); return; }
+    const id=objectMenu.id, prefix=id==='manager-desk'?'manager':id==='lead-desk'?'lead':'';
+    const ornaments=shownOrnaments.filter(item=>item.id!==id&&!(prefix&&['chair','laptop','keyboard','lamp','pen'].some(part=>item.id===`${prefix}-${part}`)));
+    if(draft) { setDraft({...draft,ornaments}); setSelectedOrnament(''); closeObjectMenu(); }
+    else if(await saveSpace({type:'layout',ornaments,desks:space.desks,layoutRevision:space.layoutRevision})) closeObjectMenu();
+  };
 
   return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${panel ? `office-panel-${panel}` : ''}`} aria-label="Kantor 3D">
     {immersive && <header className="office-game-hud">
@@ -276,14 +303,16 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onMoveOrnament={(id, x, z) => {
+      <OfficeCanvas schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onObjectMenu={target=>{setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
           else setDraft({...draft,ornaments:moveOrnament(draft.ornaments,id,{x,z},rooms,draft.desks)});
           setSpaceError('');
         } catch(failure) { setSpaceError(failure instanceof Error ? failure.message : 'Posisi belum valid.'); }
-      }} />
+      }}>
+        {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?'Meja kerja':menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
+      </OfficeCanvas>
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span><i className="is-paused" /> Istirahat</span><span><i className="is-offline" /> Di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
@@ -302,6 +331,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       {demo && <p>Simulasi klaim sebagai <strong>{data.members.find(m => m.id === viewerId)?.name}</strong>. Pilih anggota untuk mengganti pengguna simulasi.</p>}
       <div className="office-desk-grid">{Array.from({ length: DESKS_PER_ROOM }, (_, index) => {
         const slot = currentRoom * DESKS_PER_ROOM + index, owner = data.members.find(member => space.claims[member.id] === slot);
+        if(deskPosition(slot,space.desks).removed) return null;
         return <button type="button" key={slot} aria-pressed={slot === selectedDesk} className={owner?.id === viewerId ? 'is-mine' : ''} onClick={() => setSelectedDesk(slot)}><strong>{String(slot + 1).padStart(2, '0')}</strong><span>{owner?.name || 'Kosong'}</span></button>;
       })}</div>
       {selectedDesk !== null && <div className="office-desk-claim"><strong>Meja {selectedDesk + 1}</strong><p>{deskOwner ? deskOwner.id === viewerId ? 'Meja Anda saat ini.' : `Dimiliki ${deskOwner.name}.` : 'Tersedia untuk diklaim.'}</p><button type="button" disabled={!viewerId || !sharedReady || spaceSaving || Boolean(deskOwner)} onClick={() => void saveSpace({ type: 'claim', slot: selectedDesk })}>{spaceSaving ? 'Menyimpan…' : 'Klaim & pindah ke meja ini'}</button></div>}

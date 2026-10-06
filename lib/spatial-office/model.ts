@@ -71,7 +71,7 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
   return seats;
 }
 export const DESKS_PER_ROOM = 10;
-export type DeskLayout = { slot: number; x: number; z: number; rotation: number; color?: string };
+export type DeskLayout = { slot: number; x: number; z: number; rotation: number; color?: string; removed?: boolean };
 export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const index = slot % DESKS_PER_ROOM;
   // Five adjoining stations on each side of a shared, continuous workbench.
@@ -79,7 +79,7 @@ export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const custom = layout.find(d => d.slot === slot);
   const x = custom?.x ?? (Math.floor(index / 2) - 2) * 1.4, z = custom?.z ?? side * .375;
   const rotation = custom?.rotation ?? (side === -1 ? 0 : Math.PI);
-  return { x, z, rotation, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
+  return { x, z, rotation, removed:custom?.removed===true, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
 }
 export function officePath(slot: number, leaving = false): Array<[number, number]> {
   const desk = deskPosition(slot);
@@ -169,6 +169,7 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
     if (Math.abs(x) > 22 || Math.abs(z) > 22) return true;
     for (let i = 0; i < 10; i++) {
       const d = deskPosition(room * 10 + i, layout), dx = x * grid - d.x, dz = z * grid - d.z;
+      if(d.removed) continue;
       const u = dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation), v = dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation);
       if (Math.abs(u) < .86 && Math.abs(v) < .58) return true;
       if (room * 10 + i !== slot && Math.hypot(x * grid - d.seatX, z * grid - d.seatZ) < .52) return true;

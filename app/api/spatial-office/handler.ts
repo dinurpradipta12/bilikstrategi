@@ -7,7 +7,7 @@ import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/ad
 import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
 import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
-import { claimDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
+import { claimDesk, assignDesk, removeDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
 import { DESKS_PER_ROOM } from '@/lib/spatial-office/model';
 
 export const runtime = 'edge';
@@ -133,16 +133,19 @@ export async function PATCH(req: NextRequest) {
     if (raw.length > 40000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
-  if (!action || !['claim', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
-  if (action.type === 'layout' && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur ornamen.' }, 403);
+  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if (['layout','assign','remove-desk'].includes(action.type) && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
       if (action.type === 'activity') return setActivity(current, snapshot.viewerId, action.zone);
       if (action.type === 'claim') return claimDesk(current, snapshot.viewerId, action.slot, snapshot.members.length);
+      if (action.type === 'assign') return assignDesk(current,action.memberId,action.slot,snapshot.members.length);
+      if (action.type === 'remove-desk') return removeDesk(current,action.slot,snapshot.members.length);
       if (action.layoutRevision !== current.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
       const rooms = spaceCapacity(current, snapshot.members.length) / DESKS_PER_ROOM;
       const desks = parseDesks(action.desks ?? current.desks, rooms);
+      if(desks.some(d=>d.removed && !current.desks.some(old=>old.slot===d.slot && old.removed))) throw new Error('Gunakan Hapus objek pada menu meja untuk memindahkan pemiliknya dengan aman.');
       const ornaments = parseOrnaments(action.ornaments, rooms, desks);
       return { ...current, revision: current.revision + 1, layoutRevision: current.layoutRevision + 1, ornaments, desks };
     });

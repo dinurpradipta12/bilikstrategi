@@ -50,6 +50,14 @@ test('claiming another desk retains position and schedules movement, then roster
   const end = model.zonePosition(9, 'desk'); assert.equal(person.route.at(-1).x, end.x); assert.equal(person.route.at(-1).z, end.z);
   engine.setMembers([]); assert.equal(engine.occupants.size, 0); assert.equal(engine.desks.size, 10);
 });
+test('removed desks hide the complete furniture kit and can be restored',()=>{
+  const engine=office(),p=model.deskPosition(0);
+  engine.setDeskLayout([{slot:0,x:p.x,z:p.z,rotation:p.rotation,removed:true}]);
+  assert.equal(engine.desks.get(0).visible,false);
+  assert.equal(engine.desks.get(1).visible,true);
+  engine.setDeskLayout([]);
+  assert.equal(engine.desks.get(0).visible,true);
+});
 test('ornament draft move/rotate/add/remove/cancel reconcile without mutating templates', () => {
   const engine = office(), base = spaceModel.DEFAULT_ORNAMENTS;
   const original = templates.get('floor_plant').position.clone();

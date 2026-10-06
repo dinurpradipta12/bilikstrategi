@@ -13,7 +13,8 @@ type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
   route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; sleep: HTMLSpanElement; name: HTMLSpanElement; offset: number;
 };
-export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void };
+export type ObjectMenuTarget = { id: string; x: number; y: number };
+export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onObjectMenu: (target: ObjectMenuTarget) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void };
 
 export class OfficeScene {
   private scene = new THREE.Scene();
@@ -35,7 +36,7 @@ export class OfficeScene {
   private sign?: THREE.Mesh;
   private signTexture?: THREE.Texture;
   private panMode = false;
-  private deskClick: { slot:number; x:number; y:number } | null = null;
+  private objectClick: { id:string; x:number; y:number } | null = null;
   private brand = { name: 'Bilik Strategi', logo: '/landscape.png' };
   private clouds = new THREE.Group();
   private stars = new THREE.Group();
@@ -378,7 +379,7 @@ export class OfficeScene {
     const changed = JSON.stringify(this.deskLayout) !== JSON.stringify(layout);
     this.deskLayout = layout;
     if (!this.loaded) return;
-    for (const [slot, group] of this.desks) { const global = this.room * 10 + slot, d = deskPosition(global, layout); group.position.set(d.x,0,d.z); group.rotation.y = d.rotation; group.userData.ornamentId = `desk:${global}`; const table=group.children.find(child=>child.userData.tableSurface); if(table) this.tint(table,d.color); }
+    for (const [slot, group] of this.desks) { const global = this.room * 10 + slot, d = deskPosition(global, layout); group.visible=!d.removed; group.position.set(d.x,0,d.z); group.rotation.y = d.rotation; group.userData.ornamentId = `desk:${global}`; const table=group.children.find(child=>child.userData.tableSurface); if(table) this.tint(table,d.color); }
     if (changed) for (const occupant of this.occupants.values()) this.changeZone(occupant, occupant.zone);
   }
   setOrnaments(items: Ornament[], room: number, editing: boolean, selected: string) {
@@ -408,33 +409,33 @@ export class OfficeScene {
   }
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    if (!this.editMode) {
-      if (this.panMode) return;
-      this.floorPoint(event); const hit=this.raycaster.intersectObjects([...this.desks.values()],true)[0];
-      if (hit) { let object: THREE.Object3D | null=hit.object; while(object && !String(object.userData.ornamentId || '').startsWith('desk:')) object=object.parent; if(object) this.deskClick={slot:Number(String(object.userData.ornamentId).slice(5)),x:event.clientX,y:event.clientY}; }
-      return;
-    }
     const point = this.floorPoint(event); if (!point) return;
-    const hit = this.raycaster.intersectObjects([...this.decorations.values(), ...this.desks.values()], true)[0];
+    const hit = this.raycaster.intersectObjects([...this.decorations.values(), ...this.desks.values()].filter(group=>group.visible), true)[0];
     if (!hit) return;
     let object: THREE.Object3D | null = hit.object;
     while (object && !object.userData.ornamentId) object = object.parent;
     if (!object) return;
+    this.objectClick={id:object.userData.ornamentId,x:event.clientX,y:event.clientY};
+    if(!this.editMode) return;
     event.stopImmediatePropagation(); this.controls.enabled = false;
     this.dragging = { id: object.userData.ornamentId, dx: object.position.x - point.x, dz: object.position.z - point.z };
     this.renderer.domElement.setPointerCapture(event.pointerId); this.options.onSelectOrnament(this.dragging.id);
   };
   private pointerMove = (event: PointerEvent) => {
-    if (this.deskClick && Math.hypot(event.clientX-this.deskClick.x,event.clientY-this.deskClick.y)>5) this.deskClick=null;
+    if (this.objectClick && Math.hypot(event.clientX-this.objectClick.x,event.clientY-this.objectClick.y)>5) this.objectClick=null;
     if (!this.dragging || !this.editMode) return;
+    if(this.objectClick) return;
     const point = this.floorPoint(event); if (!point) return;
     event.stopImmediatePropagation();
     const x = Math.round((point.x + this.dragging.dx) * 4) / 4, z = Math.round((point.z + this.dragging.dz) * 4) / 4;
-    this.options.onMoveOrnament(this.dragging.id, THREE.MathUtils.clamp(x, -17.5, 18.5), THREE.MathUtils.clamp(z, -11.5, 5.5));
+    this.options.onMoveOrnament(this.dragging.id, THREE.MathUtils.clamp(x, -18, 19), THREE.MathUtils.clamp(z, -12, 6));
   };
   private pointerUp = (event: PointerEvent) => {
-    if (this.deskClick && event.type !== 'pointercancel' && !this.editMode) this.options.onSelectDesk(this.deskClick.slot);
-    this.deskClick=null;
+    if (this.objectClick && event.type !== 'pointercancel' && Math.hypot(event.clientX-this.objectClick.x,event.clientY-this.objectClick.y)<=5) {
+      const rect=this.renderer.domElement.getBoundingClientRect();
+      this.options.onObjectMenu({id:this.objectClick.id,x:(event.clientX-rect.left)/rect.width*100,y:(event.clientY-rect.top)/rect.height*100});
+    }
+    this.objectClick=null;
     if (!this.dragging) return;
     event.stopImmediatePropagation(); this.dragging = null; this.controls.enabled = true;
     if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
