@@ -53,8 +53,8 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
     {item && <fieldset disabled={saving}>
       <legend>{ORNAMENTS[item.asset].label}</legend>
       <button type="button" onClick={()=>update({},true)}>Tempel ke dinding terdekat</button>
-      <label>Kiri / kanan · {item.x.toFixed(2)} m<input aria-label="Posisi ornamen X" type="range" min="-17.5" max="18.5" step="0.25" value={item.x} onChange={event => update({ x: Number(event.target.value) })} /></label>
-      <label>Depan / belakang · {item.z.toFixed(2)} m<input aria-label="Posisi ornamen Z" type="range" min="-11.5" max="5.5" step="0.25" value={item.z} onChange={event => update({ z: Number(event.target.value) })} /></label>
+      <label>Kiri / kanan · {item.x.toFixed(2)} m<input aria-label="Posisi ornamen X" type="range" min="-18" max="19" step="0.01" value={item.x} onChange={event => update({ x: Number(event.target.value) })} /></label>
+      <label>Depan / belakang · {item.z.toFixed(2)} m<input aria-label="Posisi ornamen Z" type="range" min="-12" max="6" step="0.01" value={item.z} onChange={event => update({ z: Number(event.target.value) })} /></label>
       <div className="office-editor-rotate"><button type="button" onClick={() => update({ rotation: (item.rotation - Math.PI / 4 + Math.PI * 2) % (Math.PI * 2) })}>↶ Putar 45°</button><button type="button" onClick={() => update({ rotation: (item.rotation + Math.PI / 4) % (Math.PI * 2) })}>Putar 45° ↷</button></div>
       <label>Ketinggian · {(item.y || 0).toFixed(2)} m<input aria-label="Ketinggian objek" type="range" min="0" max="2" step="0.01" value={item.y || 0} onChange={event=>update({y:Number(event.target.value)})}/></label>
       <p>Gunakan 0,78 m untuk menaruh perangkat di atas meja kantor.</p>
