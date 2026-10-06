@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { deskPosition, officeTime, type DeskLayout, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
+import { deskLabel, deskPosition, officeTime, type DeskLayout, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import { normalizeAttendanceSchedule, type AttendanceSchedule } from '@/lib/attendance/schedule';
 import AvatarEditor from './AvatarEditor';
@@ -113,6 +113,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     const interval = setInterval(load, 10_000);
     const realtime = supabase.channel('spatial-office-presence')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions' }, schedule)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_presence_state' }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_user_roles' }, schedule)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, schedule)
       .subscribe(status => {
@@ -179,7 +180,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     let restored: unknown = null;
     try { restored = JSON.parse(localStorage.getItem('office-demo-space-v3') || 'null'); } catch { /* Use the default office. */ }
     const space = normalizeSpace(restored, members);
-    try { parseOrnaments(space.ornaments, spaceCapacity(space, members.length) / DESKS_PER_ROOM); } catch { space.ornaments = normalizeSpace(null, members).ornaments; }
+    try { parseOrnaments(space.ornaments, spaceCapacity(space, members.length) / DESKS_PER_ROOM,space.desks); } catch { space.ornaments = normalizeSpace(null, members).ornaments; }
     queueMicrotask(() => setData(previous => ({ ...previous, members, space, seats: new Map(Object.entries(space.claims)) })));
   }, [demo]);
   const pantryDemo = () => {
@@ -226,7 +227,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           next = { ...space, revision: space.revision + 1, layoutRevision: space.layoutRevision + 1, desks: parseDesks(action.desks, rooms), ornaments: parseOrnaments(action.ornaments, rooms, action.desks) };
         }
       } else {
-        const response = await fetch('/api/spatial-office', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action), signal: AbortSignal.timeout(20_000) });
+        const response = await fetch('/api/spatial-office', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...action,version:space.version}), signal: AbortSignal.timeout(20_000) });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Perubahan belum tersimpan.');
         next = result.space;
@@ -236,7 +237,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       else if (action.type === 'activity') { setNotice(action.zone === 'auto' ? 'Aktivitas otomatis dilanjutkan.' : 'Avatar berpindah selama 5 menit. Presensi tetap sesuai sesi Anda.'); }
       else if(action.type==='assign') setNotice('Pemilik meja berhasil diperbarui.');
       else if(action.type==='remove-desk') setNotice('Meja dihapus. Anda dapat memulihkannya melalui Edit ruangan.');
-      else { setNotice(`Meja ${action.slot + 1} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
+      else { setNotice(`${deskLabel(action.slot)} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
     return true;
     } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); return false; }
     finally { setSpaceSaving(false); }
@@ -311,10 +312,10 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           setSpaceError('');
         } catch(failure) { setSpaceError(failure instanceof Error ? failure.message : 'Posisi belum valid.'); }
       }}>
-        {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?'Meja kerja':menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
+        {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?deskLabel(menuSlot):menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
       </OfficeCanvas>
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
-      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span><i className="is-paused" /> Istirahat</span><span><i className="is-offline" /> Di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
+      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Istirahat & belum check-in: di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
     <div className="office-game-dock" aria-label="Aksi kantor">
       <button type="button" disabled={Boolean(draft)} aria-pressed={panel === 'team'} onClick={() => { setPanel(panel === 'team' ? null : 'team'); }}><Users size={18} /><span>Tim</span></button>
@@ -334,7 +335,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
         if(deskPosition(slot,space.desks).removed) return null;
         return <button type="button" key={slot} aria-pressed={slot === selectedDesk} className={owner?.id === viewerId ? 'is-mine' : ''} onClick={() => setSelectedDesk(slot)}><strong>{String(slot + 1).padStart(2, '0')}</strong><span>{owner?.name || 'Kosong'}</span></button>;
       })}</div>
-      {selectedDesk !== null && <div className="office-desk-claim"><strong>Meja {selectedDesk + 1}</strong><p>{deskOwner ? deskOwner.id === viewerId ? 'Meja Anda saat ini.' : `Dimiliki ${deskOwner.name}.` : 'Tersedia untuk diklaim.'}</p><button type="button" disabled={!viewerId || !sharedReady || spaceSaving || Boolean(deskOwner)} onClick={() => void saveSpace({ type: 'claim', slot: selectedDesk })}>{spaceSaving ? 'Menyimpan…' : 'Klaim & pindah ke meja ini'}</button></div>}
+      {selectedDesk !== null && <div className="office-desk-claim"><strong>{deskLabel(selectedDesk)}</strong><p>{deskOwner ? deskOwner.id === viewerId ? 'Meja Anda saat ini.' : `Dimiliki ${deskOwner.name}.` : 'Tersedia untuk diklaim.'}</p><button type="button" disabled={!viewerId || !sharedReady || spaceSaving || Boolean(deskOwner)} onClick={() => void saveSpace({ type: 'claim', slot: selectedDesk })}>{spaceSaving ? 'Menyimpan…' : 'Klaim & pindah ke meja ini'}</button></div>}
       {!sharedReady && <p role="status">Klaim meja tersedia setelah penyimpanan server terhubung.</p>}
       {spaceError && <p role="alert">{spaceError}</p>}
       {rooms > 1 && <div className="office-editor-rotate"><button type="button" disabled={!currentRoom} onClick={() => setRoom(currentRoom - 1)}>← Area sebelumnya</button><button type="button" disabled={currentRoom === rooms - 1} onClick={() => setRoom(currentRoom + 1)}>Area berikutnya →</button></div>}
@@ -355,10 +356,10 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       </section>
       <aside className="office-detail-panel">
         <div className="office-panel-title"><h3>{selectedMember ? 'Meja anggota' : 'Ruang untuk terhubung'}</h3>{selectedMember && <button type="button" className="office-icon-button" aria-label="Tutup detail anggota" onClick={() => setSelected('')}><X size={15} /></button>}</div>
-        {selectedMember ? <><h4>{selectedMember.name}</h4><p>{statusLabel(selectedMember)} · Meja {(data.seats.get(selectedMember.id) ?? 0) + 1}</p><div className="office-project"><span>PROJECT PRESENSI</span><strong>{selectedMember.project || 'Belum ada project yang dipilih'}</strong></div></> : <p>Pilih karakter atau nama anggota untuk melihat status dan project yang sedang mereka kerjakan.</p>}
+        {selectedMember ? <><h4>{selectedMember.name}</h4><p>{statusLabel(selectedMember)} · {deskLabel(data.seats.get(selectedMember.id) ?? 0)}</p><div className="office-project"><span>PROJECT PRESENSI</span><strong>{selectedMember.project || 'Belum ada project yang dipilih'}</strong></div></> : <p>Pilih karakter atau nama anggota untuk melihat status dan project yang sedang mereka kerjakan.</p>}
         {((demo && selectedMember) || (!demo && data.viewerId)) && !editing && <button type="button" className="office-edit-avatar" onClick={openEditor}>{demo ? 'Ubah avatar' : 'Ubah avatar saya'}</button>}
         {selectedMember && (demo || selectedMember.id === data.viewerId) && <div className="office-activity-controls">
-          <label>Aktivitas avatar<select aria-label="Aktivitas avatar" disabled={!sharedReady || spaceSaving || selectedMember.status === 'offline'} value={space.activities[selectedMember.id]?.until > now ? space.activities[selectedMember.id].zone : 'auto'} onChange={event => void saveSpace({ type: 'activity', zone: event.target.value as 'auto' | 'garden' | 'pantry' | 'lounge' })}>
+          <label>Aktivitas avatar<select aria-label="Aktivitas avatar" disabled={!sharedReady || spaceSaving || (selectedMember.status !== 'working' || selectedMember.presenceIdle)} value={space.activities[selectedMember.id]?.until > now ? space.activities[selectedMember.id].zone : 'auto'} onChange={event => void saveSpace({ type: 'activity', zone: event.target.value as 'auto' | 'garden' | 'pantry' | 'lounge' })}>
             <option value="auto">Otomatis mengikuti sesi</option><option value="garden">Duduk di taman · 5 menit</option><option value="pantry">Buat kopi di pantry · 5 menit</option><option value="lounge">Ngobrol di lounge · 5 menit</option>
           </select></label><small>Gerakan dan percakapan bersifat ilustrasi. Waktu presensi tidak berubah.</small>
         </div>}

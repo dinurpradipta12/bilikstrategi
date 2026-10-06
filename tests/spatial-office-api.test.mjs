@@ -4,24 +4,25 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { webcrypto } from 'node:crypto';
-import { spaceModel } from './spatial-office-module-loader.mjs';
+import { spaceModel, loadTS } from './spatial-office-module-loader.mjs';
 import * as model from '../lib/spatial-office/model.ts';
 
 const source = ts.transpileModule(readFileSync(new URL('../app/api/spatial-office/handler.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-function fixture({ inactive = false, outsider = false, storage = true, role = 'member' } = {}) {
+function fixture({ inactive = false, outsider = false, storage = true, role = 'member', sessions=[], presence=[] } = {}) {
   const writes = [];
   const spaceWrites = [];
   const user = { id: outsider ? 99 : 1, email: 'me@example.com', username: 'Me' };
   const deps = {
+    '@/lib/attendance/presence': loadTS('../lib/attendance/presence.ts'),
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/clickup/users': { getAuthenticatedUser: async token => { if (token !== 'verified-session') throw new Error('Invalid'); return { user }; } },
     '@/lib/clickup/teams': { getAuthorizedTeams: async () => ({ teams: [{ id: '101', members: [{ user: { id: 1, email: 'me@example.com', username: 'Me' } }] }] }) },
-    '@/lib/supabase/rest-client': { supabaseRest: { from: table => ({ select: async () => ({ data: table === 'app_user_roles' ? [{ email: 'me@example.com', status: inactive ? 'inactive' : 'active', role }] : [], error: null }) }) } },
+    '@/lib/supabase/rest-client': { supabaseRest: { from: table => ({ select: async () => ({ data: table === 'app_user_roles' ? [{ email: 'me@example.com', status: inactive ? 'inactive' : 'active', role }] : table === 'active_sessions' ? sessions : [], error: null }) }) } },
     '@/lib/supabase/admin-rest-client': { isSupabaseAdminConfigured: () => storage, supabaseAdminFetch: async (path, init) => {
       if (init?.method === 'POST') { writes.push(JSON.parse(init.body)); return new Response(null, { status: 204 }); }
-      return Response.json([]);
+      return Response.json(path.startsWith('attendance_presence_state?') ? presence : []);
     } },
     '@/lib/spatial-office/model': model,
     '@/lib/spatial-office/space': spaceModel,
@@ -36,7 +37,7 @@ function fixture({ inactive = false, outsider = false, storage = true, role = 'm
     url: 'https://office.example/api/spatial-office', headers: new Headers({ origin }),
     cookies: { get: key => key === 'clickup_access_token' && token ? { value: token } : { value: 'spoofed-owner' } },
     json: async () => ({ avatar, userId: id }),
-    text: async () => JSON.stringify({ ...action, userId: id, isAdmin: true }),
+    text: async () => JSON.stringify({ version:4, ...action, userId: id, isAdmin: true }),
   });
   return { ...context.exports, request, writes, spaceWrites };
 }
@@ -130,4 +131,19 @@ test('layout cannot hide occupied desks by bypassing the dedicated deletion acti
   const action={type:'layout',layoutRevision:0,ornaments:[],desks:[{slot:0,x:p.x,z:p.z,rotation:p.rotation,removed:true}]};
   assert.equal((await admin.PATCH(admin.request({action}))).status,409);
   assert.equal(admin.spaceWrites.length,0);
+});
+
+test('an old browser must reload before mutating the upgraded desk numbering',async()=>{
+ const f=fixture(); assert.equal((await f.PATCH(f.request({action:{type:'claim',slot:10,version:3}}))).status,409); assert.equal(f.spaceWrites.length,0);
+});
+
+test('idle presence hides only the matching active attendance session',async()=>{
+ const started=Date.now()-600000;
+ const session={user_id:'1',check_in_timestamp:started,is_paused:false};
+ const telemetry={user_email:'me@example.com',session_check_in_timestamp:started,last_activity_at:new Date(Date.now()-360000).toISOString(),last_seen_at:new Date().toISOString(),last_foreground_at:new Date().toISOString()};
+ for(const [patch,idle] of [[{},true],[{session_check_in_timestamp:started-1},false],[{user_email:'outsider@example.com'},false],[{last_activity_at:new Date().toISOString()},false]]) {
+   const f=fixture({sessions:[session],presence:[{...telemetry,...patch}]});
+   const snapshot=await (await f.GET(f.request())).json();
+   assert.equal(snapshot.members[0].status,'working'); assert.equal(snapshot.members[0].presenceIdle,idle);
+ }
 });

@@ -1,4 +1,4 @@
-import { DESKS_PER_ROOM, zonePath, deskPosition, deskCorridor, type DeskLayout, type OfficeMember } from './model';
+import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type DeskLayout, type OfficeMember } from './model';
 
 export const ORNAMENTS = {
   office_desk: { label: 'Meja kantor', category: 'Furnitur', width:1.4,depth:.75,height:.78 },
@@ -86,26 +86,39 @@ const privateOffice = (name: string, x: number): Ornament[] => [
   { id:`${name}-rug`, asset:'area_rug', x, z:-9, rotation:0, room:0 },
 ];
 export const EXECUTIVE_ORNAMENTS = [...privateOffice('manager', -3), ...privateOffice('lead', 3)];
+const isExecutiveKit=(id:string)=>/^(manager|lead)-(desk|chair|laptop|keyboard|lamp|pen)$/.test(id);
 export const DEFAULT_ORNAMENTS: Ornament[] = [
   { id:'plant-back', asset:'floor_plant', x:-5, z:-5, rotation:0, room:0 },
   { id:'shelf-back', asset:'bookshelf', x:-3.6, z:-5.4, rotation:0, room:0 },
   { id:'lamp-back', asset:'floor_lamp', x:.5, z:-5.2, rotation:0, room:0 },
   { id:'plant-front', asset:'floor_plant', x:-5, z:2.8, rotation:0, room:0 },
   { id:'rug-lounge', asset:'area_rug', x:9, z:-3, rotation:0, room:0 },
-  ...EXECUTIVE_ORNAMENTS,
+  ...EXECUTIVE_ORNAMENTS.filter(item=>!isExecutiveKit(item.id)),
 ];
 export function spaceCapacity(space: OfficeSpace, count: number) {
   return Math.max(DESKS_PER_ROOM, Math.ceil(count / DESKS_PER_ROOM) * DESKS_PER_ROOM, Math.ceil((Math.max(-1, ...Object.values(space.claims),...space.desks.map(d=>d.slot)) + 1) / DESKS_PER_ROOM) * DESKS_PER_ROOM);
 }
 export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>[]): OfficeSpace {
-  const raw = value && typeof value === 'object' ? value as Partial<OfficeSpace> : {};
+  let raw = value && typeof value === 'object' ? value as Partial<OfficeSpace> : {};
+  if ((raw.version || 0)<4) {
+    const remap=(slot:number)=>Math.floor(slot/10)*DESKS_PER_ROOM+slot%10;
+    const desks=(raw.desks||[]).map(d=>({...d,slot:remap(d.slot)}));
+    for(const [id,slot] of [['manager',10],['lead',11]] as const) {
+      const old=raw.ornaments?.find(o=>o.id===`${id}-desk`);
+      if(old) desks.push({slot:old.room*DESKS_PER_ROOM+slot,x:old.x,z:old.z,rotation:old.rotation,...(old.color?{color:old.color}:{})});
+      else if(raw.ornaments && (raw.version||0)>=2) { const d=deskPosition(slot); desks.push({slot,x:d.x,z:d.z,rotation:d.rotation,removed:true}); }
+    }
+    // Old custom decorations remain editable in the smaller meeting wing.
+    const ornaments=raw.ornaments?.map(item=>item.x < -6 ? snapOrnament({...item,x:Math.max(-11.4,item.x),z:Math.max(-2.4,Math.min(2.4,item.z))},{...item,x:-9,z:0}) : item);
+    raw={...raw,desks,ornaments,claims:Object.fromEntries(Object.entries(raw.claims||{}).map(([id,slot])=>[id,remap(slot)]))};
+  }
   const claims: Record<string, number> = {};
   const removed=new Set((Array.isArray(raw.desks)?raw.desks:[]).filter(d=>d.removed).map(d=>d.slot));
   const taken = new Set<number>();
   const sorted = [...members].sort((a, b) => a.id.localeCompare(b.id));
   for (const member of sorted) {
     const slot = raw.claims?.[member.id];
-    if (Number.isInteger(slot) && slot! >= 0 && slot! < 1000 && !taken.has(slot!) && !removed.has(slot!)) { claims[member.id] = slot!; taken.add(slot!); }
+    if (Number.isInteger(slot) && slot! >= 0 && slot! < 1200 && !taken.has(slot!) && !removed.has(slot!)) { claims[member.id] = slot!; taken.add(slot!); }
   }
   // Existing/new roster members get a free desk; saved ownership takes precedence.
   for (const member of sorted) {
@@ -122,7 +135,7 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     return item;
   }) : DEFAULT_ORNAMENTS.map(item => ({ ...item }));
   if (Array.isArray(raw.ornaments) && (raw.version || 0) < 2) for (const item of EXECUTIVE_ORNAMENTS) if (!ornaments.some(o => o.id === item.id)) ornaments.push({ ...item });
-  return { version:3, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments };
+  return { version:4, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
@@ -164,7 +177,7 @@ export function ornamentFootprint(item: Ornament) {
   return { corners, xmin:Math.min(...xs), xmax:Math.max(...xs), zmin:Math.min(...zs), zmax:Math.max(...zs), ymin:(item.y||0)+ymin, ymax:(item.y||0)+ymax };
 }
 const placementRoom = (item: Pick<Ornament,'x'|'z'>) => {
-  if(item.x < -6) return [-18,-6,-6,6];
+  if(item.x < -6) return [-12,-6,-3,3];
   if(item.z < -6) return item.x < 0 ? [-6,0,-12,-6] : [0,6,-12,-6];
   if(item.x > 12) return [12.3,18.8,-6,6];
   if(item.x > 6) return item.z < 1.5 ? [6,12,-6,1.5] : [6,12,1.5,6];
@@ -203,33 +216,33 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
   if(b.xmin<xmin+gap||b.xmax>xmax-gap||b.zmin<zmin+gap||b.zmax>zmax-gap) return 'Objek menembus dinding atau keluar ruangan. Geser ke sisi dalam atau gunakan Tempel ke dinding.';
   if(b.ymax>2.701) return 'Objek terlalu tinggi. Turunkan agar tetap di bawah bagian atas dinding.';
   item=center;
-  if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-6,0],[-6,4.5,1],[4.5,6,0],[12,4.5,1]]) {
+  if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-6,0],[-6,.5,1],[4.5,6,0],[12,4.5,1]]) {
     const along = rotated ? Math.abs(item.z-z) : Math.abs(item.x-x), across = rotated ? Math.abs(item.x-x) : Math.abs(item.z-z);
     if (along < .8 + (rotated ? rz : rx) && across < 1.05 + (rotated ? rx : rz)) return 'Sisakan bukaan dan jalur masuk pintu.';
   }
   const garden = xmin===12.3;
   const privateRoom = zmax===-6;
-  if (privateRoom) return '';
-  const bedroom=xmin===-18;
-  if (bedroom) {
-    if (item.asset === 'area_rug') return '';
-    if (Math.abs(item.z-.5)<rz+.4 || (Math.abs(item.x+7)<rx+.4 && item.z+rz>.5)) return 'Sisakan lorong kamar tidur.';
-    for(let i=0;i<10;i++) if(Math.abs(item.x-(-16.5+i%5*1.95))<rx+.7 && Math.abs(item.z-(i<5?-3:2.5))<rz+1.05) return 'Posisi bertabrakan dengan tempat tidur.';
+
+  const meeting=xmin===-12;
+  if(meeting) {
+    if(item.asset==='area_rug') return '';
+    if(Math.hypot(item.x+9,item.z)<2.35+Math.max(rx,rz)) return 'Sisakan meja bundar dan kursi ruang meeting.';
     return '';
   }
   if (garden) {
     if (item.asset !== 'area_rug') {
       if (Math.abs(item.z-1.9) < rz+.55 || Math.abs(item.z+1.2) < rz+.35 || (item.x-rx<12.85 && item.z+rz> -1.5)) return 'Sisakan jalur taman.';
-      for (let i=0;i<5;i++) for (const z of [0,-2.4]) if (Math.abs(item.x-(13.5+i*1.05))<rx+.4 && Math.abs(item.z-z)<rz+.4) return 'Sisakan kursi taman.';
+      for (let i=0;i<6;i++) for (const z of [0,-2.4]) if (Math.abs(item.x-(13.25+i*.95))<rx+.4 && Math.abs(item.z-z)<rz+.4) return 'Sisakan kursi taman.';
     }
     return '';
   }
   if(isWallOrnament(item) && b.ymin>=.65 && Math.min(b.xmin-xmin,xmax-b.xmax,b.zmin-zmin,zmax-b.zmax)<.16) return '';
   if (item.asset === 'area_rug') return '';
-  for (let i = 0; i < 10; i++) { const d = deskPosition(item.room * 10 + i, desks); if(d.removed) continue; const dx = item.x - d.x, dz = item.z - d.z; if (Math.abs(dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation)) < .7 + Math.max(rx, rz) && Math.abs(dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation) + .35) < 1 + Math.max(rx, rz)) return 'Area meja dan kursi harus tetap kosong.'; }
-  for (let slot = 0; slot < DESKS_PER_ROOM; slot++) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'bedroom'] as const) {
-    if(zone==='desk' && deskPosition(item.room*10+slot,desks).removed) continue;
-    const path = zonePath(item.room * 10 + slot, zone, desks);
+  for (let i = 0; i < DESKS_PER_ROOM; i++) { const d = deskPosition(item.room * DESKS_PER_ROOM + i, desks); if(d.removed) continue; const dx = item.x - d.x, dz = item.z - d.z; if (Math.abs(dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation)) < .7 + Math.max(rx, rz) && Math.abs(dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation) + .35) < 1 + Math.max(rx, rz)) return 'Area meja dan kursi harus tetap kosong.'; }
+  if(privateRoom && b.ymin>=.77) return '';
+  for (let slot = 0; slot < DESKS_PER_ROOM; slot++) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'exit'] as const) {
+    if(zone==='desk' && deskPosition(item.room*DESKS_PER_ROOM+slot,desks).removed) continue;
+    const path = zonePath(item.room * DESKS_PER_ROOM + slot, zone, desks);
     for (let i = 1; i < path.length; i++) if (segmentDistance(item.x, item.z, path[i - 1], path[i]) < Math.max(rx, rz) + 0.38) return 'Sisakan lorong untuk jalur karakter.';
   }
   for (const [x, z] of [[7, -4.7], [9, -4.7], [11, -4.7], [7, -1.4], [11, -1.4]]) if (Math.abs(item.x - x) < rx + 1 && Math.abs(item.z - z) < rz + 0.5) return 'Posisi bertabrakan dengan sofa lounge.';
@@ -263,20 +276,21 @@ export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[
 }
 
 export function parseDesks(value: unknown, rooms: number): DeskLayout[] {
-  if (!Array.isArray(value) || value.length > rooms * 10) throw new Error('Denah meja tidak valid.');
+  if (!Array.isArray(value) || value.length > rooms * DESKS_PER_ROOM) throw new Error('Denah meja tidak valid.');
   const used = new Set<number>();
   const desks: DeskLayout[] = value.map(d => {
-    if (!d || !Number.isInteger(d.slot) || d.slot < 0 || d.slot >= rooms * 10 || used.has(d.slot) || ![d.x, d.z, d.rotation].every(n => typeof n === 'number' && Number.isFinite(n)) || Math.abs(d.rotation) > Math.PI * 2 + .01 || !validObjectColor(d.color) || (d.removed!==undefined && typeof d.removed!=='boolean')) throw new Error('Posisi meja tidak valid.');
+    if (!d || !Number.isInteger(d.slot) || d.slot < 0 || d.slot >= rooms * DESKS_PER_ROOM || used.has(d.slot) || ![d.x, d.z, d.rotation].every(n => typeof n === 'number' && Number.isFinite(n)) || Math.abs(d.rotation) > Math.PI * 2 + .01 || !validObjectColor(d.color) || (d.removed!==undefined && typeof d.removed!=='boolean')) throw new Error('Posisi meja tidak valid.');
     used.add(d.slot);
     return { slot: d.slot, x: d.x, z: d.z, rotation: d.rotation, ...(d.color ? { color:d.color } : {}),...(d.removed ? {removed:true}: {}) };
   });
-  for (const room of new Set(desks.map(d => Math.floor(d.slot / 10)))) {
-    const poses = Array.from({ length: 10 }, (_, i) => deskPosition(room * 10 + i, desks));
+  for (const room of new Set(desks.map(d => Math.floor(d.slot / DESKS_PER_ROOM)))) {
+    const poses = Array.from({ length: DESKS_PER_ROOM }, (_, i) => deskPosition(room * DESKS_PER_ROOM + i, desks));
     // Separating-axis check for each desk + chair footprint, including rotation.
     const corners = poses.map(d => [[-.65,-1.15],[.65,-1.15],[.65,.36],[-.65,.36]].map(([x,z]) => [d.x + x*Math.cos(d.rotation)+z*Math.sin(d.rotation), d.z-x*Math.sin(d.rotation)+z*Math.cos(d.rotation)]));
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < DESKS_PER_ROOM; i++) {
       if(poses[i].removed) continue;
-      if (corners[i].some(([x,z]) => x < -5.5 || x > 4.4 || z < -5.5 || z > 3.8)) throw new Error('Meja harus berada di ruang kerja dan tidak menutup lorong pintu.');
+      const [xmin,xmax,zmin,zmax]=deskBounds(room*DESKS_PER_ROOM+i);
+      if (corners[i].some(([x,z]) => x < xmin || x > xmax || z < zmin || z > zmax)) throw new Error('Meja harus berada di ruang kerja dan tidak menutup lorong pintu.');
       for (let j = 0; j < i; j++) {
         if(poses[j].removed) continue;
         const separate = [poses[i].rotation, poses[j].rotation].flatMap(r => [[Math.cos(r),-Math.sin(r)],[Math.sin(r),Math.cos(r)]]).some(([x,z]) => {
@@ -285,7 +299,7 @@ export function parseDesks(value: unknown, rooms: number): DeskLayout[] {
         });
         if (!separate) throw new Error('Meja atau kursi saling bertabrakan. Beri ruang di antaranya.');
       }
-      if (!deskCorridor(room * 10 + i, desks).length) throw new Error('Meja ini menutup jalur duduk. Sisakan lorong di belakang kursi.');
+      if (!deskCorridor(room * DESKS_PER_ROOM + i, desks).length) throw new Error('Meja ini menutup jalur duduk. Sisakan lorong di belakang kursi.');
     }
   }
   return desks;

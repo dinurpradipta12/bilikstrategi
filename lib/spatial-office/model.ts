@@ -5,6 +5,7 @@ export type OfficeMember = {
   name: string;
   status: 'working' | 'paused' | 'offline';
   project: string;
+  presenceIdle?: boolean;
   startedAt?: number;
   accumulatedSeconds?: number;
   tasks?: OfficeTask[];
@@ -70,20 +71,28 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
   }
   return seats;
 }
-export const DESKS_PER_ROOM = 10;
+export const DESKS_PER_ROOM = 12;
+export const WORKSPACE_DESKS = 10;
+export function deskLabel(slot: number) {
+  const i=slot%DESKS_PER_ROOM;
+  return i===10?'Meja Manager':i===11?'Meja Project Lead':`Meja ${Math.floor(slot/DESKS_PER_ROOM)*10+i+1}`;
+}
+export function deskBounds(slot: number) {
+  const i=slot%DESKS_PER_ROOM;
+  return i===10?[-5.5,-.5,-11.5,-6.8]:i===11?[.5,5.5,-11.5,-6.8]:[-5.5,4.4,-5.5,3.8];
+}
 export type DeskLayout = { slot: number; x: number; z: number; rotation: number; color?: string; removed?: boolean };
 export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const index = slot % DESKS_PER_ROOM;
   // Five adjoining stations on each side of a shared, continuous workbench.
   const side = index % 2 === 0 ? -1 : 1;
   const custom = layout.find(d => d.slot === slot);
-  const x = custom?.x ?? (Math.floor(index / 2) - 2) * 1.4, z = custom?.z ?? side * .375;
-  const rotation = custom?.rotation ?? (side === -1 ? 0 : Math.PI);
+  const x = custom?.x ?? (index>=10?(index===10?-3:3):(Math.floor(index / 2) - 2) * 1.4), z = custom?.z ?? (index>=10?-9:side * .375);
+  const rotation = custom?.rotation ?? (index>=10?0:side === -1 ? 0 : Math.PI);
   return { x, z, rotation, removed:custom?.removed===true, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
 }
 export function officePath(slot: number, leaving = false): Array<[number, number]> {
-  const desk = deskPosition(slot);
-  const path: Array<[number, number]> = [[-7, 4.5], [-4.5, 4.5], [-4.5, desk.aisleZ], [desk.x, desk.aisleZ], [desk.x, desk.seatZ]];
+  const path: Array<[number, number]> = [...zonePath(slot,'exit').reverse(),...zonePath(slot,'desk').slice(1)];
   return leaving ? path.reverse() : path;
 }
 export function memberHash(id: string) {
@@ -98,7 +107,7 @@ export const AVATAR_MODELS = ['operations', 'research', 'copywriter', 'designer'
 export const AVATAR_COLORS = ['original', '#3d302b', '#c58d51', '#d78296', '#759484', '#8795bd', '#b2a0c5', '#e9debd'] as const;
 export type AvatarStyle = { model: typeof AVATAR_MODELS[number]; hair: typeof AVATAR_MODELS[number]; hairColor: typeof AVATAR_COLORS[number]; shirtColor: typeof AVATAR_COLORS[number]; glasses: boolean };
 export type OfficeTask = { name: string; status: string };
-export type OfficeZone = 'desk' | 'lounge' | 'pantry' | 'garden' | 'bedroom';
+export type OfficeZone = 'desk' | 'lounge' | 'pantry' | 'garden' | 'exit';
 export function defaultAvatar(id: string): AvatarStyle {
   const model = AVATAR_MODELS[memberHash(id) % AVATAR_MODELS.length];
   return { model, hair: model, hairColor: 'original', shirtColor: 'original', glasses: model === 'designer' };
@@ -133,12 +142,10 @@ function calculateOfficeTime(now: number, schedule?: AttendanceSchedule) {
   const phase = hour < 5 || hour >= 18 ? 'Malam' : hour < 11 ? 'Pagi' : hour < 16 ? 'Siang' : 'Sore';
   return { timezone, hour: hour + Number(parts.minute) / 60, inShift, phase, clock: `${parts.hour}:${parts.minute}:${parts.second}` };
 }
-export function memberZone(member: OfficeMember, now: number, schedule?: AttendanceSchedule): OfficeZone {
-  // A running check-in still represents work, including approved overtime.
-  if (member.status !== 'working' && !officeTime(now, schedule).inShift) return 'bedroom';
-  if (member.status === 'offline') return 'lounge';
+export function memberZone(member: OfficeMember, now: number): OfficeZone {
+  // Attendance, not the clock or browser activity, controls visibility.
+  if (member.status !== 'working' || member.presenceIdle) return 'exit';
   if (member.activity && member.activity.until > now) return member.activity.zone;
-  if (member.status === 'paused') return 'lounge';
   const cycle = workedSeconds(member, now) % 1920;
   if (cycle >= 1800) return 'garden';
   return cycle >= 900 && cycle < 960 ? 'pantry' : 'desk';
@@ -146,11 +153,11 @@ export function memberZone(member: OfficeMember, now: number, schedule?: Attenda
 export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[] = []) {
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
-  if (zone === 'bedroom') return { x: -16.5 + (i % 5) * 1.95, z: (i < 5 ? -3 : 2.5) + .75, rotation: 0 };
-  if (zone === 'garden') return { x: 13.5 + Math.floor(i / 2) * 1.05, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
-  if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * 1.15, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
+  if (zone === 'exit') return { x:4.5,z:8,rotation:0 };
+  if (zone === 'garden') return { x: 13.25 + Math.floor(i / 2) * .95, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
+  if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * .92, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);
-  return { x: (sofa < 3 ? 7 + sofa * 2 : sofa === 3 ? 7 : 11) + (i % 2 ? 0.4 : -0.4), z: sofa < 3 ? -4.55 : -1.25, rotation: 0 };
+  return { x: (7 + (sofa % 3) * 2) + (i % 2 ? 0.4 : -0.4), z: sofa < 3 ? -4.55 : -1.25, rotation: 0 };
 }
 // Walkable grid in the workspace, excluding desk surfaces and other chairs.
 const corridorCache = new Map<string, Array<[number, number]>>();
@@ -164,15 +171,19 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
   const target = deskPosition(slot, layout), room = Math.floor(slot / DESKS_PER_ROOM);
   const grid = .25, key = (x: number, z: number) => `${x},${z}`;
   const end: [number, number] = [Math.round(target.aisleX / grid), Math.round(target.aisleZ / grid)];
-  const start: [number, number] = [20, 2];
+  const privateDesk=slot%DESKS_PER_ROOM>=WORKSPACE_DESKS;
+  const door=slot%DESKS_PER_ROOM===10?-1.5:4.5;
+  const [xmin,xmax,zmin,zmax]=privateDesk?deskBounds(slot):[-5.5,5.5,-5.5,5.5];
+  const start: [number, number] = privateDesk?[door/grid,-6.75/grid]:[20,2];
+  const prefix: Array<[number,number]>=privateDesk?[[5,.5],[5,-4.3],[door,-4.3],[door,-6]]:[];
   const blocked = (x: number, z: number) => {
-    if (Math.abs(x) > 22 || Math.abs(z) > 22) return true;
-    for (let i = 0; i < 10; i++) {
-      const d = deskPosition(room * 10 + i, layout), dx = x * grid - d.x, dz = z * grid - d.z;
+    if (x*grid<xmin||x*grid>xmax||z*grid<zmin||z*grid>zmax) return true;
+    for (let i = 0; i < DESKS_PER_ROOM; i++) {
+      const d = deskPosition(room * DESKS_PER_ROOM + i, layout), dx = x * grid - d.x, dz = z * grid - d.z;
       if(d.removed) continue;
       const u = dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation), v = dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation);
       if (Math.abs(u) < .86 && Math.abs(v) < .58) return true;
-      if (room * 10 + i !== slot && Math.hypot(x * grid - d.seatX, z * grid - d.seatZ) < .52) return true;
+      if (room * DESKS_PER_ROOM + i !== slot && Math.hypot(x * grid - d.seatX, z * grid - d.seatZ) < .52) return true;
     }
     return false;
   };
@@ -182,7 +193,7 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
     if (p[0] === end[0] && p[1] === end[1]) {
       const path: Array<[number, number]> = []; let node: [number, number] | null = p;
       while (node) { path.push([node[0] * grid, node[1] * grid]); node = parents.get(key(...node))!; }
-      return [...path.reverse().filter((point, i, all) => !i || i === all.length - 1 || (all[i-1][0] !== all[i+1][0] && all[i-1][1] !== all[i+1][1])), [target.aisleX, target.aisleZ], [target.seatX, target.seatZ]];
+      return [...prefix,...path.reverse().filter((point, i, all) => !i || i === all.length - 1 || (all[i-1][0] !== all[i+1][0] && all[i-1][1] !== all[i+1][1])), [target.aisleX, target.aisleZ], [target.seatX, target.seatZ]];
     }
     for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const next: [number, number] = [p[0] + dx, p[1] + dz];
@@ -194,28 +205,31 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
 // All destinations use the shared corridor and the two partition doors.
 export function zonePath(slot: number, zone: OfficeZone, layout: DeskLayout[] = []): Array<[number, number]> {
   const p = zonePosition(slot, zone, layout);
-  if (zone === 'bedroom') return [[5,.5],[5,4.5],[-6,4.5],[-7,4.5],[-7,.5],[p.x,.5],[p.x,p.z]];
+  if (zone === 'exit') return [[5,.5],[5,4.5],[4.5,4.5],[4.5,6],[4.5,7],[p.x,p.z]];
   if (zone === 'garden') return [[5,.5],[5,3.8],[6,3.8],[11,3.8],[11,4.5],[12,4.5],[15.5,4.5],[15.5,1.9],[12.5,1.9],[12.5,-1.2],[p.x,-1.2],[p.x,p.z]];
-  if (zone === 'desk' && layout.some(d => Math.floor(d.slot / 10) === Math.floor(slot / 10))) return deskCorridor(slot, layout);
+  if (zone === 'desk' && (slot%DESKS_PER_ROOM>=WORKSPACE_DESKS || layout.some(d => Math.floor(d.slot / DESKS_PER_ROOM) === Math.floor(slot / DESKS_PER_ROOM)))) return deskCorridor(slot, layout);
   if (zone === 'desk') { const d = deskPosition(slot); return [[5, 0.5], [5, d.aisleZ], [d.x, d.aisleZ], [p.x, p.z]]; }
   if (zone === 'pantry') return [[5, 0.5], [5, 3.8], [6, 3.8], [p.x, 3.8], [p.x, p.z]];
   const aisle = slot % DESKS_PER_ROOM < 6 ? -3.1 : 0;
   return [[5, 0.5], [6, 0.5], [9, 0.5], [9, aisle], [p.x, aisle], [p.x, p.z]];
 }
 // Find a corridor route from the actual position, including rapid direction changes.
-export function travelPath(slot: number, from: [number, number], target: OfficeZone, fromSlot = slot, layout: DeskLayout[] = []): Array<[number, number]> {
-  type Point = [number, number];
+type Point = [number,number];
+type TravelGraph={nodes:Map<string,Point>;segments:[Point,Point][];costs:Map<string,number>;next:Map<string,string>;end:Point};
+const travelGraphCache=new Map<string,TravelGraph>();
+const pathKey=(p:Point)=>p.join(',');
+const pathDistance=(a:Point,b:Point)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+function buildTravelGraph(slot:number,target:OfficeZone,fromSlot:number,layout:DeskLayout[]):TravelGraph|null {
+  const key=pathKey,distance=pathDistance;
   const nodes = new Map<string, Point>(), edges = new Map<string, Set<string>>();
-  const key = (p: Point) => p.join(',');
-  const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const segments: [Point, Point][] = [];
-  for (const sourceSlot of new Set([slot, fromSlot, ...Array.from({ length: DESKS_PER_ROOM }, (_, i) => Math.floor(slot / 10) * 10 + i)])) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'bedroom'] as const) {
+  for (const sourceSlot of new Set([slot, fromSlot, ...Array.from({ length: DESKS_PER_ROOM }, (_, i) => Math.floor(slot / DESKS_PER_ROOM) * DESKS_PER_ROOM + i)])) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'exit'] as const) {
     const path = zonePath(sourceSlot, zone, layout);
     for (const p of path) { nodes.set(key(p), p); if (!edges.has(key(p))) edges.set(key(p), new Set()); }
     for (let i = 1; i < path.length; i++) { const a = path[i - 1], b = path[i]; edges.get(key(a))!.add(key(b)); edges.get(key(b))!.add(key(a)); segments.push([a, b]); }
   }
   const end = zonePath(slot, target, layout).at(-1)!;
-  if (!end) return [];
+  if (!end) return null;
   const costs = new Map<string, number>([[key(end), 0]]), next = new Map<string, string>(), pending = new Set(nodes.keys());
   while (pending.size) {
     const current = [...pending].sort((a, b) => (costs.get(a) ?? Infinity) - (costs.get(b) ?? Infinity))[0];
@@ -225,6 +239,17 @@ export function travelPath(slot: number, from: [number, number], target: OfficeZ
       if (cost < (costs.get(neighbor) ?? Infinity)) { costs.set(neighbor, cost); next.set(neighbor, current); }
     }
   }
+  return {nodes,segments,costs,next,end};
+}
+export function travelPath(slot: number, from: Point, target: OfficeZone, fromSlot = slot, layout: DeskLayout[] = []): Point[] {
+  const cacheKey=`${slot}:${fromSlot}:${target}:${JSON.stringify(layout)}`;
+  let graph=travelGraphCache.get(cacheKey);
+  if(!graph) {
+    const computed=buildTravelGraph(slot,target,fromSlot,layout); if(!computed) return [];
+    if(travelGraphCache.size>=120) travelGraphCache.clear();
+    travelGraphCache.set(cacheKey,computed); graph=computed;
+  }
+  const {nodes,segments,costs,next,end}=graph,key=pathKey,distance=pathDistance;
   let nearest = Infinity, shortest = Infinity, start = key(end), projected: Point = from;
   for (const [a, b] of segments) {
     const dx = b[0] - a[0], dz = b[1] - a[1];
@@ -247,7 +272,7 @@ export function typingHand(index: number, bodyLift: number, tap = 0): [number, n
 }
 
 export function bubbleLabel(member: OfficeMember, zone: OfficeZone = 'desk', now = Date.now()) {
-  if (member.status === 'offline' || zone === 'bedroom') return '';
+  if (member.status !== 'working' || member.presenceIdle || zone === 'exit') return '';
   const lines = zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.']
     : zone === 'garden' ? ['Enak juga duduk di taman.', 'Cari udara segar sebentar, yuk.', 'Ada ide baru yang mau dibahas?', 'Teduh sekali di sini.']
     : zone === 'lounge' ? ['Istirahat sebentar, yuk.', 'Bagaimana kabar kalian hari ini?', 'Nanti kita lanjut ngobrol setelah rehat.', 'Ada rekomendasi makan siang?']

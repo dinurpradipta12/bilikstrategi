@@ -48,7 +48,7 @@ test('all members receive unique desks beyond the first room', () => {
 });
 
 test('coworking desks join end to end with opposite seats facing inward', () => {
-  const stations = Array.from({ length: DESKS_PER_ROOM }, (_, slot) => deskPosition(slot));
+  const stations = Array.from({ length: 10 }, (_, slot) => deskPosition(slot));
   assert.equal(new Set(stations.map(d => d.x)).size, 5);
   for (let pair = 0; pair < 5; pair++) {
     assert.equal(stations[pair * 2].x, stations[pair * 2 + 1].x);
@@ -63,7 +63,7 @@ test('entry and exit corridors never cross the communal table', () => {
     assert.deepEqual(officePath(slot, true), [...path].reverse());
     for (let segment = 1; segment < path.length; segment++) {
       const [a, b] = [path[segment - 1], path[segment]];
-      assert.ok(a[0] === b[0] || a[1] === b[1], 'corridors are axis aligned');
+      assert.ok(Math.abs(a[0]-b[0])<1e-6 || Math.abs(a[1]-b[1])<1e-6, 'corridors are axis aligned');
       for (let step = 0; step <= 20; step++) {
         const x = a[0] + (b[0] - a[0]) * step / 20;
         const z = a[1] + (b[1] - a[1]) * step / 20;
@@ -81,8 +81,8 @@ test('pantry follows accumulated work across reload, pause and resume', async ()
   assert.equal(memberZone(member, now - 1), 'desk');
   assert.equal(memberZone(JSON.parse(JSON.stringify(member)), now), 'pantry');
   assert.equal(memberZone(member, now + 60000), 'desk');
-  assert.equal(memberZone({ ...member, status: 'paused' }, now), 'lounge');
-  assert.equal(memberZone({ ...member, status: 'offline' }, now), 'lounge');
+  assert.equal(memberZone({ ...member, status: 'paused' }, now), 'exit');
+  assert.equal(memberZone({ ...member, status: 'offline' }, now), 'exit');
   assert.equal(workedSeconds({ ...member, status: 'paused' }, now + 900000), 840);
 });
 test('all zone routes and rapid reversals stay in corridors and use partition doors', async () => {

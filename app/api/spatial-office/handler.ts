@@ -1,3 +1,4 @@
+import { resolvePresenceSnapshot } from '@/lib/attendance/presence';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/clickup/users';
 import { getAuthorizedTeams } from '@/lib/clickup/teams';
@@ -63,11 +64,12 @@ export async function GET(req: NextRequest) {
     if (!roster.some(member => String(member.id) === String(user.id))) return json({ error: 'Anda bukan anggota tim ini.' }, 403);
     // Reuse the existing attendance connection and its RLS permissions. A new
     // service-role credential is not required just to render this read-only view.
-    const [roleResult, sessionResult, taskResult, avatarResult] = await Promise.all([
+    const [roleResult, sessionResult, taskResult, avatarResult, presenceResult] = await Promise.all([
       supabaseRest.from('app_user_roles').select('email,display_name,status,role,is_superuser'),
       supabaseRest.from('active_sessions').select('*'),
       supabaseRest.from('task_cache').select('task_name,status,assignee_ids,raw_data'),
       isSupabaseAdminConfigured() ? supabaseAdminFetch(`app_settings?select=key,value&key=like.${encodeURIComponent(`spatial-avatar:${teamId}:*`)}`).catch(() => null) : Promise.resolve(null),
+      isSupabaseAdminConfigured() ? supabaseAdminFetch(`attendance_presence_state?select=user_email,session_check_in_timestamp,last_seen_at,last_activity_at,last_foreground_at&workspace_id=eq.${encodeURIComponent(teamId)}`).catch(() => null) : Promise.resolve(null),
     ]);
     if (roleResult.error || sessionResult.error) throw new Error('Snapshot unavailable');
     const roles = roleResult.data as { email: string; display_name: string; status: string; role?: string; is_superuser?: boolean }[];
@@ -83,8 +85,13 @@ export async function GET(req: NextRequest) {
     const avatarRows = avatarResult?.ok ? await avatarResult.json() as { key: string; value: unknown }[] : [];
     const avatars = new Map(avatarRows.map(row => [row.key, parseAvatar(row.value)]));
     const tasks = !taskResult.error && Array.isArray(taskResult.data) ? taskResult.data as TaskRow[] : [];
+    const presenceRows = presenceResult?.ok ? await presenceResult.json() as {user_email:string;session_check_in_timestamp:number;last_seen_at:string;last_activity_at:string;last_foreground_at:string}[] : [];
     const members = buildOfficeMembers(officeRoster, sessions).filter(member => activeIds.has(member.id)).map(member => ({
-      ...member, tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
+      ...member, presenceIdle: (()=>{
+        const email=officeRoster.find(item=>item.id===member.id)?.email.toLowerCase();
+        const tracked=presenceRows.find(p=>p.user_email?.toLowerCase()===email && Number(p.session_check_in_timestamp)>0 && Number(p.session_check_in_timestamp)===member.startedAt);
+        return Boolean(tracked && resolvePresenceSnapshot({isOnline:true,isPaused:member.status==='paused',lastActivityAt:tracked.last_activity_at,lastSeenAt:tracked.last_seen_at,lastForegroundAt:tracked.last_foreground_at}).state!=='active');
+      })(), tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
       avatar: avatars.get(`spatial-avatar:${teamId}:${member.id}`) || undefined,
     }));
     const office = await readOfficeSpace(teamId, members);
@@ -134,6 +141,7 @@ export async function PATCH(req: NextRequest) {
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
   if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if(action.version!==4) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
   if (['layout','assign','remove-desk'].includes(action.type) && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {

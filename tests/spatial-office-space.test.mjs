@@ -6,12 +6,12 @@ const members = [{ id: '1' }, { id: '2' }, { id: '3' }];
 
 test('ownership survives reload/reordering and roster removal frees only that desk', () => {
   let current = space.normalizeSpace(null, members);
-  assert.equal(space.spaceCapacity(current, members.length), 10);
+  assert.equal(space.spaceCapacity(current, members.length), 12);
   current = space.claimDesk(current, '1', 9, members.length);
   assert.equal(current.claims['1'], 9);
   assert.equal(current.claims['2'], 1);
   assert.throws(() => space.claimDesk(current, '2', 9, 3), /sudah dimiliki/);
-  assert.throws(() => space.claimDesk(current, '1', 10, 3), /tidak tersedia/);
+  assert.throws(() => space.claimDesk(current, '1', 12, 3), /tidak tersedia/);
   assert.throws(() => space.claimDesk(current, 'outsider', 8, 3), /bukan anggota/);
   const restored = space.normalizeSpace(JSON.parse(JSON.stringify(current)), [...members].reverse());
   assert.equal(restored.claims['1'], 9);
@@ -25,7 +25,7 @@ test('ownership survives reload/reordering and roster removal frees only that de
 test('11+ users receive additional areas without overlapping claims', () => {
   const people = Array.from({ length: 25 }, (_, i) => ({ id: String(i) }));
   const current = space.normalizeSpace(null, people);
-  assert.equal(space.spaceCapacity(current, 25), 30);
+  assert.equal(space.spaceCapacity(current, 25), 36);
   assert.equal(new Set(Object.values(current.claims)).size, 25);
 });
 test('team assignment swaps occupied desks and rejects nonmembers or unavailable desks', () => {
@@ -35,7 +35,7 @@ test('team assignment swaps occupied desks and rejects nonmembers or unavailable
   const free=space.assignDesk(swapped,'1',9,3);
   assert.equal(free.claims['1'],9); assert.equal(free.claims['2'],0);
   assert.equal(free.layoutRevision,initial.layoutRevision);
-  for(const [id,slot] of [['outsider',8],['1',NaN],['1',10]]) assert.throws(()=>space.assignDesk(free,id,slot,3));
+  for(const [id,slot] of [['outsider',8],['1',NaN],['1',12]]) assert.throws(()=>space.assignDesk(free,id,slot,3));
   const removed=space.removeDesk(free,8,3);
   assert.throws(()=>space.assignDesk(removed,'1',8,3),/tidak tersedia/);
 });
@@ -52,11 +52,11 @@ test('desk deletion relocates its owner and survives reload and roster additions
   assert.equal(space.claimDesk({...restored,desks:shown},'1',0,4).claims['1'],0);
 });
 test('a fully occupied office cannot delete a desk and empty deletions retain their area', () => {
-  const full=space.normalizeSpace(null,Array.from({length:10},(_,i)=>({id:String(i)})));
-  assert.throws(()=>space.removeDesk(full,0,10),/Semua meja terisi/);
-  assert.equal(full.desks.length,0); assert.equal(new Set(Object.values(full.claims)).size,10);
+  const full=space.normalizeSpace(null,Array.from({length:12},(_,i)=>({id:String(i)})));
+  assert.throws(()=>space.removeDesk(full,0,12),/Semua meja terisi/);
+  assert.equal(full.desks.length,0); assert.equal(new Set(Object.values(full.claims)).size,12);
   const empty=space.normalizeSpace({desks:[{slot:19,x:2,z:1,rotation:0,removed:true}]},[]);
-  assert.equal(space.spaceCapacity(empty,0),20);
+  assert.equal(space.spaceCapacity(empty,0),24);
 });
 test('ornaments allow saved garden/interior placement and reject walls, corridors and invalid assets', () => {
   assert.doesNotThrow(() => space.parseOrnaments(space.DEFAULT_ORNAMENTS, 1));
@@ -74,7 +74,7 @@ test('wall snapping uses the asymmetric asset footprint on all four solid walls'
     const item={id:'wall-item',asset,x,z,y:asset==='bookshelf'?0:.9,rotation:Math.PI/4,room:0};
     const snapped=space.snapOrnament(item,item,true),b=space.ornamentFootprint(snapped);
     assert.ok(Math.abs(b[`${axis}${side>0?'min':'max'}`]-(edge+side*.075))<.00001);
-    assert.doesNotThrow(()=>space.parseOrnaments([snapped],1));
+    assert.doesNotThrow(()=>space.parseOrnaments([snapped],1,[{slot:10,x:-3,z:-9,rotation:0,removed:true}]));
     const inside={...snapped,[axis]:snapped[axis]-side*.1};
     assert.throws(()=>space.parseOrnaments([inside],1),/dinding/);
   }
@@ -92,10 +92,10 @@ test('invalid movement cannot replace a valid draft; dragging clamps to the curr
 });
 
 test('rotated thin objects use their oriented bounds rather than oversized bounding boxes',()=>{
-  const a={id:'screen-a',asset:'room_divider',x:-3,z:-9,rotation:Math.PI/4,room:0};
-  const b={...a,id:'screen-b',x:-2.55,z:-8.55};
+  const a={id:'screen-a',asset:'room_divider',x:-4,z:-4,rotation:Math.PI/4,room:0};
+  const b={...a,id:'screen-b',x:-3.55,z:-3.55};
   assert.doesNotThrow(()=>space.parseOrnaments([a,b],1));
-  assert.throws(()=>space.parseOrnaments([a,{...b,x:-3,z:-9}],1),/bertabrakan/);
+  assert.throws(()=>space.parseOrnaments([a,{...b,x:-4,z:-4}],1),/bertabrakan/);
 });
 test('moving from any desk to another routes through aisles, including after mid-walk reversal', () => {
   for (let fromSlot = 0; fromSlot < 10; fromSlot++) for (let slot = 0; slot < 10; slot++) {

@@ -1,3 +1,14 @@
+## Perubahan terbaru: meja privat dan presensi (6 Oktober 2026)
+
+- Kantor memiliki 10 meja workspace dan 2 meja privat yang bisa diklaim: Manager dan Project Lead. Klik meja memakai mini menu yang sama; admin dapat menetapkan anggota, memindahkan, atau menghapusnya. Semua perangkat dan kursi mengikuti meja.
+- Denah JSON versi 4 mengonversi meja privat dari ornamen ke slot kepemilikan. Klaim lama, posisi meja, warna, dan revisi dipertahankan; slot area berikutnya dimigrasikan sekali dari 10 ke 12 slot per area. Tab lama diminta memuat ulang sebelum mengirim perubahan. Tidak perlu SQL baru.
+- Kamar tidur diganti ruang meeting 6 × 6 meter di sisi kiri, dengan meja bundar berdiameter 2,5 meter dan enam kursi dari aset GLB. Tidak ada ranjang, pose tidur, atau zzz.
+- Hanya anggota yang check-in aktif ditampilkan. Status istirahat, idle/away yang terdeteksi presensi, dan belum check-in berada di luar kantor. Kehadiran yang belum memiliki telemetry tetap mengikuti sesi check-in; sinyal idle harus cocok dengan email dan timestamp sesi yang sedang berjalan.
+- Snapshot awal menempatkan anggota yang sudah bekerja langsung di kursinya. Check-in yang baru teramati datang dari depan melalui pintu kaca. Checkout berjalan dari posisi saat ini, melewati pintu ruang privat bila perlu, lalu pintu kaca depan sebelum avatar dihapus. Pembaruan data tidak mengulang perjalanan; check-in cepat membalik jalur dari posisi saat ini.
+- Semua ini hanya mengubah visual kantor. Catatan presensi, penghitungan waktu, dan pemilik meja tidak dihapus ketika avatar disembunyikan.
+
+Catatan implementasi sebelumnya di bawah adalah riwayat; perubahan terbaru di atas menggantikan perilaku kamar tidur dan meja privat dekoratif.
+
 # Kantor 3D — beranda game, kepemilikan meja, dan editor kantor
 
 ## Review

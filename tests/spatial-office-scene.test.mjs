@@ -34,13 +34,13 @@ function office() {
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
 test('first snapshot seats existing workers immediately; snapshots retain the same rig', () => {
   const engine = office();
-  assert.equal(engine.desks.size, 10); assert.equal(engine.deskLabels.size, 10);
+  assert.equal(engine.desks.size, 12); assert.equal(engine.deskLabels.size, 12);
   engine.setMembers([{ member: alice, slot: 0 }]);
   const first = engine.occupants.get('1'), p = model.zonePosition(0, 'desk');
   assert.equal(first.route.length, 0); assert.equal(first.rig.root.position.x, p.x); assert.equal(first.rig.root.position.z, p.z);
   engine.setMembers([{ member: { ...alice }, slot: 0 }]); assert.equal(engine.occupants.get('1').rig, first.rig);
   engine.setMembers([{ member: { ...alice, status: 'paused' }, slot: 0 }]);
-  assert.equal(first.zone, 'lounge'); assert.ok(first.route.length > 0);
+  assert.equal(engine.occupants.size,0);
 });
 test('claiming another desk retains position and schedules movement, then roster deletion removes avatar only', () => {
   const engine = office(); engine.setMembers([{ member: alice, slot: 0 }]);
@@ -48,7 +48,7 @@ test('claiming another desk retains position and schedules movement, then roster
   engine.setMembers([{ member: alice, slot: 9 }]);
   assert.deepEqual(person.rig.root.position.toArray(), initial.toArray());
   const end = model.zonePosition(9, 'desk'); assert.equal(person.route.at(-1).x, end.x); assert.equal(person.route.at(-1).z, end.z);
-  engine.setMembers([]); assert.equal(engine.occupants.size, 0); assert.equal(engine.desks.size, 10);
+  engine.setMembers([]); assert.equal(engine.occupants.size, 0); assert.equal(engine.desks.size, 12);
 });
 test('removed desks hide the complete furniture kit and can be restored',()=>{
   const engine=office(),p=model.deskPosition(0);
@@ -70,16 +70,37 @@ test('ornament draft move/rotate/add/remove/cancel reconcile without mutating te
   assert.deepEqual(templates.get('floor_plant').position.toArray(), original.toArray());
 });
 
-test('sleep pose stays still across frames, shows zzz and hides numbers and offline bubbles', () => {
-  const engine=office();
-  Object.assign(engine,{schedule:{timezone:'Asia/Makassar',days:[]},visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
-  engine.setMembers([{member:{...alice,status:'offline'},slot:0}]);
+function animation(engine) {
+  Object.assign(engine,{visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
+}
+test('initial offline, paused and idle members stay outside; a new check-in enters through front glass',()=>{
+  const engine=office(); animation(engine);
+  engine.setMembers([{member:{...alice,status:'offline'},slot:0},{member:{...alice,id:'2',status:'paused'},slot:1},{member:{...alice,id:'3',presenceIdle:true},slot:2}]);
+  assert.equal(engine.occupants.size,0);
+  engine.setMembers([{member:alice,slot:0}]);
   const person=engine.occupants.get('1');
-  const pose=()=>[...person.rig.body.position.toArray(),...person.rig.head.rotation.toArray(),...person.rig.hands.flatMap(hand=>hand.position.toArray()),...person.rig.legs.flatMap(leg=>leg.rotation.toArray())];
-  engine.animateFrame(1000); const before=pose(); engine.animateFrame(1800);
-  assert.deepEqual(pose(),before); assert.equal(person.sleep.hidden,false); assert.equal(person.bubble.hidden,true);
-  assert.equal(person.zone,'bedroom'); assert.ok(person.rig.root.position.x < -6);
-  assert.ok([...engine.deskLabels.values()].every(label=>label.hidden));
+  assert.equal(person.rig.root.position.z,8);
+  assert.ok(person.route.some(p=>p.x===4.5&&p.z===6));
+  const route=person.route; engine.setMembers([{member:{...alice},slot:0}]); assert.equal(person.route,route);
+});
+test('checkout walks through front glass then disappears; fresh snapshot does not replay departure',()=>{
+  const engine=office(); animation(engine); engine.setMembers([{member:alice,slot:10}]);
+  engine.setMembers([{member:{...alice,status:'offline'},slot:10}]);
+  const person=engine.occupants.get('1');
+  assert.equal(person.zone,'exit'); assert.ok(person.route.some(p=>p.x===-1.5&&p.z===-6));
+  assert.ok(person.route.some(p=>p.x===4.5&&p.z===6));
+  for(let f=1;f<800;f++) engine.animateFrame(f*50);
+  assert.equal(engine.occupants.size,0);
+  engine.setMembers([{member:{...alice,status:'offline'},slot:10}]); assert.equal(engine.occupants.size,0);
+  assert.ok(engine.scene.getObjectByName('meeting-round-table'));
+  assert.ok(!engine.roomLabels.some(l=>l.element.textContent?.includes('TIDUR')));
+});
+test('checkout followed by quick check-in reverses the current route without teleporting',()=>{
+  const engine=office(); engine.setMembers([{member:alice,slot:11}]);
+  engine.setMembers([{member:{...alice,status:'offline'},slot:11}]);
+  const person=engine.occupants.get('1'),position=person.rig.root.position.clone();
+  engine.setMembers([{member:alice,slot:11}]);
+  assert.deepEqual(person.rig.root.position.toArray(),position.toArray()); assert.equal(person.zone,'desk');
 });
 test('object coloring owns its material and does not recolor another object or GLB template', () => {
   const engine=office();
@@ -103,26 +124,9 @@ test('wall attachment clears the real supplied GLB on every wall orientation',()
   }
 });
 
-test('sleeping GLBs clear the mattress, blanket and pillow with every body and hair style', () => {
-  const engine=office();
-  Object.assign(engine,{schedule:{timezone:'Asia/Makassar',days:[]},visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
-  let frame=1000;
-  for(const body of model.AVATAR_MODELS) for(const hair of model.AVATAR_MODELS) {
-    engine.setMembers([{member:{...alice,status:'offline',avatar:{...model.defaultAvatar('1'),model:body,hair,glasses:true}},slot:0}]);
-    engine.animateFrame(frame+=100);
-    const rig=engine.occupants.get('1').rig;
-    rig.root.updateMatrixWorld(true);
-    const bounds=new THREE.Box3().setFromObject(rig.body),head=new THREE.Box3().setFromObject(rig.head);
-    assert.ok(bounds.min.y>=.5949,`${body}/${hair}: body sinks into blanket at ${bounds.min.y}`);
-    assert.ok(head.min.y>=.6549,`${body}/${hair}: head sinks into pillow at ${head.min.y}`);
-    assert.ok(bounds.min.y<.78,`${body}/${hair}: floating over mattress`);
-    assert.ok(bounds.min.z>=-4 && bounds.max.z<=-2,`${body}/${hair}: extends outside bed ${bounds.min.z} .. ${bounds.max.z}`);
-  }
-});
-
 test('doors visibly clear the whole opening, stay open during passage and close after avatar leaves', () => {
   const engine=office();
-  for(const name of ['MANAGER','PROJECT LEAD','ISTIRAHAT']) assert.ok(engine.doors.some(d=>d.group.name===`door-${name}`));
+  for(const name of ['MANAGER','PROJECT LEAD','MEETING']) assert.ok(engine.doors.some(d=>d.group.name===`door-${name}`));
   engine.setMembers([{member:alice,slot:0}]);
   const person=engine.occupants.get('1');
   for(const door of engine.doors) {
