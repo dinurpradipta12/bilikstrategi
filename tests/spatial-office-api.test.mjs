@@ -10,7 +10,7 @@ import * as model from '../lib/spatial-office/model.ts';
 const source = ts.transpileModule(readFileSync(new URL('../app/api/spatial-office/handler.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-function fixture({ inactive = false, outsider = false, storage = true, role = 'member', sessions=[], presence=[] } = {}) {
+function fixture({ inactive = false, outsider = false, storage = true, role = 'member', sessions=[], presence=[], initialSpace } = {}) {
   const writes = [];
   const spaceWrites = [];
   const user = { id: outsider ? 99 : 1, email: 'me@example.com', username: 'Me' };
@@ -27,8 +27,8 @@ function fixture({ inactive = false, outsider = false, storage = true, role = 'm
     '@/lib/spatial-office/model': model,
     '@/lib/spatial-office/space': spaceModel,
     '@/lib/spatial-office/space-store': {
-      readOfficeSpace: async (_team, members) => ({ space: spaceModel.normalizeSpace(null, members), ready: storage }),
-      mutateOfficeSpace: async (_team, members, mutate) => { const next = mutate(spaceModel.normalizeSpace(null, members)); spaceWrites.push(next); return next; },
+      readOfficeSpace: async (_team, members) => ({ space: spaceModel.normalizeSpace(initialSpace??null, members), ready: storage }),
+      mutateOfficeSpace: async (_team, members, mutate) => { const next = mutate(spaceModel.normalizeSpace(initialSpace??null, members)); spaceWrites.push(next); return next; },
     },
   };
   const context = { exports: {}, require: name => { assert.ok(deps[name], `Unexpected dependency ${name}`); return deps[name]; }, crypto: webcrypto, TextEncoder, URL, process: { env: { NODE_ENV: 'production', CLICKUP_WORKSPACE_ID: '101' } } };
@@ -133,6 +133,16 @@ test('admin layout deletion safely relocates the owner in the same write',async(
   assert.equal(admin.spaceWrites.length,1);
   assert.ok(admin.spaceWrites[0].desks[0].removed);
   assert.ok(!Object.values(admin.spaceWrites[0].claims).includes(0));
+});
+test('admin can delete an ornament while an unchanged legacy object remains near the corridor',async()=>{
+  const members=[{id:'1'}],base=spaceModel.normalizeSpace(null,members);
+  const legacy={...base,layoutRevision:6,ornaments:[...base.ornaments,{id:'legacy-lamp',asset:'floor_lamp',x:5.63,z:-5.63,rotation:0,room:0}]};
+  const admin=fixture({role:'admin',initialSpace:legacy});
+  const ornaments=legacy.ornaments.filter(item=>item.id!=='lounge-sofa-0');
+  const response=await admin.PATCH(admin.request({action:{type:'layout',layoutRevision:6,desks:legacy.desks,ornaments}}));
+  assert.equal(response.status,200);
+  assert.ok(admin.spaceWrites[0].ornaments.some(item=>item.id==='legacy-lamp'));
+  assert.ok(!admin.spaceWrites[0].ornaments.some(item=>item.id==='lounge-sofa-0'));
 });
 
 test('an old browser must reload before mutating the upgraded desk numbering',async()=>{

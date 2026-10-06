@@ -274,3 +274,14 @@ test('normalization releases meeting reservations when the member pauses or beco
   const normalized=space.normalizeSpace(next,[{id:'1',status:'paused'},{id:'2',status:'working',presenceIdle:true},{id:'3',status:'working'}]);
   assert.equal(Object.keys(normalized.activities).length,0);
 });
+
+test('deleting an object is not blocked by an unchanged legacy ornament near the corridor',()=>{
+  const base=space.normalizeSpace(null,members),legacy={id:'legacy-lamp',asset:'floor_lamp',x:5.63,z:-5.63,rotation:0,room:0};
+  const current={...base,ornaments:[...base.ornaments,legacy],layoutRevision:4};
+  assert.throws(()=>space.parseOrnaments(current.ornaments,1,current.desks),/Lampu lantai/);
+  const withoutSofa=current.ornaments.filter(item=>item.id!=='lounge-sofa-0');
+  const saved=space.applyLayout(current,{layoutRevision:4,desks:current.desks,ornaments:withoutSofa},members.length);
+  assert.ok(saved.ornaments.some(item=>item.id==='legacy-lamp'));
+  assert.ok(!saved.ornaments.some(item=>item.id==='lounge-sofa-0'));
+  assert.throws(()=>space.applyLayout(current,{layoutRevision:4,desks:current.desks,ornaments:withoutSofa.map(item=>item.id==='legacy-lamp'?{...item,x:5.64}:item)},members.length),/Lampu lantai/);
+});

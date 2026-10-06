@@ -72,6 +72,9 @@ export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> 
   trash_bin: [-0.18,0.18,-0.18,0.18,0.005,0.42],
 };
 export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; scale?: [number,number,number]; color?: string; rotation: number; room: number };
+function sameOrnament(a: Ornament | undefined, b: Ornament) {
+  return Boolean(a && a.id===b.id && a.asset===b.asset && a.x===b.x && a.z===b.z && (a.y??0)===(b.y??0) && a.rotation===b.rotation && a.room===b.room && (a.color||'')===(b.color||'') && JSON.stringify(a.scale||[1,1,1])===JSON.stringify(b.scale||[1,1,1]));
+}
 export const ROOM_LIGHTS = {
   workspace:{label:'Workspace',x:0,z:0}, manager:{label:'Manager',x:-3,z:-9}, lead:{label:'Project Lead',x:3,z:-10.5},
   lounge:{label:'Lounge',x:9,z:-3}, pantry:{label:'Pantry',x:9,z:3.8}, meeting:{label:'Meeting room',x:9,z:-10.5}, corridor:{label:'Lorong meeting',x:7.5,z:-6.25},
@@ -235,7 +238,11 @@ export function removeDesk(space: OfficeSpace, slot: unknown, count: number) {
 export function applyLayout(space:OfficeSpace, action:{layoutRevision:number;desks?:unknown;ornaments:unknown}, count:number):OfficeSpace {
   if(action.layoutRevision!==space.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
   const capacity=spaceCapacity(space,count),desks=parseDesks(action.desks??space.desks,capacity/DESKS_PER_ROOM);
-  const ornaments=parseOrnaments(action.ornaments,capacity/DESKS_PER_ROOM,desks),claims={...space.claims};
+  const desksUnchanged=Array.from({length:capacity},(_,slot)=>{
+    const before=deskPosition(slot,space.desks),after=deskPosition(slot,desks);
+    return before.x===after.x&&before.z===after.z&&before.rotation===after.rotation&&(before.color||'')===(after.color||'')&&Boolean(before.removed)===Boolean(after.removed);
+  }).every(Boolean);
+  const ornaments=parseOrnaments(action.ornaments,capacity/DESKS_PER_ROOM,desks,desksUnchanged?space.ornaments:undefined),claims={...space.claims};
   const displaced=Object.keys(claims).filter(id=>deskPosition(claims[id],desks).removed);
   const occupied=new Set(Object.entries(claims).filter(([id])=>!displaced.includes(id)).map(([,slot])=>slot));
   for(const id of displaced) {
@@ -324,16 +331,18 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
   }
   return '';
 }
-export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[] = []): Ornament[] {
+export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[] = [], existing: Ornament[] = []): Ornament[] {
   if (!Array.isArray(value) || value.length > 1200) throw new Error('Maksimum 1200 objek per kantor.');
   const ids = new Set<string>();
+  const unchanged = new Set<string>();
   const items = value.map(input => {
     if (!input || typeof input !== 'object') throw new Error('Data ornamen tidak valid.');
     const item = input as Ornament;
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id) || !Object.hasOwn(ORNAMENTS, item.asset) || !validObjectColor(item.color) || (item.scale!==undefined && (!Array.isArray(item.scale)||item.scale.length!==3||!item.scale.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=.25&&n<=3))) || (item.y !== undefined && (typeof item.y !== 'number' || !Number.isFinite(item.y) || item.y < 0 || item.y > 2)) || ![item.x, item.z, item.rotation].every(v => typeof v === 'number' && Number.isFinite(v)) || Math.abs(item.rotation) > Math.PI * 2 + 0.01 || !Number.isInteger(item.room) || item.room < 0 || item.room >= rooms) throw new Error('Data ornamen tidak valid.');
     ids.add(item.id);
     const clean: Ornament = { id: item.id, asset: item.asset, x: item.x, z: item.z, rotation: item.rotation, room: item.room, ...(item.scale?{scale:item.scale}:{}), ...(item.y !== undefined ? { y:item.y } : {}), ...(item.color ? { color:item.color } : {}) };
-    const error = ornamentError(clean, desks); if (error) throw new Error(`${ORNAMENTS[item.asset].label} (X ${item.x.toFixed(2)}, Z ${item.z.toFixed(2)}): ${error}`);
+    if(sameOrnament(existing.find(saved=>saved.id===clean.id),clean)) unchanged.add(clean.id);
+    else { const error = ornamentError(clean, desks); if (error) throw new Error(`${ORNAMENTS[item.asset].label} (X ${item.x.toFixed(2)}, Z ${item.z.toFixed(2)}): ${error}`); }
     return clean;
   });
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
@@ -345,7 +354,7 @@ export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[
       const pa=ba.corners.map(p=>p[0]*x+p[1]*z),pb=bb.corners.map(p=>p[0]*x+p[1]*z);
       return Math.max(...pa)<=Math.min(...pb)+.015||Math.max(...pb)<=Math.min(...pa)+.015;
     });
-    if(!separate) throw new Error(`${ORNAMENTS[a.asset].label} (X ${a.x.toFixed(2)}, Z ${a.z.toFixed(2)}) bertabrakan dengan ${ORNAMENTS[b.asset].label} (X ${b.x.toFixed(2)}, Z ${b.z.toFixed(2)}). Geser salah satunya.`);
+    if(!separate&&(!unchanged.has(a.id)||!unchanged.has(b.id))) throw new Error(`${ORNAMENTS[a.asset].label} (X ${a.x.toFixed(2)}, Z ${a.z.toFixed(2)}) bertabrakan dengan ${ORNAMENTS[b.asset].label} (X ${b.x.toFixed(2)}, Z ${b.z.toFixed(2)}). Geser salah satunya.`);
   }
   return items;
 }
@@ -412,10 +421,10 @@ export function updateOrnament(items: Ornament[], id: string, patch: Partial<Orn
   });
 }
 
-export function moveOrnament(items: Ornament[], id: string, patch: Partial<Ornament>, rooms: number, desks: DeskLayout[], attach = false) {
+export function moveOrnament(items: Ornament[], id: string, patch: Partial<Ornament>, rooms: number, desks: DeskLayout[], attach = false, existing: Ornament[] = []) {
   const previous=items.find(item=>item.id===id); if(!previous) return items;
   const next=snapOrnament({...previous,...patch},previous,attach);
-  return parseOrnaments(updateOrnament(items,id,next),rooms,desks);
+  return parseOrnaments(updateOrnament(items,id,next),rooms,desks,existing);
 }
 
 export function moveDesk(desks: DeskLayout[], slot: number, patch: Partial<DeskLayout>, rooms: number, ornaments: Ornament[]) {

@@ -5,10 +5,10 @@ import { OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, mo
 
 import { DESKS_PER_ROOM, deskBounds, deskLabel, deskPosition, type DeskLayout } from '@/lib/spatial-office/model';
 
-export default function OfficeEditor({ library, onLibraryChange, desks, onDesksChange, items, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
+export default function OfficeEditor({ library, onLibraryChange, desks, baselineDesks, onDesksChange, items, baselineItems, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
   library:boolean; onLibraryChange:(open:boolean)=>void;
-  desks: DeskLayout[]; onDesksChange: (desks: DeskLayout[]) => void;
-  items: Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
+  desks: DeskLayout[]; baselineDesks:DeskLayout[]; onDesksChange: (desks: DeskLayout[]) => void;
+  items: Ornament[]; baselineItems:Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
   onSave: () => void; onCancel: () => void; onReload: () => void; conflict: boolean; saving: boolean; error: string;
 }) {
   const [search, setSearch] = useState('');
@@ -19,16 +19,17 @@ export default function OfficeEditor({ library, onLibraryChange, desks, onDesksC
   const [deskXmin,deskXmax,deskZmin,deskZmax]=deskBounds(deskSlot??0);
   const desk = deskSlot === null ? null : deskPosition(deskSlot, desks);
   const updateDesk = (patch: Partial<DeskLayout>) => { if (deskSlot === null || !desk) return; try { onDesksChange(moveDesk(desks,deskSlot,patch,rooms,items)); setMessage(''); } catch(failure) { setMessage(failure instanceof Error ? failure.message : 'Posisi belum valid.'); } };
-  const layoutError = useMemo(()=>{ try { parseDesks(desks, rooms); parseOrnaments(items, rooms, desks); return ''; } catch (failure) { return failure instanceof Error ? failure.message : 'Denah belum valid.'; } },[desks,items,rooms]);
+  const legacyItems=JSON.stringify(desks)===JSON.stringify(baselineDesks)?baselineItems:undefined;
+  const layoutError = useMemo(()=>{ try { parseDesks(desks, rooms); parseOrnaments(items, rooms, desks,legacyItems); return ''; } catch (failure) { return failure instanceof Error ? failure.message : 'Denah belum valid.'; } },[desks,items,rooms,legacyItems]);
   const item = items.find(item => item.id === selected);
-  const update = (patch: Partial<Ornament>, attach = false) => { try { onChange(moveOrnament(items,selected,patch,rooms,desks,attach)); setMessage(''); } catch(failure) { setMessage(failure instanceof Error ? failure.message : 'Posisi belum valid.'); } };
+  const update = (patch: Partial<Ornament>, attach = false) => { try { onChange(moveOrnament(items,selected,patch,rooms,desks,attach,legacyItems)); setMessage(''); } catch(failure) { setMessage(failure instanceof Error ? failure.message : 'Posisi belum valid.'); } };
   const add = (asset: Ornament['asset']) => {
     const bounds: Record<string, number[]> = { workspace:[-5,5,-5,5], manager:[-5,-1,-11,-7], lead:[1,5,-12.5,-8.5], lounge:[7,11,-4.5,0], pantry:[7,11,2,5], garden:[13,18,-5,5], meeting:[7,11,-12.5,-8.5] };
     const [xmin,xmax,zmin,zmax]=bounds[placement];
     for (let z=zmin; z<=zmax; z+=.5) for (let x=xmin; x<=xmax; x+=.5) {
       const candidate: Ornament = { id:crypto.randomUUID(),asset,x,z,rotation:0,room };
       const next=snapOrnament(candidate,candidate,isWallOrnament(candidate));
-      try { parseOrnaments([...items,next],rooms,desks); onChange([...items,next]); onSelect(next.id); setMessage(''); onLibraryChange(false); return; } catch { /* Try another free position. */ }
+      try { parseOrnaments([...items,next],rooms,desks,legacyItems); onChange([...items,next]); onSelect(next.id); setMessage(''); onLibraryChange(false); return; } catch { /* Try another free position. */ }
     }
     setMessage('Ruangan ini belum memiliki tempat kosong yang cukup. Pilih ruangan lain atau geser objek dahulu.');
   };
