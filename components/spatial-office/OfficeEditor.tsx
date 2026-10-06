@@ -62,8 +62,10 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
       <button type="button" className="office-editor-delete" onClick={() => { onChange(items.filter(current => current.id !== selected)); onSelect(''); }}>Hapus ornamen</button>
       {ornamentError(item, desks) && <p role="status">{ornamentError(item, desks)}</p>}
     </fieldset>}
-    {(message || error || layoutError) && <p role="alert">{error || message || layoutError}</p>}
-    {conflict && <div role="alert"><p>Denah bersama sudah berubah. Muat versi terbaru untuk mengganti draft ini sebelum mengedit kembali.</p><button type="button" onClick={onReload} disabled={saving}>Muat denah terbaru</button></div>}
-    <div className="office-editor-actions"><button type="button" onClick={()=>{ if(layoutError) setMessage(layoutError); else { setMessage(''); onSave(); } }} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan denah'}</button><button type="button" onClick={onCancel} disabled={saving}>Batal</button></div>
+    <div className="office-editor-save">
+      {(message || error || layoutError) && <p role="alert">{error || message || layoutError}</p>}
+      {conflict && <div role="alert"><p>Denah bersama sudah berubah. Muat versi terbaru untuk mengganti draft ini sebelum mengedit kembali.</p><button type="button" onClick={onReload} disabled={saving}>Muat denah terbaru</button></div>}
+      <div className="office-editor-actions"><button type="button" onClick={()=>{ if(layoutError) setMessage(layoutError); else { setMessage(''); onSave(); } }} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan denah'}</button><button type="button" onClick={onCancel} disabled={saving}>Batal</button></div>
+    </div>
   </aside>;
 }

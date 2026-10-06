@@ -839,6 +839,9 @@
 .office-editor-panel legend { font-size:11px; padding:0 5px; }
 .office-editor-panel input { width:100%; accent-color:#607b50; }
 .office-editor-rotate,.office-editor-actions { display:flex; gap:8px; margin:10px 0; }
+.office-editor-save { position:sticky; bottom:-18px; z-index:2; background:#fffef8; border-top:1px solid #d8e0ce; margin:12px -18px -18px; padding:8px 18px 12px; }
+.office-editor-save .office-editor-actions { margin:4px 0; }
+.office-editor-save [role=alert] { max-height:100px; overflow:auto; }
 .office-editor-rotate>button { flex:1; }
 .office-editor-panel .office-editor-delete { color:#9a5143; border-color:#e4cdc5; background:#fcf0e9; width:100%; margin-top:8px; }
 .office-editor-panel [role=alert],.office-desks-panel [role=alert] { color:#a15545; }
@@ -860,6 +863,7 @@
   .office-game .office-game-dock { bottom:max(14px,env(safe-area-inset-bottom)); gap:1px; padding:5px; border-radius:16px; }
   .office-game .office-game-dock button,.office-game .office-game-dock>a { min-width:44px; padding:9px 6px; font-size:8px; white-space:nowrap; }
   .office-game .office-desks-panel,.office-game .office-editor-panel,.office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { top:auto; bottom:96px; right:10px; width:calc(100% - 20px); max-height:52dvh; padding:14px; }
+  .office-game .office-editor-save { bottom:-14px; margin-left:-14px; margin-right:-14px; margin-bottom:-14px; padding-left:14px; padding-right:14px; }
   .office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { padding:0; }
   .office-close-drawer { top:10px; bottom:auto; right:12px; }
   .office-game>.office-error { left:10px; top:126px; max-width:calc(100% - 20px); }
