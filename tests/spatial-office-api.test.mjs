@@ -99,7 +99,7 @@ test('office mutations reject unauthorized sessions, outside origins and missing
 });
 
 test('activity is scoped to verified user and invalid destinations never write', async () => {
-  const f = fixture();
+  const f = fixture({sessions:[{user_id:'1',check_in_timestamp:Date.now(),is_paused:false}]});
   assert.equal((await f.PATCH(f.request({ action:{ type:'activity', zone:'garden' }, id:'99' }))).status,200);
   assert.equal(f.spaceWrites[0].activities['1'].zone,'garden');
   assert.equal(f.spaceWrites[0].activities['99'],undefined);
@@ -126,11 +126,13 @@ test('only database admins can assign or delete desks; assignment requires an ac
   assert.equal((await admin.PATCH(admin.request({action:{type:'assign',memberId:'outsider',slot:9}}))).status,409);
   assert.equal(admin.spaceWrites.length,2);
 });
-test('layout cannot hide occupied desks by bypassing the dedicated deletion action',async()=>{
+test('admin layout deletion safely relocates the owner in the same write',async()=>{
   const admin=fixture({role:'owner'}),p=model.deskPosition(0);
   const action={type:'layout',layoutRevision:0,ornaments:[],desks:[{slot:0,x:p.x,z:p.z,rotation:p.rotation,removed:true}]};
-  assert.equal((await admin.PATCH(admin.request({action}))).status,409);
-  assert.equal(admin.spaceWrites.length,0);
+  assert.equal((await admin.PATCH(admin.request({action}))).status,200);
+  assert.equal(admin.spaceWrites.length,1);
+  assert.ok(admin.spaceWrites[0].desks[0].removed);
+  assert.ok(!Object.values(admin.spaceWrites[0].claims).includes(0));
 });
 
 test('an old browser must reload before mutating the upgraded desk numbering',async()=>{
@@ -157,4 +159,12 @@ test('verified members save lamps and notes with server-owned authorship; invali
   assert.equal(f.spaceWrites[1].notes[0].authorId,'1');
   assert.equal((await f.PATCH(f.request({action:{...action,boardId:'not-a-board'}}))).status,409);
   assert.equal((await f.PATCH(f.request({token:'fake',action}))).status,401);
+});
+
+test('meeting is a verified activity with a server-selected seat; offline members cannot enter through actions',async()=>{
+  const f=fixture({sessions:[{user_id:'1',check_in_timestamp:Date.now(),is_paused:false}]});
+  assert.equal((await f.PATCH(f.request({action:{type:'activity',zone:'meeting',seat:5,memberId:'99'}}))).status,200);
+  assert.equal(f.spaceWrites[0].activities['1'].seat,0);assert.equal(f.spaceWrites[0].activities['99'],undefined);
+  const offline=fixture();assert.equal((await offline.PATCH(offline.request({action:{type:'activity',zone:'meeting'}}))).status,409);
+  assert.equal(offline.spaceWrites.length,0);
 });

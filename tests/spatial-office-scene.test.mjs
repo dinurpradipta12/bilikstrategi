@@ -28,7 +28,7 @@ for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.O
 }
 function office() {
   const engine = Object.create(OfficeScene.prototype);
-  Object.assign(engine, { scene: new THREE.Scene(), labels: new Element(), templates, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
+  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
   engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,[]).ornaments,0,false,''); return engine;
 }
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
@@ -185,4 +185,30 @@ test('corridor glazing has no old mullion and no suspended beam across its works
     if(node.material instanceof THREE.MeshStandardMaterial&&!node.material.transparent) assert.ok(!bounds.containsPoint(new THREE.Vector3(12,1.4,-6)),'no opaque mullion at obsolete room edge');
   }
   assert.ok(engine.scene.children.some(o=>o.userData.architecture==='glass'&&o.position.x===12&&o.position.z===-6.25));
+});
+
+test('every meeting seat routes through the workspace corridor and the meeting door in both directions',()=>{
+  const engine=office();
+  for(let seat=0;seat<6;seat++) {
+    const member={...alice,activity:{zone:'meeting',seat,until:Date.now()+900000}};
+    engine.setMembers([{member,slot:0}]);
+    const destination=engine.destination(0,'meeting');
+    const enter=engine.routeTo(0,[5,.5],'meeting');
+    assert.ok(enter?.length,`seat ${seat} reachable`);
+    assert.ok(enter.some(([x,z])=>x===9&&z===-7.5),`seat ${seat} uses door`);
+    assert.deepEqual(Array.from(enter.at(-1)),[destination.x,destination.z]);
+    const exit=engine.routeTo(0,[destination.x,destination.z],'exit');
+    assert.ok(exit?.some(([x,z])=>x===9&&z===-7.5));
+    assert.ok(exit?.some(([x,z])=>x===4.5&&z===6));
+    const table=spaceModel.ornamentFootprint(engine.ornaments.find(o=>o.id==='meeting-round-table'));
+    for(const [x,z] of [...enter,...exit]) assert.ok(!(x>table.xmin&&x<table.xmax&&z>table.zmin&&z<table.zmax),'route must not pass through round table');
+  }
+});
+test('front camera sits at eye level and looks horizontally toward the office',()=>{
+  const engine=office();engine.camera=new THREE.PerspectiveCamera();engine.controls={target:new THREE.Vector3(),update(){}};
+  engine.frontView();
+  assert.equal(engine.camera.position.y,1.6);assert.equal(engine.controls.target.y,1.6);
+  const offset=engine.camera.position.clone().sub(engine.controls.target);
+  assert.equal(new THREE.Spherical().setFromVector3(offset).phi,Math.PI/2);
+  assert.ok(engine.camera.position.z>6);
 });

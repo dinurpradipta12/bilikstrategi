@@ -243,3 +243,34 @@ test('corridor migrations move Project Lead as a room, widen the lounge passage 
   const moved=space.normalizeSpace({version:3,ornaments:[{id:'old-meeting-art',asset:'framed_art',x:-11.8,z:-2,y:.9,rotation:Math.PI/2,room:0}]},[]).ornaments.find(o=>o.id==='old-meeting-art');
   assert.ok(moved.x>6&&moved.z<-7.5);
 });
+
+test('meeting assigns unique existing seats per office, reports full capacity and releases expired seats',()=>{
+  const roster=Array.from({length:7},(_,i)=>({id:`a${i}`}));let current=space.normalizeSpace(null,roster);
+  for(let i=0;i<6;i++) current=space.setActivity(current,`a${i}`,'meeting',1000);
+  assert.equal(new Set(Object.values(current.activities).map(a=>a.seat)).size,6);
+  assert.throws(()=>space.setActivity(current,'a6','meeting',2000),/penuh/);
+  current=space.setActivity(current,'a0','desk',2000);
+  current=space.setActivity(current,'a6','meeting',2000);assert.equal(current.activities.a6.seat,0);
+  const later=space.setActivity(current,'a0','meeting',901001);assert.equal(later.activities.a0.seat,1);
+  const reloaded=space.normalizeSpace(current,roster);assert.equal(reloaded.activities.a6.zone,'meeting');assert.equal(reloaded.activities.a6.seat,0);
+});
+
+
+test('layout draft removes multiple desks atomically, keeps edits and never revives deleted ornaments',()=>{
+  const base=space.normalizeSpace(null,members),removed=[0,1,5].map(slot=>({...zonePosition(slot,'desk'),slot,removed:true}));
+  const next=space.applyLayout(base,{layoutRevision:0,desks:removed,ornaments:base.ornaments.filter(o=>o.id!=='plant-front')},3);
+  for(const slot of Object.values(next.claims)) assert.ok(![0,1,5].includes(slot));
+  assert.equal(new Set(Object.values(next.claims)).size,3);
+  const restored=space.normalizeSpace(next,members);assert.ok(!restored.ornaments.some(o=>o.id==='plant-front'));
+  assert.deepEqual(restored.claims,next.claims);
+  const all=Array.from({length:12},(_,slot)=>({...zonePosition(slot,'desk'),slot,removed:true}));
+  assert.throws(()=>space.applyLayout(base,{layoutRevision:0,desks:all,ornaments:[]},3),/meja kosong/);
+  assert.equal(base.claims['1'],0);
+});
+
+test('normalization releases meeting reservations when the member pauses or becomes idle',()=>{
+  const base=space.normalizeSpace(null,members);
+  const next=space.setActivity(space.setActivity(base,'1','meeting',1000),'2','meeting',1000);
+  const normalized=space.normalizeSpace(next,[{id:'1',status:'paused'},{id:'2',status:'working',presenceIdle:true},{id:'3',status:'working'}]);
+  assert.equal(Object.keys(normalized.activities).length,0);
+});

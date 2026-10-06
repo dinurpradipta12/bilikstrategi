@@ -10,7 +10,7 @@ export type OfficeMember = {
   accumulatedSeconds?: number;
   tasks?: OfficeTask[];
   avatar?: AvatarStyle;
-  activity?: { zone: 'garden' | 'pantry' | 'lounge'; until: number };
+  activity?: { zone: OfficeActivityZone; until: number; seat?: number };
 };
 export type OfficeSnapshot = { viewerRole?: string; canEditOffice?: boolean; space?: import('./space').OfficeSpace; spaceStorage?: boolean; members: OfficeMember[]; syncedAt: string; viewerId?: string; avatarStorage?: boolean };
 export type RosterMember = { id: string; name: string; email: string; aliases?: string[] };
@@ -107,7 +107,8 @@ export const AVATAR_MODELS = ['operations', 'research', 'copywriter', 'designer'
 export const AVATAR_COLORS = ['original', '#3d302b', '#c58d51', '#d78296', '#759484', '#8795bd', '#b2a0c5', '#e9debd'] as const;
 export type AvatarStyle = { model: typeof AVATAR_MODELS[number]; hair: typeof AVATAR_MODELS[number]; hairColor: typeof AVATAR_COLORS[number]; shirtColor: typeof AVATAR_COLORS[number]; glasses: boolean };
 export type OfficeTask = { name: string; status: string };
-export type OfficeZone = 'desk' | 'lounge' | 'pantry' | 'garden' | 'exit';
+export type OfficeActivityZone = 'desk' | 'lounge' | 'pantry' | 'garden' | 'meeting';
+export type OfficeZone = OfficeActivityZone | 'exit';
 export function defaultAvatar(id: string): AvatarStyle {
   const model = AVATAR_MODELS[memberHash(id) % AVATAR_MODELS.length];
   return { model, hair: model, hairColor: 'original', shirtColor: 'original', glasses: model === 'designer' };
@@ -154,6 +155,7 @@ export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
   if (zone === 'exit') return { x:4.5,z:8,rotation:0 };
+  if (zone === 'meeting') {const a=(i%6)*Math.PI/3+Math.PI/6;return {x:9+Math.sin(a)*1.9,z:-10.75+Math.cos(a)*1.9,rotation:(a+Math.PI)%(Math.PI*2)};}
   if (zone === 'garden') return { x: 13.25 + Math.floor(i / 2) * .95, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
   if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * .92, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);
@@ -206,6 +208,7 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
 // All destinations use the shared corridor and the two partition doors.
 export function zonePath(slot: number, zone: OfficeZone, layout: DeskLayout[] = []): Array<[number, number]> {
   const p = zonePosition(slot, zone, layout);
+  if (zone === 'meeting') return [[5,.5],[5,-6.25],[9,-6.25],[9,-7.5],[9,-8.1],[p.x,p.z]];
   if (zone === 'exit') return [[5,.5],[5,4.5],[4.5,4.5],[4.5,6],[4.5,7],[p.x,p.z]];
   if (zone === 'garden') return [[5,.5],[5,3.8],[6,3.8],[11,3.8],[11,4.5],[12,4.5],[15.5,4.5],[15.5,1.9],[12.5,1.9],[12.5,-1.2],[p.x,-1.2],[p.x,p.z]];
   if (zone === 'desk' && (slot%DESKS_PER_ROOM>=WORKSPACE_DESKS || layout.some(d => Math.floor(d.slot / DESKS_PER_ROOM) === Math.floor(slot / DESKS_PER_ROOM)))) return deskCorridor(slot, layout);
@@ -224,7 +227,7 @@ function buildTravelGraph(slot:number,target:OfficeZone,fromSlot:number,layout:D
   const key=pathKey,distance=pathDistance;
   const nodes = new Map<string, Point>(), edges = new Map<string, Set<string>>();
   const segments: [Point, Point][] = [];
-  for (const sourceSlot of new Set([slot, fromSlot, ...Array.from({ length: DESKS_PER_ROOM }, (_, i) => Math.floor(slot / DESKS_PER_ROOM) * DESKS_PER_ROOM + i)])) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'exit'] as const) {
+  for (const sourceSlot of new Set([slot, fromSlot, ...Array.from({ length: DESKS_PER_ROOM }, (_, i) => Math.floor(slot / DESKS_PER_ROOM) * DESKS_PER_ROOM + i)])) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'meeting', 'exit'] as const) {
     const path = zonePath(sourceSlot, zone, layout);
     for (const p of path) { nodes.set(key(p), p); if (!edges.has(key(p))) edges.set(key(p), new Set()); }
     for (let i = 1; i < path.length; i++) { const a = path[i - 1], b = path[i]; edges.get(key(a))!.add(key(b)); edges.get(key(b))!.add(key(a)); segments.push([a, b]); }
@@ -274,7 +277,7 @@ export function typingHand(index: number, bodyLift: number, tap = 0): [number, n
 
 export function bubbleLabel(member: OfficeMember, zone: OfficeZone = 'desk', now = Date.now()) {
   if (member.status !== 'working' || member.presenceIdle || zone === 'exit') return '';
-  const lines = zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.']
+  const lines = zone === 'meeting' ? [member.project?`Kita bahas progres ${member.project}, yuk.`:'Kita mulai dari progres masing-masing, ya.', 'Ada kendala yang perlu kita selesaikan bersama?', 'Aku catat keputusan meeting hari ini.', 'Setelah ini kita bagi langkah selanjutnya, ya.'] : zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.']
     : zone === 'garden' ? ['Enak juga duduk di taman.', 'Cari udara segar sebentar, yuk.', 'Ada ide baru yang mau dibahas?', 'Teduh sekali di sini.']
     : zone === 'lounge' ? ['Istirahat sebentar, yuk.', 'Bagaimana kabar kalian hari ini?', 'Nanti kita lanjut ngobrol setelah rehat.', 'Ada rekomendasi makan siang?']
     : [...(member.tasks || []).flatMap(task => [`Aku lanjut ${task.name}, ya.`, `Ada masukan untuk ${task.name}?`]), ...(member.project ? [`Yuk, bahas ide untuk ${member.project}.`, `Aku fokus ke ${member.project} dulu, ya.`] : []), 'Sebentar, aku catat idenya dulu.', 'Kalau ada yang perlu dibahas, kabari ya.', 'Kita cek detailnya bersama nanti, ya.'];

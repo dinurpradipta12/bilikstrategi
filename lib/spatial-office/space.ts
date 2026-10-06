@@ -1,4 +1,4 @@
-import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type DeskLayout, type OfficeMember } from './model';
+import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type OfficeActivityZone, type DeskLayout, type OfficeMember } from './model';
 
 export const ORNAMENTS = {
   coffee_machine: { label:'Mesin kopi', category:'Perangkat meja', width:.44,depth:.4,height:.43 },
@@ -202,7 +202,7 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     for(const item of [...(area?DEFAULT_ORNAMENTS:[]),...ROOM_FURNITURE]) {const id=area?`${item.id}-area-${area}`:item.id;if(!ornaments.some(o=>o.id===id)) ornaments.push({...item,id,room:area});}
     furnishedRooms.push(area);
   }
-  return { version:7, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
+  return { version:7, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
@@ -230,6 +230,20 @@ export function removeDesk(space: OfficeSpace, slot: unknown, count: number) {
   }
   const p=deskPosition(slot,space.desks);
   return {...space,claims,revision:space.revision+1,layoutRevision:space.layoutRevision+1,desks:[...space.desks.filter(d=>d.slot!==slot),{slot,x:p.x,z:p.z,rotation:p.rotation,color:p.color,removed:true}]};
+}
+// Apply the final draft atomically; never relocate an owner to another removed desk.
+export function applyLayout(space:OfficeSpace, action:{layoutRevision:number;desks?:unknown;ornaments:unknown}, count:number):OfficeSpace {
+  if(action.layoutRevision!==space.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
+  const capacity=spaceCapacity(space,count),desks=parseDesks(action.desks??space.desks,capacity/DESKS_PER_ROOM);
+  const ornaments=parseOrnaments(action.ornaments,capacity/DESKS_PER_ROOM,desks),claims={...space.claims};
+  const displaced=Object.keys(claims).filter(id=>deskPosition(claims[id],desks).removed);
+  const occupied=new Set(Object.entries(claims).filter(([id])=>!displaced.includes(id)).map(([,slot])=>slot));
+  for(const id of displaced) {
+    const free=Array.from({length:capacity},(_,i)=>i).find(i=>!occupied.has(i)&&!deskPosition(i,desks).removed);
+    if(free===undefined) throw new Error('Semua meja terisi. Pulihkan atau sediakan meja kosong sebelum menghapus meja milik anggota.');
+    claims[id]=free;occupied.add(free);
+  }
+  return {...space,desks,ornaments,claims,revision:space.revision+1,layoutRevision:space.layoutRevision+1};
 }
 function segmentDistance(x: number, z: number, a: [number, number], b: [number, number]) {
   const dx = b[0] - a[0], dz = b[1] - a[1];
@@ -367,10 +381,19 @@ export function parseDesks(value: unknown, rooms: number): DeskLayout[] {
 }
 export function setActivity(space: OfficeSpace, viewerId: string, zone: unknown, now = Date.now()): OfficeSpace {
   if (!Object.hasOwn(space.claims, viewerId)) throw new Error('Anda bukan anggota kantor ini.');
-  if (!['auto', 'garden', 'pantry', 'lounge'].includes(String(zone))) throw new Error('Aktivitas tidak valid.');
+  if (!['auto', 'desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(String(zone))) throw new Error('Aktivitas tidak valid.');
   const activities = { ...space.activities };
   if (zone === 'auto') delete activities[viewerId];
-  else activities[viewerId] = { zone: zone as 'garden' | 'pantry' | 'lounge', until: now + 5 * 60_000 };
+  else {
+    let seat:number|undefined;
+    if(zone==='meeting') {
+      const room=Math.floor(space.claims[viewerId]/DESKS_PER_ROOM);
+      const occupied=new Set(Object.entries(activities).filter(([id,a])=>id!==viewerId&&a.zone==='meeting'&&a.until>now&&Math.floor(space.claims[id]/DESKS_PER_ROOM)===room).map(([,a])=>a.seat));
+      seat=Array.from({length:6},(_,i)=>i).find(i=>!occupied.has(i)&&space.ornaments.some(o=>o.room===room&&(o.id===`meeting-chair-${i}`||o.id===`meeting-chair-${i}-area-${room}`)));
+      if(seat===undefined) throw new Error('Kursi meeting sedang penuh atau belum tersedia. Pilih aktivitas lain.');
+    }
+    activities[viewerId] = {zone:zone as OfficeActivityZone,until:now+(zone==='meeting'?15:5)*60_000,...(seat!==undefined?{seat}:{})};
+  }
   return { ...space, activities, revision: space.revision + 1 };
 }
 

@@ -90,7 +90,7 @@ export class OfficeScene {
     this.controls.minDistance = 9;
     this.controls.maxDistance = 85;
     this.controls.minPolarAngle = 0.35;
-    this.controls.maxPolarAngle = 1.2;
+    this.controls.maxPolarAngle = Math.PI / 2;
     this.controls.minAzimuthAngle = -Infinity;
     this.controls.maxAzimuthAngle = Infinity;
     this.resetCamera();
@@ -419,12 +419,14 @@ export class OfficeScene {
     if (!this.loaded) return;
     const visible = items.filter(item => item.room === room), ids = new Set(visible.map(item => item.id));
     for (const [id, group] of this.decorations) if (!ids.has(id)) { this.releaseTint(group); this.scene.remove(group); this.decorations.delete(id); }
+    let addedSelection=false;
     for (const item of visible) {
       let group = this.decorations.get(item.id);
       if (group && group.userData.asset !== item.asset) { this.releaseTint(group); this.scene.remove(group); this.decorations.delete(item.id); group = undefined; }
-      if (!group) { group = this.asset(item.asset, item.x, item.z); group.userData.ornamentId = item.id; group.userData.asset = item.asset; this.decorations.set(item.id, group); }
+      if (!group) { if(item.id===selected) addedSelection=true; group = this.asset(item.asset, item.x, item.z); group.userData.ornamentId = item.id; group.userData.asset = item.asset; this.decorations.set(item.id, group); }
       group.scale.set(...(item.scale||[1,1,1])); group.position.set(item.x, item.y || 0, item.z); group.rotation.y = item.rotation; this.tint(group,item.color);
     }
+    if(editing&&addedSelection) this.focusObject(selected);
     if(changed) this.blockedActivities.clear();
     if(changed) for(const occupant of this.occupants.values()) if(occupant.zone!=='desk'&&occupant.zone!=='exit') this.changeZone(occupant,this.activeZone(occupant.member,occupant.slot));
     const object = editing ? (selected.startsWith('desk:') ? this.desks.get(Number(selected.slice(5)) % DESKS_PER_ROOM) : this.decorations.get(selected)) : undefined;
@@ -528,14 +530,15 @@ export class OfficeScene {
 
   private seatItem(slot:number,zone:OfficeZone) {
     const i=slot%DESKS_PER_ROOM;
-    const prefix=zone==='garden'?`garden-chair-${i}`:zone==='lounge'?`lounge-sofa-${Math.floor(i/2)%3*2+(i>=6?1:0)}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
+    const meetingSeat=this.current.find(o=>o.slot===slot)?.member.activity?.seat??i%6;
+    const prefix=zone==='meeting'?`meeting-chair-${meetingSeat}`:zone==='garden'?`garden-chair-${i}`:zone==='lounge'?`lounge-sofa-${Math.floor(i/2)%3*2+(i>=6?1:0)}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
     return this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
   }
   private activeZone(member:OfficeMember,slot:number):OfficeZone {
     const zone=memberZone(member,Date.now());
     if(this.blockedActivities.get(member.id)===zone) return 'desk';
     this.blockedActivities.delete(member.id);
-    return ['lounge','garden','pantry'].includes(zone)&&!this.seatItem(slot,zone)?'desk':zone;
+    return ['lounge','garden','pantry','meeting'].includes(zone)&&!this.seatItem(slot,zone)?'desk':zone;
   }
   private destination(slot:number,zone:OfficeZone) {
     const item=this.seatItem(slot,zone);
@@ -544,26 +547,40 @@ export class OfficeScene {
     const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
     return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation, y:item.y||0};
   }
-  private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot) {
+  private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot):[number,number][]|null {
+    // Leaving a rearranged meeting must navigate around the table before the door.
+    if(zone!=='meeting'&&from[0]>6&&from[0]<12&&from[1]<-7.5) {
+      const exit:[number,number]=[9,-8.1];
+      const tail=this.walkRoom(from,exit,'meeting',[]);
+      const onward=this.routeTo(slot,[9,-6.25],zone,fromSlot);
+      return tail&&onward?[...tail,[9,-7.5],[9,-6.25],...onward]:null;
+    }
     const path=travelPath(slot,from,zone,fromSlot,this.deskLayout);
     const seat=this.seatItem(slot,zone);if(!seat) return path;
-    const end=this.destination(slot,zone),door: [number,number]=zone==='garden'?[12.6,4.5]:zone==='pantry'?[6.4,3.8]:[6.4,.5];
-    // Walk from the doorway around the actual furniture, then approach the seat.
-    const bounds=zone==='garden'?[12.3,18.8,-6,6]:zone==='pantry'?[6,12,1.5,6]:[6,12,-5,1.5];
-    const obstacles=this.ornaments.filter(o=>o.room===this.room&&o.asset!=='area_rug'&&o.id!==seat.id&&(o.y||0)<1).map(ornamentFootprint);
-    const step=.25,[xmin,xmax,zmin,zmax]=bounds;
-    const key=(x:number,z:number)=>`${Math.round((x-xmin)/step)},${Math.round((z-zmin)/step)}`;
+    const end=this.destination(slot,zone),door: [number,number]=zone==='meeting'?[9,-8.1]:zone==='garden'?[12.6,4.5]:zone==='pantry'?[6.4,3.8]:[6.4,.5];
+    const [xmin,xmax,zmin,zmax]=this.zoneBounds(zone);
+    const inside=from[0]>xmin&&from[0]<xmax&&from[1]>zmin&&from[1]<zmax;
+    const tail=this.walkRoom(inside?from:door,[end.x,end.z],zone,[seat.id]);
+    if(!tail) return null;
+    const entry=path.findIndex(([x,z])=>zone==='meeting'?x>6&&z<-7.5:zone==='garden'?x>=12:x>=6);
+    return [...(inside?[]:path.slice(0,entry<0?0:entry)),...(inside?[]:[door]),...tail];
+  }
+  private zoneBounds(zone:OfficeZone) {
+    return zone==='meeting'?[6,12,-13.5,-7.5]:zone==='garden'?[12.3,18.8,-6,6]:zone==='pantry'?[6,12,1.5,6]:[6,12,-5,1.5];
+  }
+  private walkRoom(from:[number,number],end:[number,number],zone:OfficeZone,ignore:string[]):[number,number][]|null {
+    const [xmin,xmax,zmin,zmax]=this.zoneBounds(zone);
+    const obstacles=this.ornaments.filter(o=>o.room===this.room&&o.asset!=='area_rug'&&!ignore.includes(o.id)&&(o.y||0)<1&&!(o.asset==='wood_chair'&&Math.hypot(o.x-from[0],o.z-from[1])<.6)).map(ornamentFootprint);
+    const step=.25,key=(x:number,z:number)=>`${Math.round((x-xmin)/step)},${Math.round((z-zmin)/step)}`;
     const point=(k:string):[number,number]=>{const [x,z]=k.split(',').map(Number);return [xmin+x*step,zmin+z*step];};
     const free=(p:[number,number])=>p[0]>xmin+.12&&p[0]<xmax-.12&&p[1]>zmin+.12&&p[1]<zmax-.12&&!obstacles.some(b=>p[0]>b.xmin-.17&&p[0]<b.xmax+.17&&p[1]>b.zmin-.17&&p[1]<b.zmax+.17);
-    const inside=from[0]>xmin&&from[0]<xmax&&from[1]>zmin&&from[1]<zmax;
-    const start=key(...(inside?from:door)),target=key(end.x,end.z),queue=[start],prev=new Map<string,string>();prev.set(start,'');
+    const start=key(...from),target=key(...end),queue=[start],prev=new Map<string,string>();prev.set(start,'');
     for(let head=0;head<queue.length&&head<2500&&!prev.has(target);head++) {
       const p=point(queue[head]);for(const [dx,dz] of [[step,0],[-step,0],[0,step],[0,-step]]) {const next:[number,number]=[p[0]+dx,p[1]+dz],k=key(...next);if(prev.has(k)||(!free(next)&&k!==target)) continue;prev.set(k,queue[head]);queue.push(k);}
     }
     if(!prev.has(target)) return null;
-    const tail:[number,number][]=[];for(let k=target;k&&k!==start;k=prev.get(k)!) tail.unshift(point(k));tail.push([end.x,end.z]);
-    const entry=path.findIndex(([x])=>zone==='garden'?x>=12: x>=6);
-    return [...(inside?[]:path.slice(0,entry<0?0:entry)),...(inside?[]:[door]),...tail];
+    const tail:[number,number][]=[];for(let k=target;k&&k!==start;k=prev.get(k)!) tail.unshift(point(k));tail.push(end);
+    return tail;
   }
   private changeZone(occupant: Occupant, zone: OfficeZone) {
     const p = occupant.rig.root.position;
@@ -630,7 +647,7 @@ export class OfficeScene {
       }
       occupant.member = member; occupant.slot = slot; occupant.name.textContent = member.name;
       occupant.label.setAttribute('aria-label', `${member.name}, sudah check-in`);
-      const zone = this.activeZone(member,slot); if (zone !== occupant.zone) this.changeZone(occupant, zone);
+      const zone = this.activeZone(member,slot); if (zone !== occupant.zone || (zone==='meeting'&&previous.find(p=>p.member.id===member.id)?.member.activity?.seat!==member.activity?.seat)) this.changeZone(occupant, zone);
     }
   }
 
@@ -649,8 +666,14 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
-  resetCamera() { this.camera.position.set(28, 33, 41); this.controls.target.set(0, 0.4, -1.5); this.controls.update(); }
-  focus(zone: OfficeZone | 'garden') { const x = zone === 'desk' ? 0 : zone === 'garden' ? 15.5 : 9, z = zone === 'pantry' ? 3.8 : zone === 'lounge' ? -2.5 : 0; this.controls.target.set(x, 0.5, z); this.camera.position.set(x + 5, 9, z + 9); this.controls.update(); }
+  resetCamera() { this.camera.position.set(28, 33, 41); this.controls.target.set(0, 1.6, -1.5); this.controls.update(); }
+  focusObject(id:string) {
+    const object=id.startsWith('desk:')?this.desks.get(Number(id.slice(5))%DESKS_PER_ROOM):this.decorations.get(id);
+    if(!object) return;
+    const {x,z}=object.position;this.controls.target.set(x,.8,z);this.camera.position.set(x+5,8,z+10);this.controls.update();
+  }
+  frontView() { this.controls.target.set(0,1.6,0);this.camera.position.set(0,1.6,23);this.controls.update(); }
+  focus(zone: OfficeZone | 'garden') { const x = zone === 'desk' ? 0 : zone === 'garden' ? 15.5 : 9, z = zone === 'pantry' ? 3.8 : zone === 'lounge' ? -2.5 : 0; this.controls.target.set(x, 1.6, z); this.camera.position.set(x + 5, 9, z + 9); this.controls.update(); }
   zoom(direction: number) {
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.84 : 1.19), 9, 85));

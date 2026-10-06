@@ -5,12 +5,12 @@ import { OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, mo
 
 import { DESKS_PER_ROOM, deskBounds, deskLabel, deskPosition, type DeskLayout } from '@/lib/spatial-office/model';
 
-export default function OfficeEditor({ desks, onDesksChange, items, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
+export default function OfficeEditor({ library, onLibraryChange, desks, onDesksChange, items, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
+  library:boolean; onLibraryChange:(open:boolean)=>void;
   desks: DeskLayout[]; onDesksChange: (desks: DeskLayout[]) => void;
   items: Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
   onSave: () => void; onCancel: () => void; onReload: () => void; conflict: boolean; saving: boolean; error: string;
 }) {
-  const [library, setLibrary] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Semua');
   const [placement, setPlacement] = useState('workspace');
@@ -28,7 +28,7 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
     for (let z=zmin; z<=zmax; z+=.5) for (let x=xmin; x<=xmax; x+=.5) {
       const candidate: Ornament = { id:crypto.randomUUID(),asset,x,z,rotation:0,room };
       const next=snapOrnament(candidate,candidate,isWallOrnament(candidate));
-      try { parseOrnaments([...items,next],rooms,desks); onChange([...items,next]); onSelect(next.id); setMessage(''); setLibrary(false); return; } catch { /* Try another free position. */ }
+      try { parseOrnaments([...items,next],rooms,desks); onChange([...items,next]); onSelect(next.id); setMessage(''); onLibraryChange(false); return; } catch { /* Try another free position. */ }
     }
     setMessage('Ruangan ini belum memiliki tempat kosong yang cukup. Pilih ruangan lain atau geser objek dahulu.');
   };
@@ -36,7 +36,7 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
   return <aside className="office-editor-panel" aria-label="Editor ruangan admin">
     <div className="office-panel-title"><h3>Atur kantor <span>ADMIN</span></h3><button type="button" onClick={onCancel} disabled={saving} aria-label="Tutup editor ornamen">×</button></div>
     <p>Seret furnitur untuk mengatur posisi. Meja kerja dan perangkatnya bergerak bersama. Objek berhenti di batas dinding; posisi yang bertabrakan tidak diterapkan. Klik Simpan denah untuk membagikan perubahan ke tim.</p>
-    <button className="office-open-library" type="button" onClick={()=>setLibrary(v=>!v)} aria-expanded={library}><Plus size={16}/> Library objek <span>{Object.keys(ORNAMENTS).length} aset</span></button>
+    <button className="office-open-library" type="button" onClick={()=>onLibraryChange(!library)} aria-expanded={library}><Plus size={16}/> Tambah objek <span>{Object.keys(ORNAMENTS).length} aset</span></button>
     {library && <section className="office-object-library" aria-label="Library objek">
       <label>Ruangan penempatan<select value={placement} onChange={event=>setPlacement(event.target.value)}><option value="workspace">Ruang kerja</option><option value="manager">Manager</option><option value="lead">Project lead</option><option value="lounge">Lounge</option><option value="pantry">Pantry</option><option value="garden">Taman</option><option value="meeting">Meeting room</option></select></label>
       <label className="office-library-search"><Search size={14}/><input type="search" aria-label="Cari objek" placeholder="Cari objek…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
@@ -50,6 +50,8 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
       <div className="office-editor-rotate"><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI * 1.5) % (Math.PI * 2) })}>↶ Putar 90°</button><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI / 2) % (Math.PI * 2) })}>Putar 90° ↷</button></div>
       {colorControls(desk.color, color=>updateDesk({color}))}
       <button type="button" onClick={() => onDesksChange(desks.filter(d => d.slot !== deskSlot))}>Posisi meja semula</button>
+      <button type="button" className="office-editor-delete" onClick={()=>updateDesk({removed:true})}>Hapus meja dari denah</button>
+      <p>Pemilik meja akan dipindahkan ke meja kosong saat denah disimpan.</p>
     </fieldset>}
     {desk?.removed && <fieldset disabled={saving}><legend>Meja dihapus</legend><p>Posisi tersimpan. Pulihkan untuk menggunakan meja ini kembali.</p><button type="button" onClick={()=>updateDesk({removed:false})}>Pulihkan meja</button></fieldset>}
     {item && <fieldset disabled={saving}>

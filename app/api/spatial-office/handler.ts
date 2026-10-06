@@ -8,8 +8,7 @@ import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/ad
 import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
 import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
-import { applySharedAction, claimDesk, assignDesk, removeDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
-import { DESKS_PER_ROOM } from '@/lib/spatial-office/model';
+import { applySharedAction, applyLayout, claimDesk, assignDesk, removeDesk, setActivity } from '@/lib/spatial-office/space';
 
 export const runtime = 'edge';
 const identityCache = new Map<string, { user: ClickUpUser; expires: number }>();
@@ -147,16 +146,15 @@ export async function PATCH(req: NextRequest) {
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
       if(action.type==='light'||action.type==='note') return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
-      if (action.type === 'activity') return setActivity(current, snapshot.viewerId, action.zone);
+      if (action.type === 'activity') {
+        const viewer=snapshot.members.find((member: {id:string})=>member.id===snapshot.viewerId);
+        if(action.zone!=='auto'&&(viewer?.status!=='working'||viewer?.presenceIdle)) throw new Error('Check-in dan aktifkan kembali sesi Anda sebelum memilih aktivitas kantor.');
+        return setActivity(current, snapshot.viewerId, action.zone);
+      }
       if (action.type === 'claim') return claimDesk(current, snapshot.viewerId, action.slot, snapshot.members.length);
       if (action.type === 'assign') return assignDesk(current,action.memberId,action.slot,snapshot.members.length);
       if (action.type === 'remove-desk') return removeDesk(current,action.slot,snapshot.members.length);
-      if (action.layoutRevision !== current.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
-      const rooms = spaceCapacity(current, snapshot.members.length) / DESKS_PER_ROOM;
-      const desks = parseDesks(action.desks ?? current.desks, rooms);
-      if(desks.some(d=>d.removed && !current.desks.some(old=>old.slot===d.slot && old.removed))) throw new Error('Gunakan Hapus objek pada menu meja untuk memindahkan pemiliknya dengan aman.');
-      const ornaments = parseOrnaments(action.ornaments, rooms, desks);
-      return { ...current, revision: current.revision + 1, layoutRevision: current.layoutRevision + 1, ornaments, desks };
+      return applyLayout(current,action,snapshot.members.length);
     });
     return json({ space });
   } catch (error) { return json({ error: error instanceof Error ? error.message : 'Perubahan belum tersimpan.' }, 409); }

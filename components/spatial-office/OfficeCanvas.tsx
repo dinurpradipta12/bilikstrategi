@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AttendanceSchedule } from '@/lib/attendance/schedule';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import type { DeskLayout } from '@/lib/spatial-office/model';
-import { Hand, Orbit, Minus, Plus, RotateCcw } from 'lucide-react';
+import { Building2, LocateFixed, Hand, Orbit, Minus, Plus, RotateCcw } from 'lucide-react';
 import type { Ornament, LightMode } from '@/lib/spatial-office/space';
 import type { OfficeMember } from '@/lib/spatial-office/model';
 import { OfficeScene, type ObjectMenuTarget } from '@/lib/spatial-office/scene';
@@ -66,9 +66,11 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
       </div>
     </div>}
     <div className="office-camera-controls" aria-label="Kontrol kamera">
+      {editing&&selectedOrnament&&<button type="button" aria-label="Sorot objek terpilih" title="Sorot objek terpilih" onClick={()=>scene.current?.focusObject(selectedOrnament)}><LocateFixed size={17}/></button>}
       <button type="button" aria-label={pan ? 'Mode orbit kamera' : 'Mode geser kamera'} title={pan ? 'Orbit: seret untuk memutar' : 'Geser: seret untuk memindahkan pandangan'} aria-pressed={pan} onClick={()=>setPan(v=>!v)}>{pan ? <Hand size={17}/> : <Orbit size={17}/>}</button>
       <button type="button" title="Perbesar" aria-label="Perbesar kantor" onClick={() => scene.current?.zoom(1)}><Plus size={17} /></button>
       <button type="button" title="Perkecil" aria-label="Perkecil kantor" onClick={() => scene.current?.zoom(-1)}><Minus size={17} /></button>
+      <button type="button" title="Tampak depan · sejajar mata" aria-label="Tampak depan kantor" onClick={()=>scene.current?.frontView()}><Building2 size={17}/></button>
       <button type="button" title="Atur ulang kamera" aria-label="Atur ulang kamera" onClick={() => scene.current?.resetCamera()}><RotateCcw size={16} /></button>
     </div>
     <div className="office-camera-hint">{pan ? 'Seret untuk geser pandangan' : 'Seret untuk orbit · Klik kanan + seret untuk geser'} · Dua jari: geser & zoom</div>
