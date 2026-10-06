@@ -189,3 +189,57 @@ test('changing desk again before arriving still leaves the original chair throug
   assert.equal(first[1], -2.2);
   const final = zonePosition(5, 'desk'); assert.deepEqual(secondClaim.at(-1), [final.x, final.z]);
 });
+
+test('new furnishing migration seeds every area once and preserves removals, claims and lighting',()=>{
+  const members=Array.from({length:14},(_,i)=>({id:String(i)}));
+  const old=space.normalizeSpace({version:4,claims:{'0':10},ornaments:space.DEFAULT_ORNAMENTS.map(o=>o.id.startsWith('lead-')?{...o,z:o.z+1.5}:o),revision:8},members);
+  assert.equal(old.version,7);assert.equal(old.claims['0'],10);
+  assert.ok(old.ornaments.some(o=>o.room===1&&o.asset==='whiteboard'));
+  assert.doesNotThrow(()=>space.parseOrnaments(old.ornaments,2));
+  const edited={...old,ornaments:old.ornaments.filter(o=>o.id!=='meeting-chair-0'),lights:{'0:meeting':'off'}};
+  const reloaded=space.normalizeSpace(edited,members);
+  assert.ok(!reloaded.ornaments.some(o=>o.id==='meeting-chair-0'));assert.equal(reloaded.lights['0:meeting'],'off');
+});
+test('all furnished objects are valid and supported tabletop objects follow a moved counter',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'}]);
+  assert.doesNotThrow(()=>space.parseOrnaments(base.ornaments,1));
+  const counter=base.ornaments.find(o=>o.id==='pantry-counter-1');
+  const next=space.moveOrnament(base.ornaments,counter.id,{z:5.4},1,[]);
+  assert.ok(Math.abs(next.find(o=>o.id==='pantry-mug-1').z-5.35)<1e-8);
+  assert.ok(Math.abs(next.find(o=>o.id==='pantry-coffee-machine').z-5.3)<1e-8);
+  const board=space.moveOrnament(next,'workspace-board',{z:-2.2},1,[]);
+  assert.equal(board.find(o=>o.id==='workspace-board').z,-2.2);
+});
+test('lighting automatic and manual modes are bounded to existing office areas',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'}]);
+  assert.equal(space.lightEnabled(undefined,true),true);assert.equal(space.lightEnabled('auto',false),false);
+  assert.equal(space.lightEnabled('on',false),true);assert.equal(space.lightEnabled('off',true),false);
+  const saved=space.applySharedAction(base,{type:'light',key:'0:meeting',mode:'on'},'a',false);
+  assert.equal(saved.lights['0:meeting'],'on');
+  for(const action of [{type:'light',key:'99:meeting',mode:'on'},{type:'light',key:'0:unknown',mode:'on'},{type:'light',key:'0:meeting',mode:'bad'}]) assert.throws(()=>space.applySharedAction(base,action,'a',true));
+});
+test('sticky notes enforce ownership, version conflict, board existence and text limits',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'},{id:'b'}]);
+  const action={type:'note',id:'note-a',boardId:'workspace-board',text:'Review konsep besok',color:'yellow',expectedRevision:0,authorId:'b'};
+  const first=space.applySharedAction(base,action,'a',false);
+  assert.equal(first.notes[0].authorId,'a');
+  assert.throws(()=>space.applySharedAction(first,{...action,expectedRevision:1,text:'Changed'},'b',false),/penulis/);
+  const updated=space.applySharedAction(first,{...action,expectedRevision:1,text:'Updated'},'a',false);
+  assert.throws(()=>space.applySharedAction(updated,{...action,expectedRevision:1},'a',false),/berubah/);
+  assert.equal(space.applySharedAction(updated,{...action,expectedRevision:2,remove:true},'b',true).notes.length,0);
+  assert.throws(()=>space.applySharedAction(base,{...action,boardId:'missing'},'a',true));
+  assert.throws(()=>space.applySharedAction(base,{...action,text:'x'.repeat(501)},'a',true));
+  assert.equal(space.normalizeSpace(updated,[{id:'a'},{id:'b'}]).notes[0].text,'Updated');
+});
+
+test('corridor migrations move Project Lead as a room, widen the lounge passage and keep notes',()=>{
+  const prior={version:5,revision:9,layoutRevision:2,claims:{a:11},desks:[{slot:11,x:3,z:-9,rotation:0}],furnishedRooms:[0],lights:{'0:meeting':'off'},notes:[{id:'n',boardId:'board',authorId:'a',text:'Keep',color:'blue',revision:8}],ornaments:[{id:'lead-art',asset:'framed_art',x:3,z:-11.6,y:.9,rotation:0,room:0},{id:'lounge-sofa-0',asset:'sofa',x:7,z:-4.4,rotation:0,room:0}]};
+  const next=space.normalizeSpace(prior,[{id:'a'}]);
+  assert.equal(next.claims.a,11);assert.equal(next.desks[0].z,-10.5);assert.equal(next.ornaments[0].z,-13.1);
+  assert.equal(next.ornaments[1].z,-4);assert.equal(next.lights['0:meeting'],'off');assert.equal(next.notes[0].text,'Keep');
+  assert.deepEqual(space.normalizeSpace(next,[{id:'a'}]),next);
+  assert.doesNotThrow(()=>space.parseOrnaments(next.ornaments,1,next.desks));
+  assert.throws(()=>space.parseOrnaments([{id:'blocked',asset:'sofa',room:0,x:9,z:-5.5,rotation:0}],1),/dinding|lorong/);
+  const moved=space.normalizeSpace({version:3,ornaments:[{id:'old-meeting-art',asset:'framed_art',x:-11.8,z:-2,y:.9,rotation:Math.PI/2,room:0}]},[]).ornaments.find(o=>o.id==='old-meeting-art');
+  assert.ok(moved.x>6&&moved.z<-7.5);
+});

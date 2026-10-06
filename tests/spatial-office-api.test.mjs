@@ -37,7 +37,7 @@ function fixture({ inactive = false, outsider = false, storage = true, role = 'm
     url: 'https://office.example/api/spatial-office', headers: new Headers({ origin }),
     cookies: { get: key => key === 'clickup_access_token' && token ? { value: token } : { value: 'spoofed-owner' } },
     json: async () => ({ avatar, userId: id }),
-    text: async () => JSON.stringify({ version:4, ...action, userId: id, isAdmin: true }),
+    text: async () => JSON.stringify({ version:7, ...action, userId: id, isAdmin: true }),
   });
   return { ...context.exports, request, writes, spaceWrites };
 }
@@ -146,4 +146,15 @@ test('idle presence hides only the matching active attendance session',async()=>
    const snapshot=await (await f.GET(f.request())).json();
    assert.equal(snapshot.members[0].status,'working'); assert.equal(snapshot.members[0].presenceIdle,idle);
  }
+});
+
+test('verified members save lamps and notes with server-owned authorship; invalid boards and unauthenticated writes fail',async()=>{
+  const f=fixture();
+  assert.equal((await f.PATCH(f.request({action:{type:'light',key:'0:meeting',mode:'off'}}))).status,200);
+  assert.equal(f.spaceWrites[0].lights['0:meeting'],'off');
+  const action={type:'note',boardId:'workspace-board',id:'note-one',text:'Ide kantor',color:'blue',expectedRevision:0,authorId:'99'};
+  assert.equal((await f.PATCH(f.request({action}))).status,200);
+  assert.equal(f.spaceWrites[1].notes[0].authorId,'1');
+  assert.equal((await f.PATCH(f.request({action:{...action,boardId:'not-a-board'}}))).status,409);
+  assert.equal((await f.PATCH(f.request({token:'fake',action}))).status,401);
 });

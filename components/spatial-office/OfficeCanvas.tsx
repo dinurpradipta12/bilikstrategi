@@ -5,19 +5,19 @@ import type { AttendanceSchedule } from '@/lib/attendance/schedule';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import type { DeskLayout } from '@/lib/spatial-office/model';
 import { Hand, Orbit, Minus, Plus, RotateCcw } from 'lucide-react';
-import type { Ornament } from '@/lib/spatial-office/space';
+import type { Ornament, LightMode } from '@/lib/spatial-office/space';
 import type { OfficeMember } from '@/lib/spatial-office/model';
 import { OfficeScene, type ObjectMenuTarget } from '@/lib/spatial-office/scene';
 
 type Props = {
   members: { member: OfficeMember; slot: number }[];
-  schedule?: AttendanceSchedule; desks: DeskLayout[];
+  lights: Record<string,LightMode>; schedule?: AttendanceSchedule; desks: DeskLayout[];
   room: number; ornaments: Ornament[]; editing: boolean; selectedOrnament: string;
   onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void;
   onObjectMenu: (target: ObjectMenuTarget) => void; children?: ReactNode;
   motion: boolean; selected: string; onSelect: (id: string) => void;
 };
-export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule }: Props) {
+export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -51,6 +51,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
   useEffect(() => { scene.current?.setMotion(motion); }, [motion, attempt]);
   useEffect(() => { scene.current?.select(selected); }, [selected, attempt]);
   useEffect(() => { scene.current?.setOrnaments(ornaments, room, editing, selectedOrnament); }, [ornaments, room, editing, selectedOrnament, attempt]);
+  useEffect(() => { scene.current?.setLights(lights); }, [lights, attempt]);
   useEffect(() => { scene.current?.setDeskLayout(desks); }, [desks, attempt]);
   useEffect(() => { scene.current?.setEnvironment(schedule); scene.current?.setBrand(OFFICE_BRAND); }, [schedule, attempt]);
   useEffect(() => { scene.current?.setPan(pan); }, [pan, attempt]);

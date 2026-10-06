@@ -1,6 +1,8 @@
 import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type DeskLayout, type OfficeMember } from './model';
 
 export const ORNAMENTS = {
+  coffee_machine: { label:'Mesin kopi', category:'Perangkat meja', width:.44,depth:.4,height:.43 },
+  round_meeting_table: { label: 'Meja bundar', category: 'Furnitur', width:2.5,depth:2.5,height:.86 },
   office_desk: { label: 'Meja kantor', category: 'Furnitur', width:1.4,depth:.75,height:.78 },
   meeting_table: { label: 'Meja meeting', category: 'Furnitur', width:2.3,depth:1.1,height:.8 },
   office_swivel_chair: { label: 'Kursi kantor', category: 'Furnitur', width:.7,depth:.7,height:1.18 },
@@ -36,6 +38,8 @@ export const ORNAMENTS = {
 // Actual supplied GLB bounds after Z-up conversion: min/max X, Z and Y.
 // Some wall decorations are asymmetric about their origin.
 export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> = {
+  coffee_machine: [-.22,.22,-.24,.16,0,.43],
+  round_meeting_table: [-1.25,1.25,-1.25,1.25,0,.86],
   office_desk: [-0.7,0.7,-0.375,0.375,0,0.775],
   meeting_table: [-1.185,1.185,-0.55,0.55,0,0.785],
   office_swivel_chair: [-0.3525,0.365,-0.3498,0.3498,0,1.175],
@@ -67,8 +71,16 @@ export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> 
   storage_box: [-0.29,0.29,-0.21,0.21,0,0.4725],
   trash_bin: [-0.18,0.18,-0.18,0.18,0.005,0.42],
 };
-export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; color?: string; rotation: number; room: number };
-export type OfficeSpace = { version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
+export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; scale?: [number,number,number]; color?: string; rotation: number; room: number };
+export const ROOM_LIGHTS = {
+  workspace:{label:'Workspace',x:0,z:0}, manager:{label:'Manager',x:-3,z:-9}, lead:{label:'Project Lead',x:3,z:-10.5},
+  lounge:{label:'Lounge',x:9,z:-3}, pantry:{label:'Pantry',x:9,z:3.8}, meeting:{label:'Meeting room',x:9,z:-10.5}, corridor:{label:'Lorong meeting',x:7.5,z:-6.25},
+} as const;
+export type LightMode='auto'|'on'|'off';
+export type StickyNote={id:string;boardId:string;authorId:string;text:string;color:string;revision:number};
+export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean};
+export function lightEnabled(mode:LightMode|undefined,night:boolean) { return mode==='on'||(mode!=='off'&&night); }
+export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
 export const OBJECT_COLORS = ['original', '#52684e', '#394c68', '#cfaa77', '#b68c92', '#efe7d5', '#59545a'] as const;
 export function validObjectColor(color: unknown) { return color === undefined || color === 'original' || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)); }
 const privateOffice = (name: string, x: number): Ornament[] => [
@@ -85,7 +97,7 @@ const privateOffice = (name: string, x: number): Ornament[] => [
   { id:`${name}-art`, asset:'framed_art', x, z:-11.6, y:.9, rotation:0, room:0 },
   { id:`${name}-rug`, asset:'area_rug', x, z:-9, rotation:0, room:0 },
 ];
-export const EXECUTIVE_ORNAMENTS = [...privateOffice('manager', -3), ...privateOffice('lead', 3)];
+export const EXECUTIVE_ORNAMENTS = [...privateOffice('manager', -3), ...privateOffice('lead', 3).map(o=>({...o,z:o.z-1.5}))];
 const isExecutiveKit=(id:string)=>/^(manager|lead)-(desk|chair|laptop|keyboard|lamp|pen)$/.test(id);
 export const DEFAULT_ORNAMENTS: Ornament[] = [
   { id:'plant-back', asset:'floor_plant', x:-5, z:-5, rotation:0, room:0 },
@@ -95,6 +107,40 @@ export const DEFAULT_ORNAMENTS: Ornament[] = [
   { id:'rug-lounge', asset:'area_rug', x:9, z:-3, rotation:0, room:0 },
   ...EXECUTIVE_ORNAMENTS.filter(item=>!isExecutiveKit(item.id)),
 ];
+// Every movable fixture has a stable ID; versioned seeding never restores deleted objects.
+export const ROOM_FURNITURE: Ornament[] = [
+  {id:'workspace-board',asset:'whiteboard',x:-5.6,z:-1.8,rotation:Math.PI/2,room:0},
+  {id:'workspace-pinboard',asset:'pinboard',x:0,z:-5.9,y:.8,rotation:0,room:0},
+  ...[7,9,11].flatMap((x,i)=>[-4,-1.4].map((z,j)=>({id:`lounge-sofa-${i*2+j}`,asset:'sofa' as const,x,z,scale:[.8,1,1] as [number,number,number],rotation:0,room:0}))),
+  ...[7.2,9,10.8].flatMap((x,i)=>[
+    {id:`pantry-counter-${i}`,asset:'drawer_cabinet' as const,x,z:5.6,scale:[1.8,.65,1] as [number,number,number],rotation:0,room:0},
+    {id:`pantry-mug-${i}`,asset:'coffee_mug' as const,x:x-.25,z:5.55,y:.94,rotation:0,room:0}]),
+  ...[[13.3,-4.8],[17.5,-4.8],[15.4,-4.8],[17.5,4.8]].map(([x,z],i)=>({id:`garden-plant-${i}`,asset:'floor_plant' as const,x,z,scale:[2.3,2.3,2.3] as [number,number,number],rotation:0,room:0})),
+  ...Array.from({length:12},(_,i)=>({id:`garden-chair-${i}`,asset:'wood_chair' as const,x:13.25+Math.floor(i/2)*.95,z:i%2?-2.4:0,rotation:i%2?0:Math.PI,room:0})),
+  {id:'pantry-coffee-machine',asset:'coffee_machine',x:9.35,z:5.5,y:.94,rotation:0,room:0},
+  {id:'garden-table',asset:'side_table',x:16,z:-3.2,rotation:0,room:0},
+  {id:'meeting-round-table',asset:'round_meeting_table',x:9,z:-10.75,rotation:0,room:0},
+  ...Array.from({length:6},(_,i)=>{const a=i*Math.PI/3+Math.PI/6;return {id:`meeting-chair-${i}`,asset:'wood_chair' as const,x:9+Math.sin(a)*1.9,z:-10.75+Math.cos(a)*1.9,rotation:(a+Math.PI)%(Math.PI*2),room:0};}),
+  {id:'meeting-vase',asset:'flower_vase',x:9,z:-10.75,y:.86,rotation:0,room:0},
+];
+export function applySharedAction(space:OfficeSpace,action:SharedOfficeAction,viewerId:string,admin:boolean):OfficeSpace {
+  if(!Object.hasOwn(space.claims,viewerId)) throw new Error('Anda bukan anggota kantor.');
+  if(action.type==='light') {
+    const [area,name]=String(action.key).split(':');
+    if(!/^\d+$/.test(area)||Number(area)>=spaceCapacity(space,Object.keys(space.claims).length)/DESKS_PER_ROOM||!Object.hasOwn(ROOM_LIGHTS,name)||!['auto','on','off'].includes(action.mode)||action.key!==`${Number(area)}:${name}`) throw new Error('Pengaturan lampu tidak valid.');
+    return {...space,revision:space.revision+1,lights:{...space.lights,[action.key]:action.mode}};
+  }
+  if(!space.ornaments.some(o=>o.id===action.boardId&&o.asset==='whiteboard')) throw new Error('Papan tulis tidak tersedia.');
+  if(typeof action.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(action.id)) throw new Error('Catatan tidak valid.');
+  const old=space.notes.find(n=>n.id===action.id);
+  if(old&&(old.boardId!==action.boardId||(!admin&&old.authorId!==viewerId))) throw new Error('Hanya penulis atau admin yang dapat mengubah catatan ini.');
+  if(action.expectedRevision!==(old?.revision??0)) throw new Error('Catatan telah berubah. Tutup lalu buka kembali papan tulis.');
+  if(!action.remove&&(typeof action.text!=='string'||!action.text.trim()||action.text.length>500||!['yellow','pink','blue','green'].includes(action.color))) throw new Error('Isi catatan 1–500 karakter dan pilih warna yang tersedia.');
+  if(!old&&!action.remove&&space.notes.length>=300) throw new Error('Papan kantor sudah penuh (300 catatan).');
+  const notes=space.notes.filter(n=>n.id!==action.id);
+  if(!action.remove) notes.push({id:action.id,boardId:action.boardId,authorId:old?.authorId??viewerId,text:action.text.trim(),color:action.color,revision:space.revision+1});
+  return {...space,revision:space.revision+1,notes};
+}
 export function spaceCapacity(space: OfficeSpace, count: number) {
   return Math.max(DESKS_PER_ROOM, Math.ceil(count / DESKS_PER_ROOM) * DESKS_PER_ROOM, Math.ceil((Math.max(-1, ...Object.values(space.claims),...space.desks.map(d=>d.slot)) + 1) / DESKS_PER_ROOM) * DESKS_PER_ROOM);
 }
@@ -109,9 +155,23 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
       else if(raw.ornaments && (raw.version||0)>=2) { const d=deskPosition(slot); desks.push({slot,x:d.x,z:d.z,rotation:d.rotation,removed:true}); }
     }
     // Old custom decorations remain editable in the smaller meeting wing.
-    const ornaments=raw.ornaments?.map(item=>item.x < -6 ? snapOrnament({...item,x:Math.max(-11.4,item.x),z:Math.max(-2.4,Math.min(2.4,item.z))},{...item,x:-9,z:0}) : item);
+    const ornaments=raw.ornaments;
     raw={...raw,desks,ornaments,claims:Object.fromEntries(Object.entries(raw.claims||{}).map(([id,slot])=>[id,remap(slot)]))};
   }
+  if((raw.version||0)<6) {
+    raw={...raw,desks:raw.desks?.map(d=>d.slot%DESKS_PER_ROOM===11?{...d,z:d.z-1.5}:d),ornaments:raw.ornaments?.map(o=>{
+      if(o.x>0&&o.x<6&&o.z<-6) return {...o,z:o.z-1.5};
+      if(o.id.startsWith('lounge-sofa-')&&!o.scale) return {...o,scale:[.8,1,1] as [number,number,number]};
+      return o;
+    })};
+  }
+  if((raw.version||0)<7 && raw.ornaments) raw={...raw,ornaments:raw.ornaments.map(o=>{
+    if(o.x>6&&o.x<12&&o.z>=-6&&o.z<1.5) {
+      const item=o.id.startsWith('lounge-sofa-')&&o.z===-4.4?{...o,z:-4}:o;
+      return snapOrnament(item,{...item,z:-3});
+    }
+    return o;
+  })};
   const claims: Record<string, number> = {};
   const removed=new Set((Array.isArray(raw.desks)?raw.desks:[]).filter(d=>d.removed).map(d=>d.slot));
   const taken = new Set<number>();
@@ -135,7 +195,14 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     return item;
   }) : DEFAULT_ORNAMENTS.map(item => ({ ...item }));
   if (Array.isArray(raw.ornaments) && (raw.version || 0) < 2) for (const item of EXECUTIVE_ORNAMENTS) if (!ornaments.some(o => o.id === item.id)) ornaments.push({ ...item });
-  return { version:4, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
+  const furnishedRooms=(raw.version||0)>=5&&Array.isArray(raw.furnishedRooms)?[...raw.furnishedRooms]:[];
+  const areas=Math.max(1,Math.ceil((Math.max(-1,...Object.values(claims),...(raw.desks||[]).map(d=>d.slot))+1)/DESKS_PER_ROOM));
+  if((raw.version||0)<5) for(let i=0;i<ornaments.length;i++) if(ornaments[i].x < -6) ornaments[i]=snapOrnament({...ornaments[i],x:Math.max(-11.4,ornaments[i].x)+18,z:Math.max(-2.4,Math.min(2.4,ornaments[i].z))-10.5},{...ornaments[i],x:9,z:-10.5});
+  for(let area=0;area<areas;area++) if(!furnishedRooms.includes(area)) {
+    for(const item of [...(area?DEFAULT_ORNAMENTS:[]),...ROOM_FURNITURE]) {const id=area?`${item.id}-area-${area}`:item.id;if(!ornaments.some(o=>o.id===id)) ornaments.push({...item,id,room:area});}
+    furnishedRooms.push(area);
+  }
+  return { version:7, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
@@ -170,17 +237,18 @@ function segmentDistance(x: number, z: number, a: [number, number], b: [number, 
   return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
 }
 export function ornamentFootprint(item: Ornament) {
-  const [xmin,xmax,zmin,zmax,ymin,ymax] = ORNAMENT_BOUNDS[item.asset];
+  const scale=item.scale||[1,1,1];
+  const [xmin,xmax,zmin,zmax,ymin,ymax] = ORNAMENT_BOUNDS[item.asset].map((v,i)=>v*scale[i<2?0:i<4?2:1]);
   const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
   const corners=[[xmin,zmin],[xmax,zmin],[xmax,zmax],[xmin,zmax]].map(([x,z])=>[item.x+x*c+z*s,item.z-x*s+z*c]);
   const xs=corners.map(p=>p[0]),zs=corners.map(p=>p[1]);
   return { corners, xmin:Math.min(...xs), xmax:Math.max(...xs), zmin:Math.min(...zs), zmax:Math.max(...zs), ymin:(item.y||0)+ymin, ymax:(item.y||0)+ymax };
 }
 const placementRoom = (item: Pick<Ornament,'x'|'z'>) => {
-  if(item.x < -6) return [-12,-6,-3,3];
-  if(item.z < -6) return item.x < 0 ? [-6,0,-12,-6] : [0,6,-12,-6];
+  if(item.x > 6 && item.z < -6) return [6,12,-13.5,-7.5];
+  if(item.z < -6) return item.x < 0 ? [-6,0,-12,-6] : [0,6,-13.5,-7.5];
   if(item.x > 12) return [12.3,18.8,-6,6];
-  if(item.x > 6) return item.z < 1.5 ? [6,12,-6,1.5] : [6,12,1.5,6];
+  if(item.x > 6) return item.z < 1.5 ? [6,12,-5,1.5] : [6,12,1.5,6];
   return [-6,6,-6,6];
 };
 export const isWallOrnament = (item: Ornament) => item.asset==='framed_art'||item.asset==='pinboard';
@@ -216,26 +284,21 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
   if(b.xmin<xmin+gap||b.xmax>xmax-gap||b.zmin<zmin+gap||b.zmax>zmax-gap) return 'Objek menembus dinding atau keluar ruangan. Geser ke sisi dalam atau gunakan Tempel ke dinding.';
   if(b.ymax>2.701) return 'Objek terlalu tinggi. Turunkan agar tetap di bawah bagian atas dinding.';
   item=center;
-  if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-6,0],[-6,.5,1],[4.5,6,0],[12,4.5,1]]) {
+  if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-7.5,0],[9,-7.5,0],[4.5,6,0],[12,4.5,1]]) {
     const along = rotated ? Math.abs(item.z-z) : Math.abs(item.x-x), across = rotated ? Math.abs(item.x-x) : Math.abs(item.z-z);
     if (along < .8 + (rotated ? rz : rx) && across < 1.05 + (rotated ? rx : rz)) return 'Sisakan bukaan dan jalur masuk pintu.';
   }
+  if(item.asset!=='area_rug'&&b.xmax>4&&b.xmin<12&&b.zmax>-7.5&&b.zmin<(b.xmin>=6?-5:-5.65)) return 'Sisakan lorong dari workspace ke ruang meeting.';
   const garden = xmin===12.3;
-  const privateRoom = zmax===-6;
+  const privateRoom = zmax===-6||(xmin===0&&zmax===-7.5);
 
-  const meeting=xmin===-12;
-  if(meeting) {
-    if(item.asset==='area_rug') return '';
-    if(Math.hypot(item.x+9,item.z)<2.35+Math.max(rx,rz)) return 'Sisakan meja bundar dan kursi ruang meeting.';
+  if(xmin===6&&zmax===-7.5) return '';
+  if(garden) {
+    if(item.asset!=='area_rug' && Math.abs(item.z-1.9)<rz+.55) return 'Sisakan jalan utama taman.';
     return '';
   }
-  if (garden) {
-    if (item.asset !== 'area_rug') {
-      if (Math.abs(item.z-1.9) < rz+.55 || Math.abs(item.z+1.2) < rz+.35 || (item.x-rx<12.85 && item.z+rz> -1.5)) return 'Sisakan jalur taman.';
-      for (let i=0;i<6;i++) for (const z of [0,-2.4]) if (Math.abs(item.x-(13.25+i*.95))<rx+.4 && Math.abs(item.z-z)<rz+.4) return 'Sisakan kursi taman.';
-    }
-    return '';
-  }
+  // Lounge/pantry have movable furniture; pairwise bounds enforce clear placements.
+  if(xmin===6) return '';
   if(isWallOrnament(item) && b.ymin>=.65 && Math.min(b.xmin-xmin,xmax-b.xmax,b.zmin-zmin,zmax-b.zmax)<.16) return '';
   if (item.asset === 'area_rug') return '';
   for (let i = 0; i < DESKS_PER_ROOM; i++) { const d = deskPosition(item.room * DESKS_PER_ROOM + i, desks); if(d.removed) continue; const dx = item.x - d.x, dz = item.z - d.z; if (Math.abs(dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation)) < .7 + Math.max(rx, rz) && Math.abs(dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation) + .35) < 1 + Math.max(rx, rz)) return 'Area meja dan kursi harus tetap kosong.'; }
@@ -245,19 +308,17 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
     const path = zonePath(item.room * DESKS_PER_ROOM + slot, zone, desks);
     for (let i = 1; i < path.length; i++) if (segmentDistance(item.x, item.z, path[i - 1], path[i]) < Math.max(rx, rz) + 0.38) return 'Sisakan lorong untuk jalur karakter.';
   }
-  for (const [x, z] of [[7, -4.7], [9, -4.7], [11, -4.7], [7, -1.4], [11, -1.4]]) if (Math.abs(item.x - x) < rx + 1 && Math.abs(item.z - z) < rz + 0.5) return 'Posisi bertabrakan dengan sofa lounge.';
-  if (item.x > 6.4 && item.z + rz > 5.15) return 'Posisi bertabrakan dengan meja pantry.';
   return '';
 }
 export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[] = []): Ornament[] {
-  if (!Array.isArray(value) || value.length > 120) throw new Error('Maksimum 120 objek per kantor.');
+  if (!Array.isArray(value) || value.length > 1200) throw new Error('Maksimum 1200 objek per kantor.');
   const ids = new Set<string>();
   const items = value.map(input => {
     if (!input || typeof input !== 'object') throw new Error('Data ornamen tidak valid.');
     const item = input as Ornament;
-    if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id) || !Object.hasOwn(ORNAMENTS, item.asset) || !validObjectColor(item.color) || (item.y !== undefined && (typeof item.y !== 'number' || !Number.isFinite(item.y) || item.y < 0 || item.y > 2)) || ![item.x, item.z, item.rotation].every(v => typeof v === 'number' && Number.isFinite(v)) || Math.abs(item.rotation) > Math.PI * 2 + 0.01 || !Number.isInteger(item.room) || item.room < 0 || item.room >= rooms) throw new Error('Data ornamen tidak valid.');
+    if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id) || !Object.hasOwn(ORNAMENTS, item.asset) || !validObjectColor(item.color) || (item.scale!==undefined && (!Array.isArray(item.scale)||item.scale.length!==3||!item.scale.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=.25&&n<=3))) || (item.y !== undefined && (typeof item.y !== 'number' || !Number.isFinite(item.y) || item.y < 0 || item.y > 2)) || ![item.x, item.z, item.rotation].every(v => typeof v === 'number' && Number.isFinite(v)) || Math.abs(item.rotation) > Math.PI * 2 + 0.01 || !Number.isInteger(item.room) || item.room < 0 || item.room >= rooms) throw new Error('Data ornamen tidak valid.');
     ids.add(item.id);
-    const clean: Ornament = { id: item.id, asset: item.asset, x: item.x, z: item.z, rotation: item.rotation, room: item.room, ...(item.y !== undefined ? { y:item.y } : {}), ...(item.color ? { color:item.color } : {}) };
+    const clean: Ornament = { id: item.id, asset: item.asset, x: item.x, z: item.z, rotation: item.rotation, room: item.room, ...(item.scale?{scale:item.scale}:{}), ...(item.y !== undefined ? { y:item.y } : {}), ...(item.color ? { color:item.color } : {}) };
     const error = ornamentError(clean, desks); if (error) throw new Error(`${ORNAMENTS[item.asset].label} (X ${item.x.toFixed(2)}, Z ${item.z.toFixed(2)}): ${error}`);
     return clean;
   });
@@ -317,10 +378,12 @@ export function setActivity(space: OfficeSpace, viewerId: string, zone: unknown,
 export function updateOrnament(items: Ornament[], id: string, patch: Partial<Ornament>): Ornament[] {
   const parent=items.find(o=>o.id===id); if(!parent) return items;
   const next={...parent,...patch}, prefix=id==='manager-desk' ? 'manager' : id==='lead-desk' ? 'lead' : '';
+  const surface=ornamentFootprint(parent);
+  const supported=items.filter(o=>o.id!==id&&o.room===parent.room&&o.x>=surface.xmin&&o.x<=surface.xmax&&o.z>=surface.zmin&&o.z<=surface.zmax&&(o.y||0)>=surface.ymax-.025&&(o.y||0)<=surface.ymax+.08);
   const angle=next.rotation-parent.rotation, c=Math.cos(angle), s=Math.sin(angle);
   return items.map(item=>{
     if(item.id===id) return next;
-    if(!prefix || !['chair','laptop','keyboard','lamp','pen'].some(part=>item.id===`${prefix}-${part}`)) return item;
+    if(!supported.some(o=>o.id===item.id)&&(!prefix || !['chair','laptop','keyboard','lamp','pen'].some(part=>item.id===`${prefix}-${part}`))) return item;
     const dx=item.x-parent.x,dz=item.z-parent.z;
     return {...item,x:next.x+dx*c+dz*s,z:next.z-dx*s+dz*c,y:(item.y||0)+(next.y||0)-(parent.y||0),rotation:(item.rotation+angle+Math.PI*2)%(Math.PI*2)};
   });

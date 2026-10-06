@@ -3,16 +3,17 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { Lightbulb, StickyNote, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import { normalizeAttendanceSchedule, type AttendanceSchedule } from '@/lib/attendance/schedule';
 import AvatarEditor from './AvatarEditor';
 import OfficeEditor from './OfficeEditor';
+import OfficeUtilities from './OfficeUtilities';
 import OfficeObjectMenu from './OfficeObjectMenu';
 import type { ObjectMenuTarget } from '@/lib/spatial-office/scene';
-import { normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, parseDesks, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
+import { applySharedAction, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, parseDesks, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
@@ -38,6 +39,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     return () => { cancelled = true; clearInterval(timer); clearInterval(poll); };
   }, [demo]);
   const clock = officeTime(now, schedule);
+  const [utility,setUtility]=useState<{boardId:string|null}|null>(null);
   const [panel, setPanel] = useState<'team' | 'desks' | 'member' | null>(null);
   const [selectedDesk, setSelectedDesk] = useState<number | null>(null);
   const [objectMenu,setObjectMenu]=useState<(ObjectMenuTarget & {room:number}) | null>(null);
@@ -211,12 +213,13 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     if (demo) localStorage.setItem('office-demo-space-v3', JSON.stringify(next));
     setData(previous => ({ ...previous, space: next, seats: new Map(Object.entries(next.claims)) }));
   };
-  const saveSpace = async (action: { type: 'claim'; slot: number } | {type:'assign'; slot:number; memberId:string} | {type:'remove-desk';slot:number} | { type: 'activity'; zone: 'auto' | 'garden' | 'pantry' | 'lounge' } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number }) => {
+  const saveSpace = async (action: SharedOfficeAction | { type: 'claim'; slot: number } | {type:'assign'; slot:number; memberId:string} | {type:'remove-desk';slot:number} | { type: 'activity'; zone: 'auto' | 'garden' | 'pantry' | 'lounge' } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number }) => {
     setSpaceSaving(true); setSpaceError('');
     try {
       let next: OfficeSpace;
       if (demo) {
-        if (action.type === 'activity') next = setActivity(space, viewerId || '', action.zone);
+        if(action.type==='light'||action.type==='note') next=applySharedAction(space,action,viewerId||'',canEdit);
+        else if (action.type === 'activity') next = setActivity(space, viewerId || '', action.zone);
         else if (action.type === 'claim') next = claimDesk(space, viewerId || '', action.slot, data.members.length);
         else if(action.type==='assign'||action.type==='remove-desk') {
           if(!canEdit) throw new Error('Hanya admin yang dapat mengatur meja tim.');
@@ -237,6 +240,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       else if (action.type === 'activity') { setNotice(action.zone === 'auto' ? 'Aktivitas otomatis dilanjutkan.' : 'Avatar berpindah selama 5 menit. Presensi tetap sesuai sesi Anda.'); }
       else if(action.type==='assign') setNotice('Pemilik meja berhasil diperbarui.');
       else if(action.type==='remove-desk') setNotice('Meja dihapus. Anda dapat memulihkannya melalui Edit ruangan.');
+      else if(action.type==='light'||action.type==='note') { /* Shared utility stays open. */ }
       else { setNotice(`${deskLabel(action.slot)} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
     return true;
     } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); return false; }
@@ -294,7 +298,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       <div><Users size={16} /><strong>{dataReady ? active : '—'}</strong><span>check-in</span></div>
       <div><Coffee size={16} /><strong>{dataReady ? paused : '—'}</strong><span>istirahat</span></div>
       <div><Box size={16} /><strong>{dataReady ? data.members.length : '—'}</strong><span>meja tim</span></div>
-      <span className="office-stats-caption">Istirahat di lounge · di luar jam kerja tidur.</span>
+      <span className="office-stats-caption">Avatar hadir setelah check-in; checkout melalui pintu depan.</span>
     </div>
     <div className="office-stage">
       <div className="office-stage-bar">
@@ -304,7 +308,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onObjectMenu={target=>{setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
+      <OfficeCanvas lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onObjectMenu={target=>{if(!draft&&shownOrnaments.find(o=>o.id===target.id)?.asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
@@ -319,11 +323,14 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     </div>
     <div className="office-game-dock" aria-label="Aksi kantor">
       <button type="button" disabled={Boolean(draft)} aria-pressed={panel === 'team'} onClick={() => { setPanel(panel === 'team' ? null : 'team'); }}><Users size={18} /><span>Tim</span></button>
+      <button type="button" aria-label="Lampu ruangan" onClick={()=>{setUtility({boardId:null});setSpaceError('');}}><Lightbulb size={18}/><span>Lampu</span></button>
+      {space.ornaments.some(o=>o.room===currentRoom&&o.asset==='whiteboard')&&<button type="button" aria-label="Buka papan ide" disabled={Boolean(draft)} onClick={()=>{setUtility({boardId:space.ornaments.find(o=>o.room===currentRoom&&o.asset==='whiteboard')!.id});setSpaceError('');}}><StickyNote size={18}/><span>Papan ide</span></button>}
       <Link href="/attendance"><Check size={18} /><span>Presensi</span></Link>
       <button type="button" disabled={!viewerId || Boolean(draft)} onClick={() => { if (viewerId) { selectMember(viewerId); setEditing({ id: viewerId, avatar: data.members.find(m => m.id === viewerId)?.avatar || defaultAvatar(viewerId) }); } }}><Users size={18} /><span>Avatar</span></button>
       {canEdit && <button className="office-edit-room" aria-label="Edit ruangan" title="Edit ruangan" type="button" disabled={!sharedReady || spaceSaving} onClick={draft ? () => setDraft(null) : openLayout} aria-pressed={Boolean(draft)}><PencilRuler size={18} /><span>Edit ruangan</span></button>}
       <button type="button" onClick={() => setMotion(value => !value)} aria-pressed={!motion}>{motion ? <Pause size={18} /> : <Play size={18} />}<span>{motion ? 'Jeda' : 'Gerak'}</span></button>
     </div>
+    {utility&&<OfficeUtilities key={utility.boardId||'lights'} space={space} room={currentRoom} night={clock.phase==='Malam'} boardId={utility.boardId} viewerId={viewerId||''} canEdit={canEdit} busy={spaceSaving} ready={sharedReady} error={spaceError} onSave={saveSpace} onClose={()=>setUtility(null)} names={Object.fromEntries(data.members.map(m=>[m.id,m.name]))} onEdit={()=>{const id=utility.boardId;setUtility(null);openLayout();if(id)setSelectedOrnament(id);}}/>}
     {canEdit && !sharedReady && immersive && dataReady && <div className="office-game-toast" role="status">Penyimpanan kantor belum terhubung. Klaim dan editor belum aktif.</div>}
     {notice && immersive && <div className="office-game-toast" role="status"><span>{notice}</span><button type="button" aria-label="Tutup pemberitahuan" onClick={() => setNotice('')}>×</button></div>}
     {panel === 'desks' && <aside className="office-desks-panel" aria-label="Kepemilikan meja">

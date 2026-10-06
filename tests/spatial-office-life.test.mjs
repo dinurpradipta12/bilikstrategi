@@ -56,7 +56,7 @@ test('exit and garden paths use the front and side glass doors', () => {
 test('saved layouts gain private offices once, preserving claims and user edits', () => {
   const old={revision:7,layoutRevision:3,claims:{a:4},ornaments:[{id:'plant-front',asset:'floor_plant',x:-5,z:4.8,rotation:0,room:0}]};
   const upgraded=spaceModel.normalizeSpace(old,[member]);
-  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,4);
+  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,7);
   assert.equal(upgraded.ornaments.filter(o=>o.id==='manager-desk').length,0);
   const saved={...upgraded,ornaments:upgraded.ornaments.filter(o=>o.id!=='manager-art')};
   assert.equal(spaceModel.normalizeSpace(saved,[member]).ornaments.some(o=>o.id==='manager-art'),false);
@@ -69,12 +69,12 @@ test('doorway upgrade only moves untouched default obstacles and protects both s
     {id:'lamp-back',asset:'floor_lamp',x:4.5,z:-5.2,rotation:0,room:0},
   ]};
   const upgraded=spaceModel.normalizeSpace(old,[member]);
-  assert.deepEqual(Array.from(upgraded.ornaments,o=>o.x),[-3.6,.5]);
-  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.ornaments.length,2);
+  assert.deepEqual(Array.from(upgraded.ornaments.slice(0,2),o=>o.x),[-3.6,.5]);
+  assert.equal(upgraded.claims.a,4); assert.ok(upgraded.ornaments.length>2);
   const customized={...old,ornaments:[{...old.ornaments[0],x:-4}]};
   assert.equal(spaceModel.normalizeSpace(customized,[member]).ornaments[0].x,-4);
-  for(const [x,z] of [[-1.5,-5.4],[-1.5,-6.6],[4.5,-5.2],[4.5,-6.8],[-6.6,.5],[-5.3,.5]]) {
-    assert.throws(()=>spaceModel.parseOrnaments([{id:'blocked-door',asset:'floor_plant',x,z,rotation:0,room:0}],1),/pintu/);
+  for(const [x,z] of [[-1.5,-5.4],[-1.5,-6.6],[4.5,-7],[4.5,-8.3],[9,-6.5],[9,-7.8]]) {
+    assert.throws(()=>spaceModel.parseOrnaments([{id:'blocked-door',asset:'floor_plant',x,z,rotation:0,room:0}],1),/pintu|dinding|lorong/);
   }
   assert.doesNotThrow(()=>spaceModel.parseOrnaments(upgraded.ornaments,1));
 });
@@ -87,7 +87,7 @@ test('private desks accept ownership and preserve transforms while rejecting exi
   assert.doesNotThrow(()=>spaceModel.parseOrnaments(lead.ornaments,1,desks));
   assert.throws(()=>spaceModel.moveDesk(desks,10,{x:3},1,lead.ornaments));
   for(const patch of [{color:'url(secret)'},{y:Infinity},{y:-1},{y:20}]) assert.throws(()=>spaceModel.parseOrnaments([{...base.ornaments.find(o=>o.id==='manager-art'),...patch}],1));
-  assert.doesNotThrow(()=>spaceModel.parseOrnaments([{id:'meeting-light',asset:'floor_lamp',x:-11.5,z:-2.5,rotation:0,room:0}],1));
+  assert.doesNotThrow(()=>spaceModel.parseOrnaments([{id:'meeting-light',asset:'floor_lamp',x:6.5,z:-13,rotation:0,room:0}],1));
 });
 test('version 4 migrates old desk ownership in later areas exactly once and preserves private desk edits',()=>{
   const old={version:3,revision:8,layoutRevision:5,claims:{a:10,b:19},desks:[{slot:10,x:-4.6,z:-2.2,rotation:0}],ornaments:[{id:'manager-desk',asset:'office_desk',x:-2.5,z:-9,rotation:0,color:'#394c68',room:0}]};

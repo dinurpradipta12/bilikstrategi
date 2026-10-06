@@ -79,7 +79,7 @@ export function deskLabel(slot: number) {
 }
 export function deskBounds(slot: number) {
   const i=slot%DESKS_PER_ROOM;
-  return i===10?[-5.5,-.5,-11.5,-6.8]:i===11?[.5,5.5,-11.5,-6.8]:[-5.5,4.4,-5.5,3.8];
+  return i===10?[-5.5,-.5,-11.5,-6.8]:i===11?[.5,5.5,-13,-8.3]:[-5.5,4.4,-5.5,3.8];
 }
 export type DeskLayout = { slot: number; x: number; z: number; rotation: number; color?: string; removed?: boolean };
 export function deskPosition(slot: number, layout: DeskLayout[] = []) {
@@ -87,7 +87,7 @@ export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   // Five adjoining stations on each side of a shared, continuous workbench.
   const side = index % 2 === 0 ? -1 : 1;
   const custom = layout.find(d => d.slot === slot);
-  const x = custom?.x ?? (index>=10?(index===10?-3:3):(Math.floor(index / 2) - 2) * 1.4), z = custom?.z ?? (index>=10?-9:side * .375);
+  const x = custom?.x ?? (index>=10?(index===10?-3:3):(Math.floor(index / 2) - 2) * 1.4), z = custom?.z ?? (index>=10?(index===11?-10.5:-9):side * .375);
   const rotation = custom?.rotation ?? (index>=10?0:side === -1 ? 0 : Math.PI);
   return { x, z, rotation, removed:custom?.removed===true, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
 }
@@ -174,8 +174,9 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
   const privateDesk=slot%DESKS_PER_ROOM>=WORKSPACE_DESKS;
   const door=slot%DESKS_PER_ROOM===10?-1.5:4.5;
   const [xmin,xmax,zmin,zmax]=privateDesk?deskBounds(slot):[-5.5,5.5,-5.5,5.5];
-  const start: [number, number] = privateDesk?[door/grid,-6.75/grid]:[20,2];
-  const prefix: Array<[number,number]>=privateDesk?[[5,.5],[5,-4.3],[door,-4.3],[door,-6]]:[];
+  const doorZ=slot%DESKS_PER_ROOM===11?-7.5:-6;
+  const start: [number, number] = privateDesk?[door/grid,(doorZ-.75)/grid]:[20,2];
+  const prefix: Array<[number,number]>=privateDesk?[[5,.5],[5,-4.3],[door,-4.3],[door,doorZ]]:[];
   const blocked = (x: number, z: number) => {
     if (x*grid<xmin||x*grid>xmax||z*grid<zmin||z*grid>zmax) return true;
     for (let i = 0; i < DESKS_PER_ROOM; i++) {

@@ -8,7 +8,7 @@ import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/ad
 import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
 
 import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
-import { claimDesk, assignDesk, removeDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
+import { applySharedAction, claimDesk, assignDesk, removeDesk, parseOrnaments, parseDesks, setActivity, spaceCapacity } from '@/lib/spatial-office/space';
 import { DESKS_PER_ROOM } from '@/lib/spatial-office/model';
 
 export const runtime = 'edge';
@@ -137,15 +137,16 @@ export async function PATCH(req: NextRequest) {
   let action;
   try {
     const raw = await req.text();
-    if (raw.length > 40000) return json({ error: 'Data terlalu besar.' }, 413);
+    if (raw.length > 300000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
-  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
-  if(action.version!==4) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
+  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity', 'light', 'note'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if(action.version!==7) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
   if (['layout','assign','remove-desk'].includes(action.type) && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
+      if(action.type==='light'||action.type==='note') return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
       if (action.type === 'activity') return setActivity(current, snapshot.viewerId, action.zone);
       if (action.type === 'claim') return claimDesk(current, snapshot.viewerId, action.slot, snapshot.members.length);
       if (action.type === 'assign') return assignDesk(current,action.memberId,action.slot,snapshot.members.length);

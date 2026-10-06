@@ -21,15 +21,15 @@ const { OfficeScene } = loadTS('../lib/spatial-office/scene.ts', {
   'three/addons/utils/BufferGeometryUtils.js': { mergeGeometries }, './model': model, './space': spaceModel,
 }, { document: { createElement: () => new Element() }, requestAnimationFrame:()=>0 });
 const templates = new Map();
-for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
+for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS).filter(k=>!['round_meeting_table','coffee_machine'].includes(k)), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
   const bytes = await readFile(new URL(`../src/Char-assets/${asset}.glb`, import.meta.url));
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
   templates.set(asset, gltf.scene);
 }
 function office() {
   const engine = Object.create(OfficeScene.prototype);
-  Object.assign(engine, { scene: new THREE.Scene(), labels: new Element(), templates, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
-  engine.buildRoom(); engine.loaded = true; return engine;
+  Object.assign(engine, { scene: new THREE.Scene(), labels: new Element(), templates, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
+  engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,[]).ornaments,0,false,''); return engine;
 }
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
 test('first snapshot seats existing workers immediately; snapshots retain the same rig', () => {
@@ -149,4 +149,40 @@ test('doors visibly clear the whole opening, stay open during passage and close 
     for(let frame=0;frame<60;frame++) engine.updateDoors(.05);
     assert.ok(Math.abs(door.group.position[axis]-door.center[axis])<.001,'door never closes');
   }
+});
+
+test('meeting sits beside Project Lead with a glazed exterior and continuous workspace corridor; every room has a controllable light',()=>{
+  const engine=office();
+  assert.equal(engine.decorations.get('meeting-round-table').position.x,9);
+  assert.equal(engine.decorations.get('meeting-round-table').position.z,-10.75);
+  assert.ok(!engine.doors.some(d=>d.center.x===9&&d.center.z>=-6&&d.center.z<=-5));assert.ok(engine.doors.some(d=>d.center.x===9&&d.center.z===-7.5));
+  assert.ok(engine.scene.children.some(o=>o.userData.architecture==='glass'&&o.position.z===-13.5));
+  const blocker=new THREE.Box3();
+  for(const node of engine.scene.children.filter(o=>o.userData.architecture)) {blocker.setFromObject(node);assert.ok(!blocker.containsPoint(new THREE.Vector3(6,1,-6.75)),'corridor must cross X=6 without a wall');assert.ok(!blocker.containsPoint(new THREE.Vector3(4.5,1,-6)),'workspace must open into the corridor');}
+  assert.ok(engine.scene.children.some(o=>o.userData.architecture==='wall'&&o.position.x===9&&o.position.z===-5),'lounge wall leaves a 2.5m corridor');
+  assert.equal(engine.roomLights.size,7);
+  engine.setLights({'0:meeting':'off','0:manager':'on'});
+  assert.equal(engine.roomLights.get('meeting').light.intensity,0);assert.ok(engine.roomLights.get('manager').light.intensity>0);
+});
+test('lounge and garden seats follow moved furniture; missing seats return avatars to their desks',()=>{
+  const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;
+  const moved=items.map(o=>o.id==='lounge-sofa-0'?{...o,x:7.2,z:-4.3,rotation:Math.PI/2}:o);
+  engine.setOrnaments(moved,0,false,'');
+  const m={...alice,activity:{zone:'lounge',until:Date.now()+300000}};
+  engine.setMembers([{member:m,slot:0}]);const p=engine.occupants.get('1');
+  assert.ok(Math.abs(p.rig.root.position.x-7.35)<1e-8);assert.equal(p.rig.root.rotation.y,Math.PI/2);
+  const route=engine.routeTo(0,[5,.5],'lounge');assert.ok(route?.length);assert.ok(Math.abs(route.at(-1)[0]-7.35)<1e-8);
+  engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'desk');
+});
+
+
+test('corridor glazing has no old mullion and no suspended beam across its workspace opening',()=>{
+  const engine=office();
+  for(const node of engine.scene.children) {
+    if(!(node instanceof THREE.Mesh)) continue;
+    const bounds=new THREE.Box3().setFromObject(node);
+    assert.ok(!bounds.containsPoint(new THREE.Vector3(6,2.84,-5.7)),'no beam on removed partition');
+    if(node.material instanceof THREE.MeshStandardMaterial&&!node.material.transparent) assert.ok(!bounds.containsPoint(new THREE.Vector3(12,1.4,-6)),'no opaque mullion at obsolete room edge');
+  }
+  assert.ok(engine.scene.children.some(o=>o.userData.architecture==='glass'&&o.position.x===12&&o.position.z===-6.25));
 });
