@@ -1,4 +1,4 @@
-import suppliedLogo from '../../public/landscape.png';
+import suppliedLogo from '../../src/logobilik-hitam.png';
 
 // The main app's supplied brand assets, with overrides for branded deployments.
 export const OFFICE_BRAND = {

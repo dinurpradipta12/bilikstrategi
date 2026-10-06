@@ -47,8 +47,29 @@ test('movable desks reject blocked layouts; seat, keyboard and route follow save
 });
 test('new bedroom and garden paths share only actual entrances', () => {
   for (let slot=0;slot<10;slot++) {
-    const bed=travelPath(slot,[5,.5],'bedroom'); assert.ok(bed.some(p=>p[0]===5&&p[1]===6));
+    const bed=travelPath(slot,[5,.5],'bedroom'); assert.ok(bed.some(p=>p[0]===-6&&p[1]===4.5));
     const garden=travelPath(slot,[5,.5],'garden'); assert.ok(garden.some(p=>p[0]===12&&p[1]===4.5));
     assert.ok(new Set(['bedroom','garden'].map(zone => JSON.stringify(zonePosition(slot,zone)))).size===2);
   }
+});
+
+test('saved layouts gain private offices once, preserving claims and user edits', () => {
+  const old={revision:7,layoutRevision:3,claims:{a:4},ornaments:[{id:'plant-front',asset:'floor_plant',x:-5,z:4.8,rotation:0,room:0}]};
+  const upgraded=spaceModel.normalizeSpace(old,[member]);
+  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,2);
+  assert.equal(upgraded.ornaments.filter(o=>o.id==='manager-desk').length,1);
+  const saved={...upgraded,ornaments:upgraded.ornaments.filter(o=>o.id!=='manager-art')};
+  assert.equal(spaceModel.normalizeSpace(saved,[member]).ornaments.some(o=>o.id==='manager-art'),false);
+  assert.doesNotThrow(()=>spaceModel.parseOrnaments(upgraded.ornaments,1));
+});
+test('library validates colors/heights and private desk peripherals follow movement', () => {
+  const base=spaceModel.DEFAULT_ORNAMENTS;
+  const moved=spaceModel.updateOrnament(base,'manager-desk',{x:-2.5,color:'#394c68'});
+  assert.equal(moved.find(o=>o.id==='manager-laptop').x,-2.5);
+  assert.equal(moved.find(o=>o.id==='manager-chair').x,-2.5);
+  assert.equal(moved.find(o=>o.id==='manager-shelf').x,-5);
+  assert.doesNotThrow(()=>spaceModel.parseOrnaments(moved,1));
+  for(const patch of [{color:'url(secret)'},{y:Infinity},{y:-1},{y:20}]) assert.throws(()=>spaceModel.parseOrnaments([{...base.find(o=>o.id==='manager-desk'),...patch}],1));
+  assert.equal(Object.keys(spaceModel.ORNAMENTS).length,30);
+  assert.doesNotThrow(()=>spaceModel.parseOrnaments([{id:'bedroom-light',asset:'floor_lamp',x:-17,z:-5,rotation:0,room:0,color:'#cfaa77'}],1));
 });

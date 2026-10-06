@@ -71,7 +71,7 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
   return seats;
 }
 export const DESKS_PER_ROOM = 10;
-export type DeskLayout = { slot: number; x: number; z: number; rotation: number };
+export type DeskLayout = { slot: number; x: number; z: number; rotation: number; color?: string };
 export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const index = slot % DESKS_PER_ROOM;
   // Five adjoining stations on each side of a shared, continuous workbench.
@@ -79,7 +79,7 @@ export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const custom = layout.find(d => d.slot === slot);
   const x = custom?.x ?? (Math.floor(index / 2) - 2) * 1.4, z = custom?.z ?? side * .375;
   const rotation = custom?.rotation ?? (side === -1 ? 0 : Math.PI);
-  return { x, z, rotation, seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
+  return { x, z, rotation, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
 }
 export function officePath(slot: number, leaving = false): Array<[number, number]> {
   const desk = deskPosition(slot);
@@ -146,7 +146,7 @@ export function memberZone(member: OfficeMember, now: number, schedule?: Attenda
 export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[] = []) {
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
-  if (zone === 'bedroom') return { x: -4.4 + (i % 5) * 1.95, z: (i < 5 ? 8 : 10.7) + .4, rotation: 0 };
+  if (zone === 'bedroom') return { x: -16.5 + (i % 5) * 1.95, z: (i < 5 ? -3 : 2.5) + .4, rotation: 0 };
   if (zone === 'garden') return { x: 13.5 + Math.floor(i / 2) * 1.05, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
   if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * 1.15, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);
@@ -193,7 +193,7 @@ function calculateDeskCorridor(slot: number, layout: DeskLayout[]): Array<[numbe
 // All destinations use the shared corridor and the two partition doors.
 export function zonePath(slot: number, zone: OfficeZone, layout: DeskLayout[] = []): Array<[number, number]> {
   const p = zonePosition(slot, zone, layout);
-  if (zone === 'bedroom') return [[5,.5],[5,6],[5,9.35],[p.x,9.35],[p.x,p.z]];
+  if (zone === 'bedroom') return [[5,.5],[5,4.5],[-6,4.5],[-7,4.5],[-7,.5],[p.x,.5],[p.x,p.z]];
   if (zone === 'garden') return [[5,.5],[5,3.8],[6,3.8],[11,3.8],[11,4.5],[12,4.5],[15.5,4.5],[15.5,1.9],[12.5,1.9],[12.5,-1.2],[p.x,-1.2],[p.x,p.z]];
   if (zone === 'desk' && layout.some(d => Math.floor(d.slot / 10) === Math.floor(slot / 10))) return deskCorridor(slot, layout);
   if (zone === 'desk') { const d = deskPosition(slot); return [[5, 0.5], [5, d.aisleZ], [d.x, d.aisleZ], [p.x, p.z]]; }

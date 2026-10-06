@@ -30,7 +30,7 @@ test('11+ users receive additional areas without overlapping claims', () => {
 });
 test('ornaments allow saved garden/interior placement and reject walls, corridors and invalid assets', () => {
   assert.doesNotThrow(() => space.parseOrnaments(space.DEFAULT_ORNAMENTS, 1));
-  const plant = { id: 'plant', asset: 'floor_plant', x: 15, z: -3, rotation: 0, room: 0 };
+  const plant = { id: 'plant', asset: 'floor_plant', x: 15, z: -5, rotation: 0, room: 0 };
   assert.doesNotThrow(() => space.parseOrnaments([plant], 1));
   for (const patch of [{ x: 0, z: 0 }, { x: 6, z: 0.5 }, { x: 5, z: 3 }, { x: 50 }, { asset: '__proto__' }, { rotation: Infinity }, { room: 1 }]) {
     assert.throws(() => space.parseOrnaments([{ ...plant, ...patch }], 1));

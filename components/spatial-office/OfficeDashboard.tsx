@@ -10,7 +10,7 @@ import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import { normalizeAttendanceSchedule, type AttendanceSchedule } from '@/lib/attendance/schedule';
 import AvatarEditor from './AvatarEditor';
 import OfficeEditor from './OfficeEditor';
-import { normalizeSpace, claimDesk, parseDesks, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
+import { normalizeSpace, claimDesk, parseDesks, updateOrnament, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
@@ -276,7 +276,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onMoveOrnament={(id, x, z) => setDraft(current => { if (!current || !canEdit) return current; if (!id.startsWith('desk:')) return { ...current, ornaments: current.ornaments.map(item => item.id === id ? { ...item, x, z } : item) }; const slot = Number(id.slice(5)), pose = deskPosition(slot, current.desks); return { ...current, desks: [...current.desks.filter(d => d.slot !== slot), { slot, x, z, rotation: pose.rotation }] }; })} />
+      <OfficeCanvas schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={selectMember} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={setSelectedOrnament} onSelectDesk={selectDesk} onMoveOrnament={(id, x, z) => setDraft(current => { if (!current || !canEdit) return current; if (!id.startsWith('desk:')) return { ...current, ornaments: updateOrnament(current.ornaments,id,{x,z}) }; const slot = Number(id.slice(5)), pose = deskPosition(slot, current.desks); return { ...current, desks: [...current.desks.filter(d => d.slot !== slot), { slot, x, z, rotation: pose.rotation, color:pose.color }] }; })} />
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span><i className="is-paused" /> Istirahat</span><span><i className="is-offline" /> Di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>

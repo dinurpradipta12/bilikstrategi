@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { ORNAMENTS, ornamentError, parseOrnaments, parseDesks, type Ornament } from '@/lib/spatial-office/space';
+import { Box, Plus, Search } from 'lucide-react';
+import { OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, updateOrnament, type Ornament } from '@/lib/spatial-office/space';
 
 import { deskPosition, type DeskLayout } from '@/lib/spatial-office/model';
 
@@ -9,38 +10,54 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
   items: Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
   onSave: () => void; onCancel: () => void; saving: boolean; error: string;
 }) {
-  const [asset, setAsset] = useState<Ornament['asset']>('floor_plant');
+  const [library, setLibrary] = useState(false);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('Semua');
+  const [placement, setPlacement] = useState('workspace');
   const [message, setMessage] = useState('');
   const deskSlot = selected.startsWith('desk:') ? Number(selected.slice(5)) : null;
   const desk = deskSlot === null ? null : deskPosition(deskSlot, desks);
-  const updateDesk = (patch: Partial<DeskLayout>) => { if (deskSlot === null || !desk) return; onDesksChange([...desks.filter(d => d.slot !== deskSlot), { slot: deskSlot, x: desk.x, z: desk.z, rotation: desk.rotation, ...patch }]); };
+  const updateDesk = (patch: Partial<DeskLayout>) => { if (deskSlot === null || !desk) return; onDesksChange([...desks.filter(d => d.slot !== deskSlot), { slot: deskSlot, x: desk.x, z: desk.z, rotation: desk.rotation, color: desk.color, ...patch }]); };
   let layoutError = '';
   try { parseDesks(desks, rooms); parseOrnaments(items, rooms, desks); } catch (failure) { layoutError = failure instanceof Error ? failure.message : 'Denah belum valid.'; }
   const item = items.find(item => item.id === selected);
-  const update = (patch: Partial<Ornament>) => onChange(items.map(current => current.id === selected ? { ...current, ...patch } : current));
-  const add = () => {
-    for (let z = -5; z <= 5; z += 1) for (let x = -5; x <= 18; x += 1) {
-      const next: Ornament = { id: crypto.randomUUID(), asset, x, z, rotation: 0, room };
-      try { parseOrnaments([...items, next], rooms, desks); onChange([...items, next]); onSelect(next.id); setMessage(''); return; } catch { /* Find the next free placement. */ }
+  const update = (patch: Partial<Ornament>) => onChange(updateOrnament(items,selected,patch));
+  const add = (asset: Ornament['asset']) => {
+    const bounds: Record<string, number[]> = { workspace:[-5,5,-5,5], manager:[-5,-1,-11,-7], lead:[1,5,-11,-7], lounge:[7,11,-5,0], pantry:[7,11,2,5], garden:[13,18,-5,5], bedroom:[-17,-7,-5,5] };
+    const [xmin,xmax,zmin,zmax]=bounds[placement];
+    for (let z=zmin; z<=zmax; z+=.5) for (let x=xmin; x<=xmax; x+=.5) {
+      const next: Ornament = { id:crypto.randomUUID(),asset,x,z,rotation:0,room };
+      try { parseOrnaments([...items,next],rooms,desks); onChange([...items,next]); onSelect(next.id); setMessage(''); setLibrary(false); return; } catch { /* Try another free position. */ }
     }
-    setMessage('Belum ada ruang kosong untuk ornamen ini. Geser atau hapus ornamen lain.');
+    setMessage('Ruangan ini belum memiliki tempat kosong yang cukup. Pilih ruangan lain atau geser objek dahulu.');
   };
+  const colorControls = (color: string | undefined, change: (color: string) => void) => <div className="office-color-control"><label>Warna objek<input aria-label="Warna objek" type="color" value={color && color !== 'original' ? color : '#ffffff'} onChange={event=>change(event.target.value)} /></label><div>{OBJECT_COLORS.map(c=><button type="button" key={c} title={c === 'original' ? 'Warna asli' : c} aria-label={c === 'original' ? 'Warna asli' : `Warna ${c}`} aria-pressed={(color || 'original')===c} style={{background:c === 'original' ? '#f1eee4' : c}} onClick={()=>change(c)}>{c === 'original' ? 'Asli' : ''}</button>)}</div></div>;
   return <aside className="office-editor-panel" aria-label="Editor ruangan admin">
     <div className="office-panel-title"><h3>Atur kantor <span>ADMIN</span></h3><button type="button" onClick={onCancel} disabled={saving} aria-label="Tutup editor ornamen">×</button></div>
     <p>Seret meja atau ornamen di ruang 3D atau gunakan kontrol posisi. Perubahan dibagikan ke tim setelah disimpan.</p>
-    <div className="office-editor-add"><label>Tambah ornamen<select value={asset} onChange={event => setAsset(event.target.value as Ornament['asset'])}>{Object.entries(ORNAMENTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label><button type="button" onClick={add} disabled={saving || items.length >= 60}>Tambah</button></div>
+    <button className="office-open-library" type="button" onClick={()=>setLibrary(v=>!v)} aria-expanded={library}><Plus size={16}/> Library objek <span>{Object.keys(ORNAMENTS).length} aset</span></button>
+    {library && <section className="office-object-library" aria-label="Library objek">
+      <label>Ruangan penempatan<select value={placement} onChange={event=>setPlacement(event.target.value)}><option value="workspace">Ruang kerja</option><option value="manager">Manager</option><option value="lead">Project lead</option><option value="lounge">Lounge</option><option value="pantry">Pantry</option><option value="garden">Taman</option><option value="bedroom">Kamar tidur</option></select></label>
+      <label className="office-library-search"><Search size={14}/><input type="search" aria-label="Cari objek" placeholder="Cari objek…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
+      <label>Kategori<select value={category} onChange={event=>setCategory(event.target.value)}>{['Semua',...new Set(Object.values(ORNAMENTS).map(o=>o.category))].map(c=><option key={c}>{c}</option>)}</select></label>
+      <div className="office-library-grid">{Object.entries(ORNAMENTS).filter(([,a])=>(category==='Semua'||a.category===category)&&a.label.toLowerCase().includes(search.toLowerCase())).map(([key,a])=><button type="button" key={key} disabled={saving || items.length >= 120} onClick={()=>add(key as Ornament['asset'])}><Box size={22}/><strong>{a.label}</strong><small>{a.width} × {a.depth} m</small></button>)}</div>
+    </section>}
     <label>Meja & ornamen area {room + 1}<select value={selected} onChange={event => onSelect(event.target.value)}><option value="">Pilih meja atau ornamen…</option>{Array.from({ length: 10 }, (_, i) => <option key={`desk:${room * 10 + i}`} value={`desk:${room * 10 + i}`}>Meja {room * 10 + i + 1}</option>)}{items.filter(item => item.room === room).map((item, i) => <option key={item.id} value={item.id}>{i + 1}. {ORNAMENTS[item.asset].label}</option>)}</select></label>
     {desk && <fieldset disabled={saving}><legend>Meja {deskSlot! + 1}</legend>
       <label>Kiri / kanan · {desk.x.toFixed(2)} m<input aria-label="Posisi meja X" type="range" min="-5" max="4" step="0.25" value={desk.x} onChange={event => updateDesk({ x: Number(event.target.value) })} /></label>
       <label>Depan / belakang · {desk.z.toFixed(2)} m<input aria-label="Posisi meja Z" type="range" min="-5" max="5" step="0.25" value={desk.z} onChange={event => updateDesk({ z: Number(event.target.value) })} /></label>
       <div className="office-editor-rotate"><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI * 1.5) % (Math.PI * 2) })}>↶ Putar 90°</button><button type="button" onClick={() => updateDesk({ rotation: (desk.rotation + Math.PI / 2) % (Math.PI * 2) })}>Putar 90° ↷</button></div>
+      {colorControls(desk.color, color=>updateDesk({color}))}
       <button type="button" onClick={() => onDesksChange(desks.filter(d => d.slot !== deskSlot))}>Posisi meja semula</button>
     </fieldset>}
     {item && <fieldset disabled={saving}>
       <legend>{ORNAMENTS[item.asset].label}</legend>
-      <label>Kiri / kanan · {item.x.toFixed(2)} m<input aria-label="Posisi ornamen X" type="range" min="-5.5" max="18.5" step="0.25" value={item.x} onChange={event => update({ x: Number(event.target.value) })} /></label>
-      <label>Depan / belakang · {item.z.toFixed(2)} m<input aria-label="Posisi ornamen Z" type="range" min="-5.5" max="5.5" step="0.25" value={item.z} onChange={event => update({ z: Number(event.target.value) })} /></label>
+      <label>Kiri / kanan · {item.x.toFixed(2)} m<input aria-label="Posisi ornamen X" type="range" min="-17.5" max="18.5" step="0.25" value={item.x} onChange={event => update({ x: Number(event.target.value) })} /></label>
+      <label>Depan / belakang · {item.z.toFixed(2)} m<input aria-label="Posisi ornamen Z" type="range" min="-11.5" max="5.5" step="0.25" value={item.z} onChange={event => update({ z: Number(event.target.value) })} /></label>
       <div className="office-editor-rotate"><button type="button" onClick={() => update({ rotation: (item.rotation - Math.PI / 4 + Math.PI * 2) % (Math.PI * 2) })}>↶ Putar 45°</button><button type="button" onClick={() => update({ rotation: (item.rotation + Math.PI / 4) % (Math.PI * 2) })}>Putar 45° ↷</button></div>
+      <label>Ketinggian · {(item.y || 0).toFixed(2)} m<input aria-label="Ketinggian objek" type="range" min="0" max="2" step="0.01" value={item.y || 0} onChange={event=>update({y:Number(event.target.value)})}/></label>
+      <p>Gunakan 0,78 m untuk menaruh perangkat di atas meja kantor.</p>
+      {colorControls(item.color, color=>update({color}))}
       <button type="button" className="office-editor-delete" onClick={() => { onChange(items.filter(current => current.id !== selected)); onSelect(''); }}>Hapus ornamen</button>
       {ornamentError(item, desks) && <p role="status">{ornamentError(item, desks)}</p>}
     </fieldset>}

@@ -19,7 +19,7 @@ class Element {
 const { OfficeScene } = loadTS('../lib/spatial-office/scene.ts', {
   three: THREE, 'three/addons/loaders/GLTFLoader.js': { GLTFLoader }, 'three/addons/controls/OrbitControls.js': { OrbitControls },
   'three/addons/utils/BufferGeometryUtils.js': { mergeGeometries }, './model': model, './space': spaceModel,
-}, { document: { createElement: () => new Element() } });
+}, { document: { createElement: () => new Element() }, requestAnimationFrame:()=>0 });
 const templates = new Map();
 for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
   const bytes = await readFile(new URL(`../src/Char-assets/${asset}.glb`, import.meta.url));
@@ -60,4 +60,26 @@ test('ornament draft move/rotate/add/remove/cancel reconcile without mutating te
   engine.setOrnaments([], 0, true, ''); assert.equal(engine.decorations.size, 0);
   engine.setOrnaments(base, 0, false, ''); assert.equal(engine.decorations.get('plant-back').position.x, -5); assert.equal(engine.outline.visible, false);
   assert.deepEqual(templates.get('floor_plant').position.toArray(), original.toArray());
+});
+
+test('sleep pose stays still across frames, shows zzz and hides numbers and offline bubbles', () => {
+  const engine=office();
+  Object.assign(engine,{schedule:{timezone:'Asia/Makassar',days:[]},visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
+  engine.setMembers([{member:{...alice,status:'offline'},slot:0}]);
+  const person=engine.occupants.get('1');
+  const pose=()=>[...person.rig.body.position.toArray(),...person.rig.head.rotation.toArray(),...person.rig.hands.flatMap(hand=>hand.position.toArray()),...person.rig.legs.flatMap(leg=>leg.rotation.toArray())];
+  engine.animateFrame(1000); const before=pose(); engine.animateFrame(1800);
+  assert.deepEqual(pose(),before); assert.equal(person.sleep.hidden,false); assert.equal(person.bubble.hidden,true);
+  assert.equal(person.zone,'bedroom'); assert.ok(person.rig.root.position.x < -6);
+  assert.ok([...engine.deskLabels.values()].every(label=>label.hidden));
+});
+test('object coloring owns its material and does not recolor another object or GLB template', () => {
+  const engine=office();
+  const a={id:'a',asset:'floor_plant',x:-5,z:-5,rotation:0,room:0},b={...a,id:'b',x:15};
+  engine.setOrnaments([a,b],0,true,'a');
+  const mesh=group=>{let result; group.traverse(child=>{if(child instanceof THREE.Mesh) result=child;});return result;};
+  const first=mesh(engine.decorations.get('a')),second=mesh(engine.decorations.get('b')),original=mesh(templates.get('floor_plant'));
+  const color=second.material.color.getHexString(), originalColor=original.material.color.getHexString();
+  engine.setOrnaments([{...a,color:'#394c68'},b],0,true,'a');
+  assert.equal(first.material.color.getHexString(),'394c68'); assert.equal(second.material.color.getHexString(),color); assert.equal(original.material.color.getHexString(),originalColor);
 });

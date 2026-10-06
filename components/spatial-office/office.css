@@ -899,3 +899,29 @@
  .office-game .office-game-dock button,.office-game .office-game-dock>a { min-width:40px; }
  .office-review-game>.office-review-modes { top:122px; }
 }
+
+.office-sleep { display:block; color:#a8c7ff; font-size:18px; letter-spacing:3px; font-weight:800; text-shadow:0 1px 4px #132236; pointer-events:none; }
+.office-sleep[hidden] { display:none; }
+.office-desk-label { display:none!important; }
+.office-game-brand>img { width:30px; height:30px; }
+.office-open-library { width:100%; display:flex; align-items:center; justify-content:center; gap:7px; }
+.office-open-library span { font-size:9px; opacity:.65; }
+.office-object-library { padding:8px 0; }
+.office-library-search { flex-direction:row!important; align-items:center; }
+.office-library-search input { border:1px solid #cbd6c3; border-radius:8px; padding:9px; }
+.office-library-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; max-height:275px; overflow:auto; }
+.office-library-grid button { display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 5px; background:#f6f8ef; }
+.office-library-grid strong { font-size:9px; }
+.office-library-grid small { font-size:8px; opacity:.6; }
+.office-color-control>div { display:flex; gap:6px; flex-wrap:wrap; }
+.office-color-control input[type=color] { height:35px; border:0; padding:0; }
+.office-color-control>div>button { height:30px; min-width:30px; padding:3px; color:#344330; font-size:9px; }
+.office-color-control button[aria-pressed=true] { outline:2px solid #46683b; outline-offset:2px; }
+.office-game-hud { top:calc(env(safe-area-inset-top,0px) + 14px); left:calc(env(safe-area-inset-left,0px) + 14px); right:calc(env(safe-area-inset-right,0px) + 14px); }
+html[data-ui-style='m3'] [data-office-shell]::before,html[data-ui-style='m3'] [data-office-shell]::after { display:none; }
+html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none; }
+.office-game-hud,.office-game-brand,.office-clock { backdrop-filter:none; -webkit-backdrop-filter:none; }
+@media(max-width:1024px) {
+ .office-game-hud { top:calc(env(safe-area-inset-top,0px) + 12px); }
+ .office-review-game>.office-review-modes { top:calc(env(safe-area-inset-top,0px) + 130px); bottom:auto; }
+}

@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest) {
   let action;
   try {
     const raw = await req.text();
-    if (raw.length > 20000) return json({ error: 'Data terlalu besar.' }, 413);
+    if (raw.length > 40000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
   if (!action || !['claim', 'layout', 'activity'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
