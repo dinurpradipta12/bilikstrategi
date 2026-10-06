@@ -56,10 +56,26 @@ test('new bedroom and garden paths share only actual entrances', () => {
 test('saved layouts gain private offices once, preserving claims and user edits', () => {
   const old={revision:7,layoutRevision:3,claims:{a:4},ornaments:[{id:'plant-front',asset:'floor_plant',x:-5,z:4.8,rotation:0,room:0}]};
   const upgraded=spaceModel.normalizeSpace(old,[member]);
-  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,2);
+  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,3);
   assert.equal(upgraded.ornaments.filter(o=>o.id==='manager-desk').length,1);
   const saved={...upgraded,ornaments:upgraded.ornaments.filter(o=>o.id!=='manager-art')};
   assert.equal(spaceModel.normalizeSpace(saved,[member]).ornaments.some(o=>o.id==='manager-art'),false);
+  assert.doesNotThrow(()=>spaceModel.parseOrnaments(upgraded.ornaments,1));
+});
+
+test('doorway upgrade only moves untouched default obstacles and protects both sides of entrances', () => {
+  const old={version:2,claims:{a:4},ornaments:[
+    {id:'shelf-back',asset:'bookshelf',x:-2,z:-5.4,rotation:0,room:0},
+    {id:'lamp-back',asset:'floor_lamp',x:4.5,z:-5.2,rotation:0,room:0},
+  ]};
+  const upgraded=spaceModel.normalizeSpace(old,[member]);
+  assert.deepEqual(Array.from(upgraded.ornaments,o=>o.x),[-3.6,.5]);
+  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.ornaments.length,2);
+  const customized={...old,ornaments:[{...old.ornaments[0],x:-4}]};
+  assert.equal(spaceModel.normalizeSpace(customized,[member]).ornaments[0].x,-4);
+  for(const [x,z] of [[-1.5,-5.4],[-1.5,-6.6],[4.5,-5.2],[4.5,-6.8],[-6.6,4.5],[-5.3,4.5]]) {
+    assert.throws(()=>spaceModel.parseOrnaments([{id:'blocked-door',asset:'floor_plant',x,z,rotation:0,room:0}],1),/pintu/);
+  }
   assert.doesNotThrow(()=>spaceModel.parseOrnaments(upgraded.ornaments,1));
 });
 test('library validates colors/heights and private desk peripherals follow movement', () => {

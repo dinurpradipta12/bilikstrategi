@@ -146,7 +146,7 @@ export function memberZone(member: OfficeMember, now: number, schedule?: Attenda
 export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[] = []) {
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
-  if (zone === 'bedroom') return { x: -16.5 + (i % 5) * 1.95, z: (i < 5 ? -3 : 2.5) + .4, rotation: 0 };
+  if (zone === 'bedroom') return { x: -16.5 + (i % 5) * 1.95, z: (i < 5 ? -3 : 2.5) + .75, rotation: 0 };
   if (zone === 'garden') return { x: 13.5 + Math.floor(i / 2) * 1.05, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
   if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * 1.15, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);

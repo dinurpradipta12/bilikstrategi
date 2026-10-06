@@ -53,8 +53,8 @@ const privateOffice = (name: string, x: number): Ornament[] => [
 export const EXECUTIVE_ORNAMENTS = [...privateOffice('manager', -3), ...privateOffice('lead', 3)];
 export const DEFAULT_ORNAMENTS: Ornament[] = [
   { id:'plant-back', asset:'floor_plant', x:-5, z:-5, rotation:0, room:0 },
-  { id:'shelf-back', asset:'bookshelf', x:-2, z:-5.4, rotation:0, room:0 },
-  { id:'lamp-back', asset:'floor_lamp', x:4.5, z:-5.2, rotation:0, room:0 },
+  { id:'shelf-back', asset:'bookshelf', x:-3.6, z:-5.4, rotation:0, room:0 },
+  { id:'lamp-back', asset:'floor_lamp', x:.5, z:-5.2, rotation:0, room:0 },
   { id:'plant-front', asset:'floor_plant', x:-5, z:2.8, rotation:0, room:0 },
   { id:'rug-lounge', asset:'area_rug', x:9, z:-3, rotation:0, room:0 },
   ...EXECUTIVE_ORNAMENTS,
@@ -77,9 +77,16 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     let slot = 0; while (taken.has(slot)) slot++;
     claims[member.id] = slot; taken.add(slot);
   }
-  const ornaments = Array.isArray(raw.ornaments) ? raw.ornaments.map(item => raw.version !== 2 && item.id === 'plant-front' && item.x === -5 && item.z === 4.8 ? { ...item, z:2.8 } : item) : DEFAULT_ORNAMENTS.map(item => ({ ...item }));
-  if (Array.isArray(raw.ornaments) && raw.version !== 2) for (const item of EXECUTIVE_ORNAMENTS) if (!ornaments.some(o => o.id === item.id)) ornaments.push({ ...item });
-  return { version:2, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments };
+  const ornaments = Array.isArray(raw.ornaments) ? raw.ornaments.map(item => {
+    if ((raw.version || 0) < 2 && item.id === 'plant-front' && item.x === -5 && item.z === 4.8) return { ...item, z:2.8 };
+    if ((raw.version || 0) < 3 && item.rotation === 0) {
+      if (item.id === 'shelf-back' && item.x === -2 && item.z === -5.4) return { ...item, x:-3.6 };
+      if (item.id === 'lamp-back' && item.x === 4.5 && item.z === -5.2) return { ...item, x:.5 };
+    }
+    return item;
+  }) : DEFAULT_ORNAMENTS.map(item => ({ ...item }));
+  if (Array.isArray(raw.ornaments) && (raw.version || 0) < 2) for (const item of EXECUTIVE_ORNAMENTS) if (!ornaments.some(o => o.id === item.id)) ornaments.push({ ...item });
+  return { version:3, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { const a = raw.activities?.[m.id]; return a && ['garden', 'pantry', 'lounge'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
@@ -96,6 +103,10 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
   const size = ORNAMENTS[item.asset];
   const cos = Math.abs(Math.cos(item.rotation)), sin = Math.abs(Math.sin(item.rotation));
   const rx = (size.width * cos + size.depth * sin) / 2, rz = (size.width * sin + size.depth * cos) / 2;
+  if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-6,0],[-6,4.5,1],[4.5,6,0],[12,4.5,1]]) {
+    const along = rotated ? Math.abs(item.z-z) : Math.abs(item.x-x), across = rotated ? Math.abs(item.x-x) : Math.abs(item.z-z);
+    if (along < .8 + (rotated ? rz : rx) && across < 1.05 + (rotated ? rx : rz)) return 'Sisakan bukaan dan jalur masuk pintu.';
+  }
   const garden = item.x - rx >= 12.4 && item.x + rx <= 18.6;
   const privateRoom = item.z - rz >= -11.7 && item.z + rz <= -6.3 && ((item.x-rx >= -5.7 && item.x+rx <= -.3) || (item.x-rx >= .3 && item.x+rx <= 5.7));
   if (privateRoom) return '';

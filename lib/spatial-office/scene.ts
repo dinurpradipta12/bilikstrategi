@@ -8,7 +8,7 @@ import { AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition
 
 const CHARACTERS = [...AVATAR_MODELS];
 const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS)])];
-type Rig = { root: THREE.Group; body: THREE.Group; head: THREE.Group; arms: THREE.Group[]; hands: THREE.Group[]; mug: THREE.Group; legs: THREE.Group[] };
+type Rig = { root: THREE.Group; body: THREE.Group; head: THREE.Group; arms: THREE.Group[]; hands: THREE.Group[]; mug: THREE.Group; legs: THREE.Group[]; sleepPose?: { height: number; headY: number } };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
   route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; sleep: HTMLSpanElement; name: HTMLSpanElement; offset: number;
@@ -52,7 +52,7 @@ export class OfficeScene {
   private disposed = false;
   private loaded = false;
   private roomLabels: { element: HTMLElement; position: THREE.Vector3 }[] = [];
-  private doors: { group: THREE.Group; center: THREE.Vector3; rotate?: boolean }[] = [];
+  private doors: { group: THREE.Group; center: THREE.Vector3; rotate: boolean; travel: number; hold: number }[] = [];
   private current: { member: OfficeMember; slot: number }[] = [];
   private raf = 0;
   private lastFrame = 0;
@@ -191,26 +191,68 @@ export class OfficeScene {
     return mesh;
   }
 
-  private wall(x: number, z: number, length: number, rotate = false, door = false) {
-    const frame = '#a39a87';
-    this.box(x, 2.78, z, rotate ? 0.08 : length, 0.10, rotate ? length : 0.08, frame);
-    for (const side of [-1, 1]) this.box(x + (rotate ? 0 : side * length / 2), 1.4, z + (rotate ? side * length / 2 : 0), 0.07, 2.8, 0.07, frame);
-    const panel = this.box(x, 1.37, z, rotate ? 0.045 : length - 0.05, 2.68, rotate ? length - 0.05 : 0.045, door ? '#9b8266' : '#e6ddc9', 1);
-    if (door) {
-      const group = new THREE.Group(); group.position.set(x, 0, z); this.scene.add(group);
-      panel.position.x -= x; panel.position.z -= z; group.add(panel);
-      this.doors.push({ group, center: new THREE.Vector3(x, 0, z), rotate });
-    } else this.box(x, 0.08, z, rotate ? 0.08 : length, 0.16, rotate ? length : 0.08, frame);
+  private wall(x: number, z: number, length: number, rotate = false, door = false, glazed = false, name = '') {
+    const frame = glazed ? '#567267' : '#a39a87';
+    const localBox = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) =>
+      this.box(x + (rotate ? normal : along), y, z + (rotate ? along : normal), rotate ? d : w, h, rotate ? w : d, color, opacity);
+    const panel = (along: number, y: number, width: number, height: number) => {
+      const mesh = localBox(along, y, 0, width, height, .075, glazed ? '#b8ddd7' : '#e6ddc9', glazed ? .19 : 1);
+      mesh.userData.architecture = glazed ? 'glass' : 'wall'; return mesh;
+    };
+    localBox(0, 2.78, 0, length, .10, .12, frame);
+    for (const side of [-1, 1]) localBox(side * length / 2, 1.4, 0, .07, 2.8, .12, frame);
+    if (!door) { panel(0, 1.37, length - .05, 2.68); localBox(0, .08, 0, length, .16, .12, frame); return; }
+
+    // A human-sized opening with jambs, lintel and a separate sliding leaf.
+    // The leaf clears the entire opening; the wall above it remains stationary.
+    const width = Math.min(1.45, length - .16), height = 2.3, sideWidth = (length - width) / 2;
+    for (const side of [-1, 1]) {
+      if (sideWidth > .08) panel(side * (width / 2 + sideWidth / 2), 1.37, sideWidth - .035, 2.68);
+      localBox(side * (width / 2 + .015), height / 2, 0, .10, height, .20, '#465e56');
+    }
+    panel(0, 2.55, width, .36);
+    localBox(0, height + .035, 0, width + .18, .13, .20, '#465e56');
+    localBox(0, .025, 0, width, .035, .26, '#b4bdad');
+    const group = new THREE.Group(); group.position.set(x, 0, z); group.name = `door-${name || this.doors.length}`; this.scene.add(group);
+    const leafPart = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) => {
+      const mesh = localBox(along, y, normal, w, h, d, color, opacity);
+      mesh.position.x -= x; mesh.position.z -= z; group.add(mesh); return mesh;
+    };
+    leafPart(0, 1.16, .15, width + .025, 2.26, .065, glazed ? '#a7d8cf' : '#92714f', glazed ? .27 : 1);
+    for (const side of [-1, 1]) {
+      leafPart(side * width / 2, 1.16, .15, .065, 2.26, .09, '#405b52');
+      leafPart(width * .31, 1.12, .15 + side * .08, .045, .38, .045, '#f0ce88');
+    }
+    for (const y of [.055, 2.26]) leafPart(0, y, .15, width + .08, .065, .09, '#405b52');
+    // Inset and plaque make a closed solid door recognizable from either side.
+    if (!glazed) for (const side of [-1, 1]) {
+      leafPart(0, 1.7, .15 + side * .036, width * .54, .45, .01, '#b8d2c5');
+      leafPart(0, 1.31, .15 + side * .045, width * .66, .19, .016, '#344b44');
+    }
+    this.doors.push({ group, center: new THREE.Vector3(x, 0, z), rotate, travel: width + .14, hold: 0 });
+    if (name) {
+      const canvas = document.createElement('canvas'); const context = canvas.getContext?.('2d');
+      if (context) {
+        canvas.width = 512; canvas.height = 96; context.fillStyle = '#f7ebcd'; context.font = '600 42px sans-serif'; context.textAlign = 'center'; context.textBaseline = 'middle'; context.fillText(name, 256, 48, 470);
+        const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; this.textures.add(texture);
+        for (const side of [-1, 1]) {
+          const label = new THREE.Mesh(new THREE.PlaneGeometry(width * .61, .15), new THREE.MeshBasicMaterial({ map:texture, transparent:true, depthWrite:false, toneMapped:false }));
+          label.position.set(rotate ? .15 + side * .059 : 0, 1.31, rotate ? 0 : .15 + side * .059);
+          label.rotation.y = (rotate ? Math.PI / 2 : 0) + (side < 0 ? Math.PI : 0); group.add(label); this.track(label);
+        }
+      }
+    }
   }
 
   private buildRoom() {
     for (const x of [-4.5, -1.5, 1.5, 4.5, 7.5, 10.5]) {
       for (const z of [-4.5, -1.5, 1.5, 4.5]) this.asset(x > 6 ? 'floor_ivory_3m' : 'floor_wood_3m', x, z);
-      this.wall(x, -6, 3, false, x === -1.5 || x === 4.5); this.wall(x, 6, 3, false, x === 4.5);
+      this.wall(x, -6, 3, false, x === -1.5 || x === 4.5, false, x === -1.5 ? 'MANAGER' : x === 4.5 ? 'PROJECT LEAD' : '');
+      this.wall(x, 6, 3, false, x === 4.5, true);
     }
     for (const z of [-4.5, -1.5, 1.5, 4.5]) {
-      this.wall(-6, z, 3, true, z === 4.5);
-      this.wall(12, z, 3, true, z === 4.5);
+      this.wall(-6, z, 3, true, z === 4.5, false, z === 4.5 ? 'ISTIRAHAT' : '');
+      this.wall(12, z, 3, true, z === 4.5, true);
     }
     this.wall(6, -3.125, 5.75, true); this.wall(6, 0.5, 1.5, true, true);
     this.wall(6, 2.15, 1.8, true); this.wall(6, 3.8, 1.5, true, true); this.wall(6, 5.275, 1.45, true);
@@ -269,8 +311,14 @@ export class OfficeScene {
       this.box(x,.56,z-.65,.82,.17,.38,'#fffbef');
       this.box(x,.55,z+.35,1.18,.07,1.05,'#91aab0');
     }
-    for (const x of [-3.8,3.8]) this.box(x,3.23,6.17,.04,.88,.04,'#8de8c4');
-    for (const y of [2.79,3.67]) this.box(0,y,6.17,7.65,.04,.04,'#8de8c4');
+    // Hollow metal neon-box casing: visible depth with an illuminated front rim.
+    for (const x of [-3.88,3.88]) this.box(x,3.28,6.20,.13,1.04,.30,'#263f38');
+    for (const y of [2.76,3.80]) this.box(0,y,6.20,7.89,.13,.30,'#263f38');
+    for (const x of [-3.4,3.4]) this.box(x,2.82,6.08,.09,.4,.1,'#263f38');
+    const glow = new THREE.MeshBasicMaterial({color:'#7fffd4',toneMapped:false});
+    const rim = (x:number,y:number,w:number,h:number) => { const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,.025),glow); mesh.position.set(x,y,6.36); this.scene.add(mesh); this.track(mesh); mesh.castShadow=false; };
+    for (const x of [-3.84,3.84]) rim(x,3.28,.025,.98);
+    for (const y of [2.79,3.77]) rim(0,y,7.7,.025);
     const indoor = new THREE.PointLight('#ffead0', 14, 22, 1.4); indoor.position.set(3,4.5,2); this.scene.add(indoor);
     // Light clouds and stars vary with the workspace's local clock.
     if (this.clouds && this.stars) {
@@ -303,7 +351,7 @@ export class OfficeScene {
     context.fillText(/agency/i.test(brand.name) ? brand.name : `${brand.name} Agency`,768,76,1340);
     const texture=new THREE.CanvasTexture(canvas); texture.colorSpace=THREE.SRGBColorSpace; texture.wrapS=THREE.RepeatWrapping;
     if (this.sign) { const old=this.sign.material as THREE.MeshBasicMaterial; old.map?.dispose(); if(old.map) this.textures.delete(old.map); old.map=texture; old.needsUpdate=true; }
-    else { this.sign=new THREE.Mesh(new THREE.PlaneGeometry(7.5,.84),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,toneMapped:false,side:THREE.DoubleSide})); this.sign.position.set(0,3.23,6.19); this.scene.add(this.sign); this.track(this.sign); }
+    else { this.sign=new THREE.Mesh(new THREE.PlaneGeometry(7.5,.84),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,toneMapped:false,side:THREE.DoubleSide})); this.sign.position.set(0,3.28,6.37); this.scene.add(this.sign); this.track(this.sign); }
     this.signTexture=texture; this.textures.add(texture);
   }
   setPan(enabled: boolean) {
@@ -552,11 +600,12 @@ export class OfficeScene {
       const sleeping = settled && occupant.zone === 'bedroom';
       const seated = settled && !sleeping && occupant.zone !== 'pantry';
       rig.body.rotation.x = sleeping ? -Math.PI / 2 : 0;
-      rig.root.position.y = sleeping ? .53 : 0;
+      rig.root.position.y = 0;
       const t = this.time + occupant.offset;
       rig.body.position.z = sleeping ? 0 : seated ? 0.15 : this.moving ? Math.abs(Math.sin(t * 8)) * (settled ? 0.005 : 0.045) : 0;
       rig.head.rotation.x = working && this.moving ? 0.045 + Math.sin(t * 1.7) * 0.025 : 0;
       rig.head.rotation.z = seated && this.moving ? Math.sin(t * 0.6) * 0.045 : 0;
+      rig.head.position.y = 0;
       const coffee = settled && occupant.zone === 'pantry';
       const sip = coffee && this.moving ? Math.max(0, Math.sin(t * 0.9)) : 0;
       rig.mug.position.set(0.26, 0.83 + sip * 0.27, 0.3 - sip * 0.06);
@@ -580,6 +629,21 @@ export class OfficeScene {
       rig.legs.forEach((leg, index) => { leg.rotation.x = seated ? -1.12 : settled ? 0 : Math.sin(t * 8 + index * Math.PI) * 0.4; });
       rig.mug.visible = settled && occupant.zone === 'pantry';
       if (settled) rig.root.rotation.y = destination.rotation;
+      if (sleeping) {
+        // Calibrate each GLB/hair combination against the mattress and pillow.
+        // Source models have different back/hair depths, so a fixed root height sinks them.
+        if (!rig.sleepPose) {
+          rig.root.updateMatrixWorld(true);
+          const body = new THREE.Box3(), head = new THREE.Box3().setFromObject(rig.head);
+          for (const part of rig.body.children) if (part !== rig.head) body.union(new THREE.Box3().setFromObject(part));
+          const height = .595 - body.min.y;
+          // Support the large chibi head on the pillow independently of the torso.
+          // After the two X rotations, source -Y raises the head in world space.
+          rig.sleepPose = { height, headY: -(.655 - head.min.y - height) / .53 };
+        }
+        rig.root.position.y = rig.sleepPose.height;
+        rig.head.position.y = rig.sleepPose.headY;
+      }
       const text = settled ? bubbleLabel(member, occupant.zone, this.moving ? Date.now() : 0) : '';
       if (occupant.bubble.textContent !== text) occupant.bubble.textContent = text;
       occupant.bubble.hidden = !text || (id !== this.selected && (!this.moving || (t + occupant.slot * 3) % 25 >= 5));
@@ -604,11 +668,7 @@ export class OfficeScene {
       const { x, z } = deskPosition(this.room * 10 + slot, this.deskLayout); this.placeLabel(label, new THREE.Vector3(x, 0.88, z));
     }
     for (const label of this.roomLabels) this.placeLabel(label.element, label.position);
-    for (const door of this.doors) {
-      const open = [...this.occupants.values()].some(occupant => occupant.route.length && occupant.rig.root.position.distanceTo(door.center) < 1.7);
-      const axis = door.rotate ? 'z' : 'x';
-      door.group.position[axis] = THREE.MathUtils.damp(door.group.position[axis], door.center[axis] + (open ? 1.5 : 0), 9, dt);
-    }
+    this.updateDoors(dt);
     const minute = Math.floor(Date.now() / 60000);
     if (minute !== this.skyMinute) {
       this.skyMinute = minute;
@@ -625,6 +685,19 @@ export class OfficeScene {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
+
+  private updateDoors(dt: number) {
+    for (const door of this.doors) {
+      const nearby = [...this.occupants.values()].some(({rig, route}) => {
+        const dx=rig.root.position.x-door.center.x, dz=rig.root.position.z-door.center.z;
+        const across=Math.abs(door.rotate ? dx : dz), along=Math.abs(door.rotate ? dz : dx);
+        return along < .95 && across < (route.length ? 2.1 : .7);
+      });
+      door.hold = nearby ? .65 : Math.max(0, door.hold-dt);
+      const axis = door.rotate ? 'z' : 'x';
+      door.group.position[axis] = THREE.MathUtils.damp(door.group.position[axis], door.center[axis] - (door.hold > 0 ? door.travel : 0), 12, dt);
+    }
+  }
 
   dispose() {
     this.disposed = true;

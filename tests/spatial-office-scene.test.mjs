@@ -83,3 +83,47 @@ test('object coloring owns its material and does not recolor another object or G
   engine.setOrnaments([{...a,color:'#394c68'},b],0,true,'a');
   assert.equal(first.material.color.getHexString(),'394c68'); assert.equal(second.material.color.getHexString(),color); assert.equal(original.material.color.getHexString(),originalColor);
 });
+
+test('sleeping GLBs clear the mattress, blanket and pillow with every body and hair style', () => {
+  const engine=office();
+  Object.assign(engine,{schedule:{timezone:'Asia/Makassar',days:[]},visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
+  let frame=1000;
+  for(const body of model.AVATAR_MODELS) for(const hair of model.AVATAR_MODELS) {
+    engine.setMembers([{member:{...alice,status:'offline',avatar:{...model.defaultAvatar('1'),model:body,hair,glasses:true}},slot:0}]);
+    engine.animateFrame(frame+=100);
+    const rig=engine.occupants.get('1').rig;
+    rig.root.updateMatrixWorld(true);
+    const bounds=new THREE.Box3().setFromObject(rig.body),head=new THREE.Box3().setFromObject(rig.head);
+    assert.ok(bounds.min.y>=.5949,`${body}/${hair}: body sinks into blanket at ${bounds.min.y}`);
+    assert.ok(head.min.y>=.6549,`${body}/${hair}: head sinks into pillow at ${head.min.y}`);
+    assert.ok(bounds.min.y<.78,`${body}/${hair}: floating over mattress`);
+    assert.ok(bounds.min.z>=-4 && bounds.max.z<=-2,`${body}/${hair}: extends outside bed ${bounds.min.z} .. ${bounds.max.z}`);
+  }
+});
+
+test('doors visibly clear the whole opening, stay open during passage and close after avatar leaves', () => {
+  const engine=office();
+  for(const name of ['MANAGER','PROJECT LEAD','ISTIRAHAT']) assert.ok(engine.doors.some(d=>d.group.name===`door-${name}`));
+  engine.setMembers([{member:alice,slot:0}]);
+  const person=engine.occupants.get('1');
+  for(const door of engine.doors) {
+    person.rig.root.position.copy(door.center); person.rig.root.position[door.rotate?'x':'z']+=1.8;
+    person.route=[door.center.clone()];
+    for(let frame=0;frame<30;frame++) engine.updateDoors(.05);
+    const axis=door.rotate?'z':'x';
+    assert.ok(Math.abs(door.group.position[axis]-door.center[axis])>door.travel-.01);
+    const bounds=new THREE.Box3().setFromObject(door.group);
+    assert.ok(bounds.max[axis]<door.center[axis]-.65,'leaf still blocks opening');
+    person.rig.root.position.copy(door.center); person.route=[];
+    for(let frame=0;frame<30;frame++) engine.updateDoors(.05);
+    assert.ok(door.hold>0,'door closes on stationary avatar in doorway');
+    const direction=new THREE.Vector3(door.rotate?1:0,0,door.rotate?0:1);
+    const origin=door.center.clone().addScaledVector(direction,-.5); origin.y=1;
+    engine.scene.updateMatrixWorld(true);
+    const ray=new THREE.Raycaster(origin,direction,0,1);
+    assert.equal(ray.intersectObjects(engine.scene.children.filter(object=>object!==person.rig.root),true).length,0,'wall geometry seals the opening');
+    person.rig.root.position.set(25,0,25);
+    for(let frame=0;frame<60;frame++) engine.updateDoors(.05);
+    assert.ok(Math.abs(door.group.position[axis]-door.center[axis])<.001,'door never closes');
+  }
+});

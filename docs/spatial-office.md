@@ -37,7 +37,7 @@ Tidak memerlukan migration SQL baru jika tabel bawaan `app_settings` sudah terse
 
 - Sumber: `src/Char-assets` milik pengguna; disalin ke `public/spatial-assets` oleh lifecycle predev/prebuild/prepages:build. Hasil salinan tidak dikomit.
 - Three.js dimuat pada beranda kantor; statistik/Recharts dipisah ke chunk lain agar tidak ikut dimuat saat pertama membuka kantor. `GLTFLoader` memuat model dan `OrbitControls` mengatur kamera.
-- Karakter, rambut, furnitur dan lantai memakai GLB yang disediakan. Jalan, trotoar, taman, dinding solid, pintu geser, ranjang dan mesin kopi sederhana dibuat dari geometri Three.js. Atap ditiadakan untuk tampilan cutaway; seluruh sisi ruangan dibatasi dinding biasa. Sistem sumber Z-up dikonversi menjadi Y-up.
+- Karakter, rambut, furnitur dan lantai memakai GLB yang disediakan. Jalan, trotoar, taman, dinding solid, pintu geser, ranjang dan mesin kopi sederhana dibuat dari geometri Three.js. Atap ditiadakan untuk tampilan cutaway; fasad depan dan sisi taman memakai kaca, sementara kamar tidur dan ruangan privat memakai dinding solid. Sistem sumber Z-up dikonversi menjadi Y-up.
 - GLB tidak memiliki skeleton, skin, atau animation clip. Gerakan berjalan, duduk dan mengetik berupa artikulasi terbatas dari mesh tubuh bernama. Ini bukan motion capture atau rig humanoid.
 - Furnitur digabung per aset dan karakter digabung per sendi agar draw call lebih sedikit. Geometry/material dilepas saat instance dihapus, observer/listener/renderer dilepas saat unmount.
 - Maksimum 30 FPS, DPR maksimum 1.5; rendering berhenti saat halaman tersembunyi atau scene di luar viewport. Kamera menyesuaikan layar portrait. Daftar anggota tetap bisa digunakan tanpa WebGL.
@@ -52,7 +52,7 @@ npx eslint components/spatial-office lib/spatial-office app/api/spatial-office a
 npm run build -- --webpack
 ```
 
-43 pengujian lulus (termasuk jadwal/shift malam, aktivitas sementara, kamar tidur/taman, meja bergerak, dan otorisasi aktivitas): timer/bubble, identitas, kontak keyboard, jalur sepuluh kursi, klaim yang bersamaan (row baru/lama), klaim bersamaan dengan editor, role admin, penolakan identitas palsu/origin asing, validasi ornamen, dan scene menggunakan GLB asli untuk perpindahan meja, posisi awal, serta tambah/geser/putar/hapus/batal dekorasi. Pemeriksaan skema live (read-only) mengonfirmasi kolom role dan filter revision PostgREST tersedia. Tidak ada klaim, denah, atau data presensi produksi yang diubah untuk pengujian.
+46 pengujian lulus (termasuk jadwal/shift malam, aktivitas sementara, kamar tidur/taman, meja bergerak, dan otorisasi aktivitas): timer/bubble, identitas, kontak keyboard, jalur sepuluh kursi, klaim yang bersamaan (row baru/lama), klaim bersamaan dengan editor, role admin, penolakan identitas palsu/origin asing, validasi ornamen, dan scene menggunakan GLB asli untuk perpindahan meja, posisi awal, serta tambah/geser/putar/hapus/batal dekorasi. Pemeriksaan skema live (read-only) mengonfirmasi kolom role dan filter revision PostgREST tersedia. Tidak ada klaim, denah, atau data presensi produksi yang diubah untuk pengujian.
 
 Build webpack, TypeScript, dan ESLint pada modul kantor lulus. Layout lama mempunyai dua peringatan lint `set-state-in-effect` pada pemeriksaan akses yang sudah ada; alur akses tidak diubah. Review browser HTTPS: tanpa overflow pada 1366 px; editor mobile 390 px berhasil menggeser meja 1 ke X=-4.50 dan menyimpan denah simulasi. Versi sebelumnya sudah menampilkan kamar tidur, karakter berbaring, langit malam, jam realtime dan neon. Bug gambar publik yang diarahkan ke login diperbaiki dengan static import. Simpan dengan akun produksi masih memerlukan sesi login; pengujian endpoint memakai fixture otorisasi, bukan menulis data tim produksi.
 
@@ -79,3 +79,10 @@ Build webpack, TypeScript, dan ESLint pada modul kantor lulus. Layout lama mempu
 Untuk gerakan lebih natural: karakter GLB dengan skeleton + skin dan klip `Idle`, `Walk`, `SitDown`, `Typing`, `StandUp`. Pertahankan skala dan orientasi konsisten. Aset sekarang tetap bisa dipakai untuk review tata ruang. Untuk peningkatan berikutnya, siapkan animasi `DrinkCoffee` dan model mesin kopi yang lebih detail. Untuk kamar tidur, tambahkan aset tempat tidur dan klip `LieDown`/`Sleep` agar lebih natural; versi saat ini memakai ranjang geometri dan artikulasi mesh GLB yang tersedia.
 
 Referensi implementasi: [GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.html), [OrbitControls](https://threejs.org/docs/pages/OrbitControls.html), [filter JSON dan conditional PATCH PostgREST](https://docs.postgrest.org/en/stable/references/api/tables_views.html).
+
+## Perbaikan pintu dan ranjang
+
+- Pintu Manager, Project Lead dan kamar tidur memiliki kusen, handle, panel inset dan label. Daun pintu bergeser penuh saat avatar mendekat; sensor menjaga pintu terbuka ketika jalur masih ditempati dan menutup setelah avatar lewat.
+- Posisi tidur dikalibrasi dari geometri setiap tubuh/rambut: badan bertumpu di atas selimut dan kepala pada bantal, tetap diam dengan zzz. Pengujian mencakup seluruh 64 kombinasi model dan rambut serta batas panjang ranjang.
+- Denah versi 3 memindahkan hanya rak/lampu bawaan yang belum diedit dari depan pintu privat; klaim, perubahan pengguna dan objek yang sudah dihapus tetap dipertahankan. Editor menolak ornamen baru yang menutup jalur pintu. Tidak membutuhkan SQL.
+- Neon memakai frame metal berketebalan dengan rim menyala dan running text transparan; tidak memakai latar putih.
