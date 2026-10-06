@@ -84,6 +84,17 @@ test('object coloring owns its material and does not recolor another object or G
   assert.equal(first.material.color.getHexString(),'394c68'); assert.equal(second.material.color.getHexString(),color); assert.equal(original.material.color.getHexString(),originalColor);
 });
 
+test('wall attachment clears the real supplied GLB on every wall orientation',()=>{
+  const engine=office();
+  for(const asset of ['framed_art','pinboard','bookshelf']) for(const [x,z,axis,edge,side] of [[-3,-11.5,'z',-12,1],[-5.5,-9,'x',-6,1],[-.5,-9,'x',0,-1],[-3,-6.5,'z',-6,-1]]) {
+    const item={id:'mounted',asset,x,z,y:asset==='bookshelf'?0:.9,rotation:0,room:0};
+    const snapped=spaceModel.snapOrnament(item,item,true);
+    engine.setOrnaments([snapped],0,true,'mounted');
+    const box=new THREE.Box3().setFromObject(engine.decorations.get('mounted'));
+    assert.ok(Math.abs((side>0?box.min[axis]:box.max[axis])-(edge+side*.075))<.0001,`${asset} penetrates wall ${axis}/${side}`);
+  }
+});
+
 test('sleeping GLBs clear the mattress, blanket and pillow with every body and hair style', () => {
   const engine=office();
   Object.assign(engine,{schedule:{timezone:'Asia/Makassar',days:[]},visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});

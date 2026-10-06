@@ -38,6 +38,35 @@ test('ornaments allow saved garden/interior placement and reject walls, corridor
   assert.throws(() => space.parseOrnaments([plant, { ...plant, id: 'other' }], 1), /bertabrakan/);
   assert.throws(() => space.parseOrnaments([plant, plant], 1), /tidak valid/);
 });
+
+test('wall snapping uses the asymmetric asset footprint on all four solid walls', () => {
+  for(const asset of ['framed_art','pinboard','bookshelf']) for(const [x,z,axis,edge,side] of [[-3,-11.5,'z',-12,1],[-5.5,-9,'x',-6,1],[-.5,-9,'x',0,-1],[-3,-6.5,'z',-6,-1]]) {
+    const item={id:'wall-item',asset,x,z,y:asset==='bookshelf'?0:.9,rotation:Math.PI/4,room:0};
+    const snapped=space.snapOrnament(item,item,true),b=space.ornamentFootprint(snapped);
+    assert.ok(Math.abs(b[`${axis}${side>0?'min':'max'}`]-(edge+side*.075))<.00001);
+    assert.doesNotThrow(()=>space.parseOrnaments([snapped],1));
+    const inside={...snapped,[axis]:snapped[axis]-side*.1};
+    assert.throws(()=>space.parseOrnaments([inside],1),/dinding/);
+  }
+});
+
+test('invalid movement cannot replace a valid draft; dragging clamps to the current room', () => {
+  const initial=space.DEFAULT_ORNAMENTS.map(o=>({...o}));
+  assert.throws(()=>space.moveOrnament(initial,'shelf-back',{x:0,z:0},1,[]),/Rak buku.*meja/);
+  assert.equal(initial.find(o=>o.id==='shelf-back').x,-3.6);
+  const moved=space.moveOrnament(initial,'shelf-back',{z:-30},1,[]);
+  const shelf=moved.find(o=>o.id==='shelf-back');
+  assert.ok(space.ornamentFootprint(shelf).zmin>=-5.926);
+  assert.doesNotThrow(()=>space.parseOrnaments(moved,1));
+  assert.throws(()=>space.moveDesk([],0,{x:0,z:0},1,initial),/bertabrakan/);
+});
+
+test('rotated thin objects use their oriented bounds rather than oversized bounding boxes',()=>{
+  const a={id:'screen-a',asset:'room_divider',x:-3,z:-9,rotation:Math.PI/4,room:0};
+  const b={...a,id:'screen-b',x:-2.55,z:-8.55};
+  assert.doesNotThrow(()=>space.parseOrnaments([a,b],1));
+  assert.throws(()=>space.parseOrnaments([a,{...b,x:-3,z:-9}],1),/bertabrakan/);
+});
 test('moving from any desk to another routes through aisles, including after mid-walk reversal', () => {
   for (let fromSlot = 0; fromSlot < 10; fromSlot++) for (let slot = 0; slot < 10; slot++) {
     const a = zonePosition(fromSlot, 'desk'), end = zonePosition(slot, 'desk');
@@ -74,6 +103,18 @@ function storeFixture(initial = null) {
   };
   return { ...loadTS('../lib/spatial-office/space-store.ts', { '@/lib/supabase/admin-rest-client': api, './space': space }), state: () => row };
 }
+
+test('wall-mounted layout is persisted and read back without losing position, rotation or height',async()=>{
+  const store=storeFixture(space.normalizeSpace(null,members));
+  const saved=await store.mutateOfficeSpace('team',members,current=>{
+    const ornaments=space.moveOrnament(current.ornaments,'manager-art',{},1,current.desks,true);
+    return {...current,ornaments,layoutRevision:current.layoutRevision+1,revision:current.revision+1};
+  });
+  const restored=await store.readOfficeSpace('team',members);
+  assert.equal(restored.ready,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.space)),JSON.parse(JSON.stringify(saved)));
+  assert.doesNotThrow(()=>space.parseOrnaments(restored.space.ornaments,1));
+});
 test('simultaneous claims for one desk have exactly one winner (new and existing row)', async () => {
   for (const initial of [null, space.normalizeSpace(null, members)]) {
     const store = storeFixture(initial);

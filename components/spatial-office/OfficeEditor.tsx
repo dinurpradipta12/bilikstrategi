@@ -1,14 +1,14 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Box, Plus, Search } from 'lucide-react';
-import { OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, updateOrnament, type Ornament } from '@/lib/spatial-office/space';
+import { OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, moveOrnament, moveDesk, snapOrnament, isWallOrnament, type Ornament } from '@/lib/spatial-office/space';
 
 import { deskPosition, type DeskLayout } from '@/lib/spatial-office/model';
 
-export default function OfficeEditor({ desks, onDesksChange, items, room, rooms, selected, onSelect, onChange, onSave, onCancel, saving, error }: {
+export default function OfficeEditor({ desks, onDesksChange, items, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
   desks: DeskLayout[]; onDesksChange: (desks: DeskLayout[]) => void;
   items: Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
-  onSave: () => void; onCancel: () => void; saving: boolean; error: string;
+  onSave: () => void; onCancel: () => void; onReload: () => void; conflict: boolean; saving: boolean; error: string;
 }) {
   const [library, setLibrary] = useState(false);
   const [search, setSearch] = useState('');
@@ -17,16 +17,16 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
   const [message, setMessage] = useState('');
   const deskSlot = selected.startsWith('desk:') ? Number(selected.slice(5)) : null;
   const desk = deskSlot === null ? null : deskPosition(deskSlot, desks);
-  const updateDesk = (patch: Partial<DeskLayout>) => { if (deskSlot === null || !desk) return; onDesksChange([...desks.filter(d => d.slot !== deskSlot), { slot: deskSlot, x: desk.x, z: desk.z, rotation: desk.rotation, color: desk.color, ...patch }]); };
-  let layoutError = '';
-  try { parseDesks(desks, rooms); parseOrnaments(items, rooms, desks); } catch (failure) { layoutError = failure instanceof Error ? failure.message : 'Denah belum valid.'; }
+  const updateDesk = (patch: Partial<DeskLayout>) => { if (deskSlot === null || !desk) return; try { onDesksChange(moveDesk(desks,deskSlot,patch,rooms,items)); setMessage(''); } catch(failure) { setMessage(failure instanceof Error ? failure.message : 'Posisi belum valid.'); } };
+  const layoutError = useMemo(()=>{ try { parseDesks(desks, rooms); parseOrnaments(items, rooms, desks); return ''; } catch (failure) { return failure instanceof Error ? failure.message : 'Denah belum valid.'; } },[desks,items,rooms]);
   const item = items.find(item => item.id === selected);
-  const update = (patch: Partial<Ornament>) => onChange(updateOrnament(items,selected,patch));
+  const update = (patch: Partial<Ornament>, attach = false) => { try { onChange(moveOrnament(items,selected,patch,rooms,desks,attach)); setMessage(''); } catch(failure) { setMessage(failure instanceof Error ? failure.message : 'Posisi belum valid.'); } };
   const add = (asset: Ornament['asset']) => {
     const bounds: Record<string, number[]> = { workspace:[-5,5,-5,5], manager:[-5,-1,-11,-7], lead:[1,5,-11,-7], lounge:[7,11,-5,0], pantry:[7,11,2,5], garden:[13,18,-5,5], bedroom:[-17,-7,-5,5] };
     const [xmin,xmax,zmin,zmax]=bounds[placement];
     for (let z=zmin; z<=zmax; z+=.5) for (let x=xmin; x<=xmax; x+=.5) {
-      const next: Ornament = { id:crypto.randomUUID(),asset,x,z,rotation:0,room };
+      const candidate: Ornament = { id:crypto.randomUUID(),asset,x,z,rotation:0,room };
+      const next=snapOrnament(candidate,candidate,isWallOrnament(candidate));
       try { parseOrnaments([...items,next],rooms,desks); onChange([...items,next]); onSelect(next.id); setMessage(''); setLibrary(false); return; } catch { /* Try another free position. */ }
     }
     setMessage('Ruangan ini belum memiliki tempat kosong yang cukup. Pilih ruangan lain atau geser objek dahulu.');
@@ -34,7 +34,7 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
   const colorControls = (color: string | undefined, change: (color: string) => void) => <div className="office-color-control"><label>Warna objek<input aria-label="Warna objek" type="color" value={color && color !== 'original' ? color : '#ffffff'} onChange={event=>change(event.target.value)} /></label><div>{OBJECT_COLORS.map(c=><button type="button" key={c} title={c === 'original' ? 'Warna asli' : c} aria-label={c === 'original' ? 'Warna asli' : `Warna ${c}`} aria-pressed={(color || 'original')===c} style={{background:c === 'original' ? '#f1eee4' : c}} onClick={()=>change(c)}>{c === 'original' ? 'Asli' : ''}</button>)}</div></div>;
   return <aside className="office-editor-panel" aria-label="Editor ruangan admin">
     <div className="office-panel-title"><h3>Atur kantor <span>ADMIN</span></h3><button type="button" onClick={onCancel} disabled={saving} aria-label="Tutup editor ornamen">×</button></div>
-    <p>Seret meja atau ornamen di ruang 3D atau gunakan kontrol posisi. Perubahan dibagikan ke tim setelah disimpan.</p>
+    <p>Seret objek untuk mengatur posisi. Objek berhenti di batas dinding; posisi yang bertabrakan tidak diterapkan. Klik Simpan denah untuk membagikan perubahan ke tim.</p>
     <button className="office-open-library" type="button" onClick={()=>setLibrary(v=>!v)} aria-expanded={library}><Plus size={16}/> Library objek <span>{Object.keys(ORNAMENTS).length} aset</span></button>
     {library && <section className="office-object-library" aria-label="Library objek">
       <label>Ruangan penempatan<select value={placement} onChange={event=>setPlacement(event.target.value)}><option value="workspace">Ruang kerja</option><option value="manager">Manager</option><option value="lead">Project lead</option><option value="lounge">Lounge</option><option value="pantry">Pantry</option><option value="garden">Taman</option><option value="bedroom">Kamar tidur</option></select></label>
@@ -52,6 +52,7 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
     </fieldset>}
     {item && <fieldset disabled={saving}>
       <legend>{ORNAMENTS[item.asset].label}</legend>
+      <button type="button" onClick={()=>update({},true)}>Tempel ke dinding terdekat</button>
       <label>Kiri / kanan · {item.x.toFixed(2)} m<input aria-label="Posisi ornamen X" type="range" min="-17.5" max="18.5" step="0.25" value={item.x} onChange={event => update({ x: Number(event.target.value) })} /></label>
       <label>Depan / belakang · {item.z.toFixed(2)} m<input aria-label="Posisi ornamen Z" type="range" min="-11.5" max="5.5" step="0.25" value={item.z} onChange={event => update({ z: Number(event.target.value) })} /></label>
       <div className="office-editor-rotate"><button type="button" onClick={() => update({ rotation: (item.rotation - Math.PI / 4 + Math.PI * 2) % (Math.PI * 2) })}>↶ Putar 45°</button><button type="button" onClick={() => update({ rotation: (item.rotation + Math.PI / 4) % (Math.PI * 2) })}>Putar 45° ↷</button></div>
@@ -62,6 +63,7 @@ export default function OfficeEditor({ desks, onDesksChange, items, room, rooms,
       {ornamentError(item, desks) && <p role="status">{ornamentError(item, desks)}</p>}
     </fieldset>}
     {(message || error || layoutError) && <p role="alert">{error || message || layoutError}</p>}
-    <div className="office-editor-actions"><button type="button" onClick={onSave} disabled={saving || Boolean(layoutError)}>{saving ? 'Menyimpan…' : 'Simpan denah'}</button><button type="button" onClick={onCancel} disabled={saving}>Batal</button></div>
+    {conflict && <div role="alert"><p>Denah bersama sudah berubah. Muat versi terbaru untuk mengganti draft ini sebelum mengedit kembali.</p><button type="button" onClick={onReload} disabled={saving}>Muat denah terbaru</button></div>}
+    <div className="office-editor-actions"><button type="button" onClick={()=>{ if(layoutError) setMessage(layoutError); else { setMessage(''); onSave(); } }} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan denah'}</button><button type="button" onClick={onCancel} disabled={saving}>Batal</button></div>
   </aside>;
 }

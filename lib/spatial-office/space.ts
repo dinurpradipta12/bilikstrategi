@@ -32,6 +32,41 @@ export const ORNAMENTS = {
   storage_box: { label: 'Kotak penyimpanan', category: 'Dekorasi', width:.58,depth:.42,height:.48 },
   trash_bin: { label: 'Tempat sampah', category: 'Dekorasi', width:.36,depth:.36,height:.42 },
 } as const;
+
+// Actual supplied GLB bounds after Z-up conversion: min/max X, Z and Y.
+// Some wall decorations are asymmetric about their origin.
+export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> = {
+  office_desk: [-0.7,0.7,-0.375,0.375,0,0.775],
+  meeting_table: [-1.185,1.185,-0.55,0.55,0,0.785],
+  office_swivel_chair: [-0.3525,0.365,-0.3498,0.3498,0,1.175],
+  wood_chair: [-0.29,0.29,-0.31,0.27,0.02,1.23],
+  round_stool: [-0.27,0.3244,-0.2853,0.2853,-0.0064,0.695],
+  sofa: [-0.91,0.91,-0.395,0.39,0,1.19],
+  drawer_cabinet: [-0.45,0.45,-0.23,0.282,0,1.44],
+  bookshelf: [-0.525,0.525,-0.21,0.21,0,1.935],
+  side_table: [-0.36,0.36,-0.36,0.36,0,0.585],
+  room_divider: [-0.7,0.6625,-0.2,0.2,0,1.58],
+  whiteboard: [-0.8825,0.8825,-0.045,0.21,0.005,1.7025],
+  pinboard: [-0.6,0.6,-0.025,0.08,0.425,1.275],
+  laptop: [-0.325,0.325,-0.215,0.215,0.0175,0.465],
+  monitor: [-0.4,0.4,-0.14,0.12,0.255,1.15],
+  keyboard: [-0.265,0.265,-0.09,0.09,-0.0005,0.063],
+  mouse: [-0.065,0.065,-0.1,0.1,-0.01,0.08],
+  desk_lamp: [-0.27,0.16,-0.17,0.17,0,0.84],
+  coffee_mug: [-0.09,0.2018,-0.09,0.09,0,0.21],
+  book_stack: [-0.185,0.275,-0.135,0.148,0.0075,0.3375],
+  pen_cup: [-0.09,0.09,-0.09,0.09,0,0.3828],
+  desk_plant: [-0.2172,0.2466,-0.1922,0.2658,0,0.5365],
+  floor_plant: [-0.3744,0.4438,-0.3314,0.4583,0,0.925],
+  flower_vase: [-0.2683,0.297,-0.2897,0.2897,0.02,0.695],
+  cactus: [-0.21,0.21,-0.15,0.15,0,0.66],
+  floor_lamp: [-0.29,0.29,-0.29,0.29,0,1.77],
+  framed_art: [-0.35,0.46,-0.025,0.053,0.16,1.1],
+  area_rug: [-1,1,-0.675,0.675,-0.0005,0.039],
+  cushion: [-0.28,0.28,-0.28,0.28,0,0.24],
+  storage_box: [-0.29,0.29,-0.21,0.21,0,0.4725],
+  trash_bin: [-0.18,0.18,-0.18,0.18,0.005,0.42],
+};
 export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; color?: string; rotation: number; room: number };
 export type OfficeSpace = { version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
 export const OBJECT_COLORS = ['original', '#52684e', '#394c68', '#cfaa77', '#b68c92', '#efe7d5', '#59545a'] as const;
@@ -99,25 +134,67 @@ function segmentDistance(x: number, z: number, a: [number, number], b: [number, 
   const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
   return Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t);
 }
+export function ornamentFootprint(item: Ornament) {
+  const [xmin,xmax,zmin,zmax,ymin,ymax] = ORNAMENT_BOUNDS[item.asset];
+  const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
+  const corners=[[xmin,zmin],[xmax,zmin],[xmax,zmax],[xmin,zmax]].map(([x,z])=>[item.x+x*c+z*s,item.z-x*s+z*c]);
+  const xs=corners.map(p=>p[0]),zs=corners.map(p=>p[1]);
+  return { corners, xmin:Math.min(...xs), xmax:Math.max(...xs), zmin:Math.min(...zs), zmax:Math.max(...zs), ymin:(item.y||0)+ymin, ymax:(item.y||0)+ymax };
+}
+const placementRoom = (item: Pick<Ornament,'x'|'z'>) => {
+  if(item.x < -6) return [-18,-6,-6,6];
+  if(item.z < -6) return item.x < 0 ? [-6,0,-12,-6] : [0,6,-12,-6];
+  if(item.x > 12) return [12.3,18.8,-6,6];
+  if(item.x > 6) return item.z < 1.5 ? [6,12,-6,1.5] : [6,12,1.5,6];
+  return [-6,6,-6,6];
+};
+export const isWallOrnament = (item: Ornament) => item.asset==='framed_art'||item.asset==='pinboard';
+// Keep the full GLB footprint on the room-facing surface, including rotation.
+// Call with the previous position so dragging cannot jump through a partition.
+export function snapOrnament(item: Ornament, previous: Ornament = item, attach = false): Ornament {
+  const [xmin,xmax,zmin,zmax]=placementRoom(previous), gap=.075;
+  const next={...item};
+  if(xmin!==12.3 && (attach || isWallOrnament(item))) {
+    const walls=[{distance:Math.abs(item.z-zmin),axis:'z',edge:zmin,rotation:0,sign:1},
+      {distance:Math.abs(item.x-xmin),axis:'x',edge:xmin,rotation:Math.PI/2,sign:1},
+      {distance:Math.abs(item.x-xmax),axis:'x',edge:xmax,rotation:Math.PI*1.5,sign:-1},
+      {distance:Math.abs(item.z-zmax),axis:'z',edge:zmax,rotation:Math.PI,sign:-1}].sort((a,b)=>a.distance-b.distance);
+    const wall=walls[0];
+    if(attach || wall.distance<.65) {
+      next.rotation=wall.rotation;
+      if(isWallOrnament(next) && next.y===undefined) next.y=.9;
+      const b=ornamentFootprint(next);
+      if(wall.axis==='x') next.x+=wall.edge+wall.sign*gap-(wall.sign>0?b.xmin:b.xmax);
+      else next.z+=wall.edge+wall.sign*gap-(wall.sign>0?b.zmin:b.zmax);
+    }
+  }
+  const b=ornamentFootprint(next);
+  next.x+=Math.max(0,xmin+gap-b.xmin)-Math.max(0,b.xmax-xmax+gap);
+  next.z+=Math.max(0,zmin+gap-b.zmin)-Math.max(0,b.zmax-zmax+gap);
+  if(next.y!==undefined) next.y=Math.max(0,Math.min(next.y,2,2.7-ORNAMENT_BOUNDS[next.asset][5]));
+  return next;
+}
 export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string {
-  const size = ORNAMENTS[item.asset];
-  const cos = Math.abs(Math.cos(item.rotation)), sin = Math.abs(Math.sin(item.rotation));
-  const rx = (size.width * cos + size.depth * sin) / 2, rz = (size.width * sin + size.depth * cos) / 2;
+  const b=ornamentFootprint(item), rx=(b.xmax-b.xmin)/2,rz=(b.zmax-b.zmin)/2;
+  const center={...item,x:(b.xmin+b.xmax)/2,z:(b.zmin+b.zmax)/2};
+  const [xmin,xmax,zmin,zmax]=placementRoom(item),gap=.074;
+  if(b.xmin<xmin+gap||b.xmax>xmax-gap||b.zmin<zmin+gap||b.zmax>zmax-gap) return 'Objek menembus dinding atau keluar ruangan. Geser ke sisi dalam atau gunakan Tempel ke dinding.';
+  if(b.ymax>2.701) return 'Objek terlalu tinggi. Turunkan agar tetap di bawah bagian atas dinding.';
+  item=center;
   if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-6,0],[-6,4.5,1],[4.5,6,0],[12,4.5,1]]) {
     const along = rotated ? Math.abs(item.z-z) : Math.abs(item.x-x), across = rotated ? Math.abs(item.x-x) : Math.abs(item.z-z);
     if (along < .8 + (rotated ? rz : rx) && across < 1.05 + (rotated ? rx : rz)) return 'Sisakan bukaan dan jalur masuk pintu.';
   }
-  const garden = item.x - rx >= 12.4 && item.x + rx <= 18.6;
-  const privateRoom = item.z - rz >= -11.7 && item.z + rz <= -6.3 && ((item.x-rx >= -5.7 && item.x+rx <= -.3) || (item.x-rx >= .3 && item.x+rx <= 5.7));
+  const garden = xmin===12.3;
+  const privateRoom = zmax===-6;
   if (privateRoom) return '';
-  const bedroom=item.x-rx>=-17.7 && item.x+rx<=-6.3 && item.z-rz>=-5.7 && item.z+rz<=5.7;
+  const bedroom=xmin===-18;
   if (bedroom) {
     if (item.asset === 'area_rug') return '';
     if (Math.abs(item.z-.5)<rz+.4 || (Math.abs(item.x+7)<rx+.4 && item.z+rz>.5)) return 'Sisakan lorong kamar tidur.';
     for(let i=0;i<10;i++) if(Math.abs(item.x-(-16.5+i%5*1.95))<rx+.7 && Math.abs(item.z-(i<5?-3:2.5))<rz+1.05) return 'Posisi bertabrakan dengan tempat tidur.';
     return '';
   }
-  if (item.z - rz < -5.7 || item.z + rz > 5.7 || (!garden && (item.x - rx < -5.7 || item.x + rx > 11.7))) return 'Tempatkan ornamen di dalam kantor atau taman.';
   if (garden) {
     if (item.asset !== 'area_rug') {
       if (Math.abs(item.z-1.9) < rz+.55 || Math.abs(item.z+1.2) < rz+.35 || (item.x-rx<12.85 && item.z+rz> -1.5)) return 'Sisakan jalur taman.';
@@ -125,7 +202,7 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
     }
     return '';
   }
-  if (Math.abs(item.x - 6) < rx + 0.18 || (item.x > 6 && Math.abs(item.z - 1.5) < rz + 0.18)) return 'Ornamen tidak boleh menembus dinding atau pintu.';
+  if(isWallOrnament(item) && b.ymin>=.65 && Math.min(b.xmin-xmin,xmax-b.xmax,b.zmin-zmin,zmax-b.zmax)<.16) return '';
   if (item.asset === 'area_rug') return '';
   for (let i = 0; i < 10; i++) { const d = deskPosition(item.room * 10 + i, desks); const dx = item.x - d.x, dz = item.z - d.z; if (Math.abs(dx * Math.cos(d.rotation) - dz * Math.sin(d.rotation)) < .7 + Math.max(rx, rz) && Math.abs(dx * Math.sin(d.rotation) + dz * Math.cos(d.rotation) + .35) < 1 + Math.max(rx, rz)) return 'Area meja dan kursi harus tetap kosong.'; }
   for (let slot = 0; slot < DESKS_PER_ROOM; slot++) for (const zone of ['desk', 'lounge', 'pantry', 'garden', 'bedroom'] as const) {
@@ -145,17 +222,19 @@ export function parseOrnaments(value: unknown, rooms: number, desks: DeskLayout[
     if (typeof item.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(item.id) || ids.has(item.id) || !Object.hasOwn(ORNAMENTS, item.asset) || !validObjectColor(item.color) || (item.y !== undefined && (typeof item.y !== 'number' || !Number.isFinite(item.y) || item.y < 0 || item.y > 2)) || ![item.x, item.z, item.rotation].every(v => typeof v === 'number' && Number.isFinite(v)) || Math.abs(item.rotation) > Math.PI * 2 + 0.01 || !Number.isInteger(item.room) || item.room < 0 || item.room >= rooms) throw new Error('Data ornamen tidak valid.');
     ids.add(item.id);
     const clean: Ornament = { id: item.id, asset: item.asset, x: item.x, z: item.z, rotation: item.rotation, room: item.room, ...(item.y !== undefined ? { y:item.y } : {}), ...(item.color ? { color:item.color } : {}) };
-    const error = ornamentError(clean, desks); if (error) throw new Error(error);
+    const error = ornamentError(clean, desks); if (error) throw new Error(`${ORNAMENTS[item.asset].label} (X ${item.x.toFixed(2)}, Z ${item.z.toFixed(2)}): ${error}`);
     return clean;
   });
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
     const a = items[i], b = items[j];
     if (a.room !== b.room || a.asset === 'area_rug' || b.asset === 'area_rug') continue;
-    const sa=ORNAMENTS[a.asset], sb=ORNAMENTS[b.asset];
-    if ((a.y || 0)+sa.height <= (b.y || 0)+.015 || (b.y || 0)+sb.height <= (a.y || 0)+.015) continue;
-    const bounds = (o: Ornament) => { const s=ORNAMENTS[o.asset], c=Math.abs(Math.cos(o.rotation)), n=Math.abs(Math.sin(o.rotation)); return [(s.width*c+s.depth*n)/2,(s.width*n+s.depth*c)/2]; };
-    const ra=bounds(a), rb=bounds(b);
-    if (Math.abs(a.x-b.x) < ra[0]+rb[0]-.015 && Math.abs(a.z-b.z) < ra[1]+rb[1]-.015) throw new Error('Dua ornamen saling bertabrakan. Geser salah satunya.');
+    const ba=ornamentFootprint(a),bb=ornamentFootprint(b);
+    if(ba.ymax<=bb.ymin+.015||bb.ymax<=ba.ymin+.015) continue;
+    const separate=[a.rotation,b.rotation].flatMap(r=>[[Math.cos(r),-Math.sin(r)],[Math.sin(r),Math.cos(r)]]).some(([x,z])=>{
+      const pa=ba.corners.map(p=>p[0]*x+p[1]*z),pb=bb.corners.map(p=>p[0]*x+p[1]*z);
+      return Math.max(...pa)<=Math.min(...pb)+.015||Math.max(...pb)<=Math.min(...pa)+.015;
+    });
+    if(!separate) throw new Error(`${ORNAMENTS[a.asset].label} (X ${a.x.toFixed(2)}, Z ${a.z.toFixed(2)}) bertabrakan dengan ${ORNAMENTS[b.asset].label} (X ${b.x.toFixed(2)}, Z ${b.z.toFixed(2)}). Geser salah satunya.`);
   }
   return items;
 }
@@ -206,4 +285,17 @@ export function updateOrnament(items: Ornament[], id: string, patch: Partial<Orn
     const dx=item.x-parent.x,dz=item.z-parent.z;
     return {...item,x:next.x+dx*c+dz*s,z:next.z-dx*s+dz*c,y:(item.y||0)+(next.y||0)-(parent.y||0),rotation:(item.rotation+angle+Math.PI*2)%(Math.PI*2)};
   });
+}
+
+export function moveOrnament(items: Ornament[], id: string, patch: Partial<Ornament>, rooms: number, desks: DeskLayout[], attach = false) {
+  const previous=items.find(item=>item.id===id); if(!previous) return items;
+  const next=snapOrnament({...previous,...patch},previous,attach);
+  return parseOrnaments(updateOrnament(items,id,next),rooms,desks);
+}
+
+export function moveDesk(desks: DeskLayout[], slot: number, patch: Partial<DeskLayout>, rooms: number, ornaments: Ornament[]) {
+  const previous=deskPosition(slot,desks);
+  const next=parseDesks([...desks.filter(d=>d.slot!==slot),{slot,x:previous.x,z:previous.z,rotation:previous.rotation,color:previous.color,...patch}],rooms);
+  parseOrnaments(ornaments,rooms,next);
+  return next;
 }

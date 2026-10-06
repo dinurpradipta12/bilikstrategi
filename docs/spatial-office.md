@@ -52,7 +52,7 @@ npx eslint components/spatial-office lib/spatial-office app/api/spatial-office a
 npm run build -- --webpack
 ```
 
-46 pengujian lulus (termasuk jadwal/shift malam, aktivitas sementara, kamar tidur/taman, meja bergerak, dan otorisasi aktivitas): timer/bubble, identitas, kontak keyboard, jalur sepuluh kursi, klaim yang bersamaan (row baru/lama), klaim bersamaan dengan editor, role admin, penolakan identitas palsu/origin asing, validasi ornamen, dan scene menggunakan GLB asli untuk perpindahan meja, posisi awal, serta tambah/geser/putar/hapus/batal dekorasi. Pemeriksaan skema live (read-only) mengonfirmasi kolom role dan filter revision PostgREST tersedia. Tidak ada klaim, denah, atau data presensi produksi yang diubah untuk pengujian.
+51 pengujian lulus (termasuk jadwal/shift malam, aktivitas sementara, kamar tidur/taman, meja bergerak, dan otorisasi aktivitas): timer/bubble, identitas, kontak keyboard, jalur sepuluh kursi, klaim yang bersamaan (row baru/lama), klaim bersamaan dengan editor, role admin, penolakan identitas palsu/origin asing, validasi ornamen, dan scene menggunakan GLB asli untuk perpindahan meja, posisi awal, serta tambah/geser/putar/hapus/batal dekorasi. Pemeriksaan skema live (read-only) mengonfirmasi kolom role dan filter revision PostgREST tersedia. Tidak ada klaim, denah, atau data presensi produksi yang diubah untuk pengujian.
 
 Build webpack, TypeScript, dan ESLint pada modul kantor lulus. Layout lama mempunyai dua peringatan lint `set-state-in-effect` pada pemeriksaan akses yang sudah ada; alur akses tidak diubah. Review browser HTTPS: tanpa overflow pada 1366 px; editor mobile 390 px berhasil menggeser meja 1 ke X=-4.50 dan menyimpan denah simulasi. Versi sebelumnya sudah menampilkan kamar tidur, karakter berbaring, langit malam, jam realtime dan neon. Bug gambar publik yang diarahkan ke login diperbaiki dengan static import. Simpan dengan akun produksi masih memerlukan sesi login; pengujian endpoint memakai fixture otorisasi, bukan menulis data tim produksi.
 
@@ -86,3 +86,11 @@ Referensi implementasi: [GLTFLoader](https://threejs.org/docs/pages/GLTFLoader.h
 - Posisi tidur dikalibrasi dari geometri setiap tubuh/rambut: badan bertumpu di atas selimut dan kepala pada bantal, tetap diam dengan zzz. Pengujian mencakup seluruh 64 kombinasi model dan rambut serta batas panjang ranjang.
 - Denah versi 3 memindahkan hanya rak/lampu bawaan yang belum diedit dari depan pintu privat; klaim, perubahan pengguna dan objek yang sudah dihapus tetap dipertahankan. Editor menolak ornamen baru yang menutup jalur pintu. Tidak membutuhkan SQL.
 - Neon memakai frame metal berketebalan dengan rim menyala dan running text transparan; tidak memakai latar putih.
+
+## Penyimpanan editor dan penempatan dinding
+
+- Drag dan kontrol posisi memakai validasi yang sama dengan server sebelum mengganti draft. Posisi bertabrakan ditolak tanpa merusak posisi valid sebelumnya; Simpan tetap dapat digunakan dan pesan menyebut objek serta koordinatnya.
+- Footprint memakai batas GLB sesungguhnya, termasuk origin lukisan/papan yang tidak simetris. Rotasi memakai pemeriksaan oriented bounds, sehingga objek tipis yang berdekatan tidak ditolak hanya karena kotak pembatasnya saling beririsan.
+- Semua ornamen dibatasi pada permukaan dalam ruangan saat digeser. Tombol Tempel ke dinding terdekat memutar dan menempatkan objek di sisi dalam; lukisan/papan otomatis menempel ketika dekat dinding. Pintu dan jalur tetap dilindungi.
+- Kegagalan jaringan menyisakan draft, dengan timeout 20 detik. Konflik versi menawarkan Muat denah terbaru, tanpa menimpa perubahan admin lain.
+- Pengujian mencakup snap empat arah terhadap geometri GLB asli, penolakan perpindahan invalid, save/read-back persistence, dan collision benda berotasi. Tidak ada perubahan SQL.
