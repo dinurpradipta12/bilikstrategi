@@ -438,6 +438,22 @@ export function parseDesks(value: unknown, rooms: number): DeskLayout[] {
   }
   return desks;
 }
+export function addClaimableDeskLayout(area:'workspace'|'manager'|'lead', room:number, desks:DeskLayout[], claims:Record<string,number>, rooms:number, ornaments:Ornament[], existing:Ornament[]=[]) {
+  const roomStart=room*DESKS_PER_ROOM,[start,end]=area==='manager'?[roomStart+10,roomStart+11]:area==='lead'?[roomStart+11,roomStart+12]:[roomStart,roomStart+10];
+  const owned=new Set(Object.values(claims));
+  const slot=Array.from({length:end-start},(_,i)=>start+i).find(candidate=>!owned.has(candidate));
+  if(slot===undefined) throw new Error('Tidak ada meja kosong di area ini. Pilih area lain atau bebaskan meja terlebih dahulu.');
+  const [xmin,xmax,zmin,zmax]=deskBounds(slot),rotation=deskPosition(slot,desks).rotation;
+  for(let z=zmin+.5;z<=zmax-.5;z+=.5) for(let x=xmin+.5;x<=xmax-.5;x+=.5) {
+    const candidate:DeskLayout={slot,x,z,rotation,removed:false};
+    try {
+      const next=parseDesks([...desks.filter(desk=>desk.slot!==slot),candidate],rooms);
+      parseOrnaments(ornaments,rooms,next,existing);
+      return {slot,desks:next};
+    } catch { /* Search the next clear spot and keep all walkways open. */ }
+  }
+  throw new Error('Tidak ada posisi kosong untuk meja ini. Geser meja atau ornamen lain, lalu coba lagi.');
+}
 export function setActivity(space: OfficeSpace, viewerId: string, zone: unknown, now = Date.now()): OfficeSpace {
   if (!Object.hasOwn(space.claims, viewerId)) throw new Error('Anda bukan anggota kantor ini.');
   if (!['auto', 'desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(String(zone))) throw new Error('Aktivitas tidak valid.');

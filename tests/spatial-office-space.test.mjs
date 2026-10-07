@@ -89,6 +89,14 @@ test('desktop objects can be placed on a workstation surface and cannot float ab
   assert.throws(()=>space.parseOrnaments([{...mug,x:desk.x+2}],1,[]),/meja|lorong/);
 });
 
+test('claimable desk preset uses an unowned workspace slot and can be claimed after placement',()=>{
+  const initial=space.normalizeSpace(null,members),placed=space.addClaimableDeskLayout('workspace',0,initial.desks,initial.claims,1,initial.ornaments,initial.ornaments);
+  assert.equal(Object.values(initial.claims).includes(placed.slot),false);
+  assert.equal(deskPosition(placed.slot,placed.desks).removed,false);
+  const claimed=space.claimDesk({...initial,desks:placed.desks},'1',placed.slot,3);
+  assert.equal(claimed.claims['1'],placed.slot);
+});
+
 test('invalid movement cannot replace a valid draft; dragging clamps to the current room', () => {
   const initial=space.DEFAULT_ORNAMENTS.map(o=>({...o}));
   assert.throws(()=>space.moveOrnament(initial,'shelf-back',{x:0,z:0},1,[]),/Rak buku.*meja/);

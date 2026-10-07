@@ -31,6 +31,7 @@ export default function OfficeObjectMenu({ target, title, slot, owner, viewerId,
       <button type="button" disabled={!canEdit||locked||slot===null||hasDraft} title={hasDraft?'Simpan denah terlebih dahulu.':canEdit?'Set meja untuk tim':'Khusus admin'} aria-expanded={pane==='assign'} onClick={()=>setPane(pane==='assign'?null:'assign')}><UsersRound size={19}/><span>Set untuk tim</span></button>
       <button type="button" className="is-danger" disabled={!canEdit||locked} title={canEdit?'Hapus objek':'Khusus admin'} aria-expanded={pane==='delete'} onClick={()=>setPane(pane==='delete'?null:'delete')}><Trash2 size={19}/><span>Hapus objek</span></button>
     </div>
+    {slot===null&&title==='Meja kantor'&&<p>Ini meja dekorasi, belum memiliki kepemilikan. Tambahkan “set meja klaim” lewat Edit ruangan untuk membuat meja yang bisa diklaim.</p>}
     {pane==='assign' && <div className="office-object-form"><label>Anggota tim<select aria-label="Anggota penerima meja" value={memberId} onChange={e=>setMemberId(e.target.value)} disabled={busy}><option value="">Pilih anggota…</option>{members.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
       {owner&&memberId&&owner.id!==memberId&&<p>Meja {owner.name} akan ditukar dengan meja anggota pilihan.</p>}
       <button type="button" disabled={!memberId||busy} onClick={()=>onAssign(memberId)}>{busy?'Menyimpan…':'Tetapkan meja'}</button></div>}

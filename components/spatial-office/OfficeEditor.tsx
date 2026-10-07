@@ -1,14 +1,14 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Box, Plus, Search } from 'lucide-react';
-import { DESK_SURFACE_Y, OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, moveOrnament, moveDesk, snapOrnament, isWallOrnament, type Ornament } from '@/lib/spatial-office/space';
+import { addClaimableDeskLayout, DESK_SURFACE_Y, OBJECT_COLORS, ORNAMENTS, ornamentError, parseOrnaments, parseDesks, moveOrnament, moveDesk, snapOrnament, isWallOrnament, type Ornament } from '@/lib/spatial-office/space';
 
 import { DESKS_PER_ROOM, deskBounds, deskLabel, deskPosition, type DeskLayout } from '@/lib/spatial-office/model';
 
-export default function OfficeEditor({ library, onLibraryChange, desks, baselineDesks, onDesksChange, items, baselineItems, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
+export default function OfficeEditor({ library, onLibraryChange, desks, baselineDesks, onDesksChange, items, baselineItems, claims, room, rooms, selected, onSelect, onChange, onSave, onCancel, onReload, conflict, saving, error }: {
   library:boolean; onLibraryChange:(open:boolean)=>void;
   desks: DeskLayout[]; baselineDesks:DeskLayout[]; onDesksChange: (desks: DeskLayout[]) => void;
-  items: Ornament[]; baselineItems:Ornament[]; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
+  items: Ornament[]; baselineItems:Ornament[]; claims:Record<string,number>; room: number; rooms: number; selected: string; onSelect: (id: string) => void; onChange: (items: Ornament[]) => void;
   onSave: () => void; onCancel: () => void; onReload: () => void; conflict: boolean; saving: boolean; error: string;
 }) {
   const [search, setSearch] = useState('');
@@ -47,6 +47,13 @@ export default function OfficeEditor({ library, onLibraryChange, desks, baseline
     }
     setMessage('Ruangan ini belum memiliki tempat kosong yang cukup. Pilih ruangan lain atau geser objek dahulu.');
   };
+  const addClaimableDesk = () => {
+    if(!['workspace','manager','lead'].includes(placement)) return;
+    try {
+      const result=addClaimableDeskLayout(placement as 'workspace'|'manager'|'lead',room,desks,claims,rooms,items,legacyItems);
+      onDesksChange(result.desks);onSelect(`desk:${result.slot}`);setMessage('');onLibraryChange(false);
+    } catch(failure) { setMessage(failure instanceof Error?failure.message:'Meja klaim belum dapat ditambahkan.'); }
+  };
   const colorControls = (color: string | undefined, change: (color: string) => void) => <div className="office-color-control"><label>Warna objek<input aria-label="Warna objek" type="color" value={color && color !== 'original' ? color : '#ffffff'} onChange={event=>change(event.target.value)} /></label><div>{OBJECT_COLORS.map(c=><button type="button" key={c} title={c === 'original' ? 'Warna asli' : c} aria-label={c === 'original' ? 'Warna asli' : `Warna ${c}`} aria-pressed={(color || 'original')===c} style={{background:c === 'original' ? '#f1eee4' : c}} onClick={()=>change(c)}>{c === 'original' ? 'Asli' : ''}</button>)}</div></div>;
   return <aside className="office-editor-panel" aria-label="Editor ruangan admin">
     <div className="office-panel-title"><h3>Atur kantor <span>ADMIN</span></h3><button type="button" onClick={onCancel} disabled={saving} aria-label="Tutup editor ornamen">×</button></div>
@@ -54,6 +61,7 @@ export default function OfficeEditor({ library, onLibraryChange, desks, baseline
     <button className="office-open-library" type="button" onClick={()=>onLibraryChange(!library)} aria-expanded={library}><Plus size={16}/> Tambah objek <span>{Object.keys(ORNAMENTS).length} aset</span></button>
     {library && <section className="office-object-library" aria-label="Library objek">
       <label>Ruangan penempatan<select value={placement} onChange={event=>setPlacement(event.target.value)}><option value="workspace">Ruang kerja</option><option value="desk">Di atas meja kerja</option><option value="manager">Manager</option><option value="lead">Project lead</option><option value="lounge">Lounge</option><option value="pantry">Pantry</option><option value="garden">Taman</option><option value="meeting">Meeting room</option></select></label>
+      {['workspace','manager','lead'].includes(placement)&&<><button type="button" className="office-open-library" disabled={saving} onClick={addClaimableDesk}><Box size={18}/><span>Tambahkan set meja klaim</span></button><p>Meja, kursi, laptop, keyboard, dan cangkir siap dipakai. Bisa diklaim setelah denah disimpan.</p></>}
       <label className="office-library-search"><Search size={14}/><input type="search" aria-label="Cari objek" placeholder="Cari objek…" value={search} onChange={event=>setSearch(event.target.value)}/></label>
       <label>Kategori<select value={category} onChange={event=>setCategory(event.target.value)}>{['Semua',...new Set(Object.values(ORNAMENTS).map(o=>o.category))].map(c=><option key={c}>{c}</option>)}</select></label>
       <div className="office-library-grid">{Object.entries(ORNAMENTS).filter(([,a])=>(category==='Semua'||a.category===category)&&a.label.toLowerCase().includes(search.toLowerCase())).map(([key,a])=><button type="button" key={key} disabled={saving || items.length >= 1200} onClick={()=>add(key as Ornament['asset'])}><Box size={22}/><strong>{a.label}</strong><small>{a.width} × {a.depth} m</small></button>)}</div>
