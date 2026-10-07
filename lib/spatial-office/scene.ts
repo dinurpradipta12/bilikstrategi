@@ -62,7 +62,7 @@ export class OfficeScene {
   private receivedRoster = false;
   private roomLabels: { element: HTMLElement; position: THREE.Vector3 }[] = [];
   private doors: { group: THREE.Group; center: THREE.Vector3; rotate: boolean; travel: number; hold: number }[] = [];
-  private wallPanels: { mesh: THREE.Mesh; x: number; z: number; length: number; rotate: boolean; glazed: boolean; cutouts: THREE.Mesh[]; signature: string }[] = [];
+  private wallPanels: { mesh: THREE.Mesh; x: number; z: number; length: number; rotate: boolean; glazed: boolean; cutouts: THREE.Mesh[]; signature: string; posts: { mesh: THREE.Mesh; along: number; cutouts: THREE.Mesh[]; signature: string }[] }[] = [];
   private current: { member: OfficeMember; slot: number }[] = [];
   private raf = 0;
   private lastFrame = 0;
@@ -230,7 +230,7 @@ export class OfficeScene {
       piece(1.9,.085,.15,0,.045,0,'#263f37'); piece(1.9,.085,.15,0,1.455,0,'#263f37');
       piece(.085,1.5,.15,-.9075,.75,0,'#263f37'); piece(.085,1.5,.15,.9075,.75,0,'#263f37');
       piece(.055,1.29,.12,0,.75,0,'#526f62');
-      piece(.82,1.27,.035,-.44,.75,.025,'#b9e4e5',.34);piece(.82,1.27,.035,.44,.75,.025,'#b9e4e5',.34);
+      piece(.82,1.27,.035,-.44,.75,.025,'#d9f2f1',.2);piece(.82,1.27,.035,.44,.75,.025,'#d9f2f1',.2);
       group.position.set(x,y,z);group.rotation.y=rotation;parent.add(group);return group;
     }
     const model = this.templates.get(name)!.clone(true);
@@ -258,10 +258,14 @@ export class OfficeScene {
       mesh.userData.architecture = glazed ? 'glass' : 'wall'; return mesh;
     };
     localBox(0, 2.78, 0, length, .10, .12, frame);
-    for (const side of [-1, 1]) localBox(side * length / 2, 1.4, 0, .07, 2.8, .12, frame);
+    const posts: { mesh: THREE.Mesh; along: number; cutouts: THREE.Mesh[]; signature: string }[] = [];
+    for (const side of [-1, 1]) {
+      const along = side * length / 2, mesh = localBox(along, 1.4, 0, .07, 2.8, .12, frame);
+      if (!door) posts.push({ mesh, along, cutouts: [], signature: '' });
+    }
     if (!door) {
       const mesh = panel(0, 1.37, length - .05, 2.68);
-      this.wallPanels.push({ mesh, x, z, length: length - .05, rotate, glazed, cutouts: [], signature: '' });
+      this.wallPanels.push({ mesh, x, z, length: length - .05, rotate, glazed, cutouts: [], signature: '', posts });
       localBox(0, .08, 0, length, .16, .12, frame); return;
     }
 
@@ -488,7 +492,8 @@ export class OfficeScene {
         const aligned = wall.rotate ? angle > .9 : angle < .1;
         const normalDistance = wall.rotate ? Math.abs(item.x - wall.x) : Math.abs(item.z - wall.z);
         const along = wall.rotate ? item.z - wall.z : item.x - wall.x;
-        return aligned && normalDistance < .2 && Math.abs(along) < wall.length / 2 - .96;
+        const halfWidth = .95 * (item.scale?.[0] || 1);
+        return aligned && normalDistance < .2 && along + halfWidth > -wall.length / 2 && along - halfWidth < wall.length / 2;
       });
       const signature = matching.map(item => [item.id, item.x, item.y || 0, item.z, item.rotation, ...(item.scale || [1, 1, 1])].join(':')).sort().join('|');
       if (signature === wall.signature) continue;
@@ -500,7 +505,18 @@ export class OfficeScene {
       }
       wall.cutouts = [];
       wall.mesh.visible = matching.length === 0;
-      if (!matching.length) continue;
+      if (!matching.length) {
+        for (const post of wall.posts) {
+          post.signature = ''; post.mesh.visible = true;
+          for (const mesh of post.cutouts) {
+            this.scene.remove(mesh); mesh.geometry.dispose(); this.geometries.delete(mesh.geometry);
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            for (const material of materials) { material.dispose(); this.materials.delete(material); }
+          }
+          post.cutouts = [];
+        }
+        continue;
+      }
 
       // Replace the solid wall with a grid of wall panels around the custom windows.
       // That leaves an actual opening behind each transparent pane instead of the
@@ -508,8 +524,8 @@ export class OfficeScene {
       const alongOffset = (item: Ornament) => wall.rotate ? item.z - wall.z : item.x - wall.x;
       const left = -wall.length / 2, right = wall.length / 2, bottom = .03, top = 2.71;
       const openings = matching.map(item => ({
-        left: alongOffset(item) - .95 * (item.scale?.[0] || 1) - .025,
-        right: alongOffset(item) + .95 * (item.scale?.[0] || 1) + .025,
+        left: Math.max(left, alongOffset(item) - .95 * (item.scale?.[0] || 1) - .025),
+        right: Math.min(right, alongOffset(item) + .95 * (item.scale?.[0] || 1) + .025),
         bottom: Math.max(bottom, (item.y || 0) - .025),
         top: Math.min(top, (item.y || 0) + 1.5 * (item.scale?.[1] || 1) + .025),
       }));
@@ -527,6 +543,43 @@ export class OfficeScene {
         mesh.position.set(wall.x + (wall.rotate ? 0 : cx), (y1 + y2) / 2, wall.z + (wall.rotate ? cx : 0));
         mesh.userData.architecture = wall.glazed ? 'glass' : 'wall';
         this.scene.add(mesh); this.track(mesh); wall.cutouts.push(mesh);
+      }
+      for (const post of wall.posts) {
+        const postWindows = windows.filter(item => {
+          const angle = Math.abs(Math.sin(item.rotation));
+          const aligned = wall.rotate ? angle > .9 : angle < .1;
+          const normalDistance = wall.rotate ? Math.abs(item.x - wall.x) : Math.abs(item.z - wall.z);
+          const along = alongOffset(item), halfWidth = .95 * (item.scale?.[0] || 1) + .025;
+          return aligned && normalDistance < .2 && Math.abs(along - post.along) < halfWidth;
+        });
+        const postSignature = postWindows.map(item => [item.id, item.y || 0, item.scale?.[1] || 1].join(':')).sort().join('|');
+        if (postSignature === post.signature) continue;
+        post.signature = postSignature;
+        for (const mesh of post.cutouts) {
+          this.scene.remove(mesh); mesh.geometry.dispose(); this.geometries.delete(mesh.geometry);
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const material of materials) { material.dispose(); this.materials.delete(material); }
+        }
+        post.cutouts = [];
+        post.mesh.visible = postWindows.length === 0;
+        if (!postWindows.length) continue;
+        const ranges = postWindows.map(item => [Math.max(0, (item.y || 0) - .025), Math.min(2.8, (item.y || 0) + 1.5 * (item.scale?.[1] || 1) + .025)] as const).sort((a, b) => a[0] - b[0]);
+        const merged: [number, number][] = [];
+        for (const range of ranges) {
+          const previous = merged.at(-1);
+          if (previous && range[0] <= previous[1]) previous[1] = Math.max(previous[1], range[1]);
+          else merged.push([range[0], range[1]]);
+        }
+        const frameSegments: [number, number][] = [];
+        let cursor = 0;
+        for (const [start, end] of merged) { if (start > cursor) frameSegments.push([cursor, start]); cursor = Math.max(cursor, end); }
+        if (cursor < 2.8) frameSegments.push([cursor, 2.8]);
+        for (const [start, end] of frameSegments) {
+          if (end - start < .01) continue;
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(wall.rotate ? .07 : .12, end - start, wall.rotate ? .12 : .07), new THREE.MeshStandardMaterial({ color: wall.glazed ? '#567267' : '#a39a87', roughness: .7 }));
+          mesh.position.set(wall.x + (wall.rotate ? 0 : post.along), (start + end) / 2, wall.z + (wall.rotate ? post.along : 0));
+          this.scene.add(mesh); this.track(mesh); post.cutouts.push(mesh);
+        }
       }
     }
   }

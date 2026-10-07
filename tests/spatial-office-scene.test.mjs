@@ -107,8 +107,9 @@ test('ornament draft move/rotate/add/remove/cancel reconcile without mutating te
 });
 test('custom window library item renders without requiring a missing GLB',()=>{
   const engine=office(),window=engine.asset('window',-3,-6,.65,Math.PI/2);
-  let meshes=0;window.traverse(object=>{if(object.isMesh)meshes++;});
+  let meshes=0;const panes=[];window.traverse(object=>{if(object.isMesh){meshes++;if(object.material.transparent)panes.push(object.material.opacity);}});
   assert.ok(meshes>=7);assert.equal(window.position.y,.65);assert.equal(window.rotation.y,Math.PI/2);
+  assert.deepEqual(panes,[.2,.2]);
 });
 test('custom window creates an opening through the wall so the outside can be seen',()=>{
   const engine=office();
@@ -121,6 +122,18 @@ test('custom window creates an opening through the wall so the outside can be se
   engine.setOrnaments([],0,true,'');
   assert.equal(wall.mesh.visible,true);
   assert.equal(wall.cutouts.length,0);
+});
+test('custom window opens across joined wall panels and removes the seam through the glass',()=>{
+  const engine=office();
+  const panels=engine.wallPanels.filter(panel=>!panel.rotate&&panel.z===6&&[-1.5,1.5].includes(panel.x));
+  assert.equal(panels.length,2);
+  engine.setOrnaments([{id:'seam-window',asset:'window',x:0,y:.65,z:5.925,rotation:0,room:0}],0,false,'');
+  assert.ok(panels.every(panel=>!panel.mesh.visible&&panel.cutouts.length>0));
+  const seamPosts=panels.map(panel=>panel.posts.find(post=>post.along===-panel.x));
+  assert.ok(seamPosts.every(post=>post&&!post.mesh.visible&&post.cutouts.length===2));
+  engine.setOrnaments([],0,false,'');
+  assert.ok(panels.every(panel=>panel.mesh.visible&&panel.cutouts.length===0));
+  assert.ok(seamPosts.every(post=>post.mesh.visible&&post.cutouts.length===0));
 });
 test('workspace radio is rendered as a selectable procedural object',()=>{
   const engine=office(),radio=engine.decorations.get('workspace-radio');
