@@ -253,8 +253,9 @@ test('paused avatars use separate sofa seats and sit at the cushion height',()=>
 
   const desk=office();animation(desk);desk.setMembers([{member:alice,slot:0}]);desk.animateFrame(50);
   const worker=desk.occupants.get('1');worker.rig.model.getObjectByName('Hips').getWorldPosition(hips);
-  assert.equal(worker.rig.root.position.y,.14);assert.ok(hips.y>.55&&hips.y<.6,`desk hips should rest at chair height, received ${hips.y}`);
-  assert.equal(worker.rig.bones.upperArms[0].rotation.z,-.12);assert.equal(worker.rig.bones.upperArms[1].rotation.z,.12);
+  assert.equal(worker.rig.root.position.y,.22);assert.ok(hips.y>.63&&hips.y<.65,`desk hips should sit above the chair cushion, received ${hips.y}`);
+  assert.equal(worker.rig.bones.upperArms[0].rotation.z,-.7);assert.equal(worker.rig.bones.upperArms[1].rotation.z,.7);
+  assert.equal(worker.rig.bones.lowerArms[0].rotation.z,0);assert.equal(worker.rig.bones.lowerArms[1].rotation.z,0);
 
   const shared=office();shared.setMembers([{member:{...alice,id:'0',status:'paused'},slot:0},{member:{...alice,id:'1',status:'paused'},slot:1}]);
   assert.equal(shared.loungeSeat(0).item.id,shared.loungeSeat(1).item.id);

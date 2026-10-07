@@ -90,7 +90,9 @@ export function deskPosition(slot: number, layout: DeskLayout[] = []) {
   const custom = layout.find(d => d.slot === slot);
   const x = custom?.x ?? (index>=10?(index===10?-3:3):(Math.floor(index / 2) - 2) * 1.4), z = custom?.z ?? (index>=10?(index===11?-10.5:-9):side * .375);
   const rotation = custom?.rotation ?? (index>=10?0:side === -1 ? 0 : Math.PI);
-  return { x, z, rotation, removed:custom?.removed===true, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .78, seatZ: z - Math.cos(rotation) * .78, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
+  // The chair seat should finish at the desk edge. A .78m offset left too
+  // much gap between the keyboard and the avatar's hands.
+  return { x, z, rotation, removed:custom?.removed===true, color: custom?.color || 'original', seatX: x - Math.sin(rotation) * .62, seatZ: z - Math.cos(rotation) * .62, aisleX: x - Math.sin(rotation) * 1.825, aisleZ: z - Math.cos(rotation) * 1.825 };
 }
 export function officePath(slot: number, leaving = false): Array<[number, number]> {
   const path: Array<[number, number]> = [...zonePath(slot,'exit').reverse(),...zonePath(slot,'desk').slice(1)];

@@ -313,7 +313,7 @@ export class OfficeScene {
       const p = deskPosition(slot), group = new THREE.Group();
       group.position.set(p.x, 0, p.z); group.rotation.y = p.rotation; this.scene.add(group); group.userData.ornamentId = `desk:${slot}`; this.desks.set(slot, group);
       const table = this.asset('office_desk', 0, 0, 0, 0, group); table.userData.tableSurface = true;
-      this.asset('office_swivel_chair', 0, -0.78, 0, 0, group);
+      this.asset('office_swivel_chair', 0, -0.62, 0, 0, group);
       this.asset('laptop', 0, 0.12, 0.78, Math.PI, group);
       this.asset('keyboard', 0, -0.27, 0.78, Math.PI, group);
       this.asset('coffee_mug', -0.48, 0.04, 0.78, 0, group);
@@ -589,7 +589,7 @@ export class OfficeScene {
     const item=this.seatItem(slot,zone);
     if(!item) {
       const destination=zonePosition(slot,zone,this.deskLayout);
-      return zone==='desk'?{...destination,y:.14}:destination;
+      return zone==='desk'?{...destination,y:.22}:destination;
     }
     const i=slot%DESKS_PER_ROOM,lounge=this.loungeSeat(slot),loungeOffset=zone==='lounge'?lounge?.offset:0;
     // The sofa GLB's cushion is forward of its backrest after the asset's
@@ -794,8 +794,8 @@ export class OfficeScene {
       }
       if (working) {
         const tap = this.moving ? Math.sin(t * 9) * .08 : 0;
-        rig.bones.upperArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.92 + (index ? tap : -tap);arm.rotation.z=index?.12:-.12;} });
-        rig.bones.lowerArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.5 + (index ? -tap : tap);arm.rotation.z=index?-.08:.08;} });
+        rig.bones.upperArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.95 + (index ? tap : -tap);arm.rotation.z=index?.7:-.7;} });
+        rig.bones.lowerArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.1 + (index ? -tap : tap);arm.rotation.z=0;} });
         if (rig.bones.head) rig.bones.head.rotation.x = .08 + (this.moving ? Math.sin(t * 1.7) * .025 : 0);
       } else if(seated) {
         rig.bones.upperArms.forEach((arm,index)=>{if(arm){arm.rotation.x=-.3;arm.rotation.z=index?.65:-.65;}});
