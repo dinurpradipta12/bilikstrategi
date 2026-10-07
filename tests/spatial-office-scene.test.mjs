@@ -36,7 +36,7 @@ for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.O
 }
 function office() {
   const engine = Object.create(OfficeScene.prototype);
-  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
+  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], wallPanels: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
   engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,[]).ornaments,0,false,''); return engine;
 }
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
@@ -109,6 +109,18 @@ test('custom window library item renders without requiring a missing GLB',()=>{
   const engine=office(),window=engine.asset('window',-3,-6,.65,Math.PI/2);
   let meshes=0;window.traverse(object=>{if(object.isMesh)meshes++;});
   assert.ok(meshes>=7);assert.equal(window.position.y,.65);assert.equal(window.rotation.y,Math.PI/2);
+});
+test('custom window creates an opening through the wall so the outside can be seen',()=>{
+  const engine=office();
+  const wall=engine.wallPanels.find(panel=>panel.rotate&&panel.x===-6&&panel.z===0);
+  assert.ok(wall);
+  engine.setOrnaments([{id:'west-window',asset:'window',x:-5.925,y:.65,z:0,rotation:Math.PI/2,room:0}],0,true,'west-window');
+  assert.equal(wall.mesh.visible,false);
+  assert.ok(wall.cutouts.length>=4);
+  assert.equal(wall.cutouts.some(mesh=>Math.abs(mesh.position.z)<.9&&mesh.position.y>1&&mesh.position.y<2),false);
+  engine.setOrnaments([],0,true,'');
+  assert.equal(wall.mesh.visible,true);
+  assert.equal(wall.cutouts.length,0);
 });
 test('workspace radio is rendered as a selectable procedural object',()=>{
   const engine=office(),radio=engine.decorations.get('workspace-radio');

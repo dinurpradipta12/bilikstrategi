@@ -62,6 +62,7 @@ export class OfficeScene {
   private receivedRoster = false;
   private roomLabels: { element: HTMLElement; position: THREE.Vector3 }[] = [];
   private doors: { group: THREE.Group; center: THREE.Vector3; rotate: boolean; travel: number; hold: number }[] = [];
+  private wallPanels: { mesh: THREE.Mesh; x: number; z: number; length: number; rotate: boolean; glazed: boolean; cutouts: THREE.Mesh[]; signature: string }[] = [];
   private current: { member: OfficeMember; slot: number }[] = [];
   private raf = 0;
   private lastFrame = 0;
@@ -258,7 +259,11 @@ export class OfficeScene {
     };
     localBox(0, 2.78, 0, length, .10, .12, frame);
     for (const side of [-1, 1]) localBox(side * length / 2, 1.4, 0, .07, 2.8, .12, frame);
-    if (!door) { panel(0, 1.37, length - .05, 2.68); localBox(0, .08, 0, length, .16, .12, frame); return; }
+    if (!door) {
+      const mesh = panel(0, 1.37, length - .05, 2.68);
+      this.wallPanels.push({ mesh, x, z, length: length - .05, rotate, glazed, cutouts: [], signature: '' });
+      localBox(0, .08, 0, length, .16, .12, frame); return;
+    }
 
     // A human-sized opening with jambs, lintel and a separate sliding leaf.
     // The leaf clears the entire opening; the wall above it remains stationary.
@@ -455,6 +460,7 @@ export class OfficeScene {
     this.ornaments = items; this.room = room; this.updateLights(); this.setDeskLayout(this.deskLayout); this.editMode = editing; this.selectedOrnament = selected;
     if (!editing && this.dragging) { this.dragging = null; this.controls.enabled = true; }
     if (!this.loaded) return;
+    this.updateWindowOpenings(items);
     const visible = items.filter(item => item.room === room), ids = new Set(visible.map(item => item.id));
     for (const [id, group] of this.decorations) if (!ids.has(id)) { this.releaseTint(group); this.scene.remove(group); this.decorations.delete(id); }
     let addedSelection=false;
@@ -473,6 +479,56 @@ export class OfficeScene {
       this.outline.visible = true; this.outline.setFromObject(object);
       this.outline.material.color.set((!selected.startsWith('desk:') && ornamentError(items.find(item => item.id === selected)!, this.deskLayout)) ? '#db6c60' : '#d49745');
     } else if (this.outline) this.outline.visible = false;
+  }
+  private updateWindowOpenings(items: Ornament[]) {
+    const windows = items.filter(item => item.asset === 'window');
+    for (const wall of this.wallPanels) {
+      const matching = windows.filter(item => {
+        const angle = Math.abs(Math.sin(item.rotation));
+        const aligned = wall.rotate ? angle > .9 : angle < .1;
+        const normalDistance = wall.rotate ? Math.abs(item.x - wall.x) : Math.abs(item.z - wall.z);
+        const along = wall.rotate ? item.z - wall.z : item.x - wall.x;
+        return aligned && normalDistance < .2 && Math.abs(along) < wall.length / 2 - .96;
+      });
+      const signature = matching.map(item => [item.id, item.x, item.y || 0, item.z, item.rotation, ...(item.scale || [1, 1, 1])].join(':')).sort().join('|');
+      if (signature === wall.signature) continue;
+      wall.signature = signature;
+      for (const mesh of wall.cutouts) {
+        this.scene.remove(mesh); mesh.geometry.dispose(); this.geometries.delete(mesh.geometry);
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const material of materials) { material.dispose(); this.materials.delete(material); }
+      }
+      wall.cutouts = [];
+      wall.mesh.visible = matching.length === 0;
+      if (!matching.length) continue;
+
+      // Replace the solid wall with a grid of wall panels around the custom windows.
+      // That leaves an actual opening behind each transparent pane instead of the
+      // original wall showing through the glass.
+      const alongOffset = (item: Ornament) => wall.rotate ? item.z - wall.z : item.x - wall.x;
+      const left = -wall.length / 2, right = wall.length / 2, bottom = .03, top = 2.71;
+      const openings = matching.map(item => ({
+        left: alongOffset(item) - .95 * (item.scale?.[0] || 1) - .025,
+        right: alongOffset(item) + .95 * (item.scale?.[0] || 1) + .025,
+        bottom: Math.max(bottom, (item.y || 0) - .025),
+        top: Math.min(top, (item.y || 0) + 1.5 * (item.scale?.[1] || 1) + .025),
+      }));
+      const xs = [...new Set([left, right, ...openings.flatMap(opening => [Math.max(left, opening.left), Math.min(right, opening.right)])])].sort((a, b) => a - b);
+      const ys = [...new Set([bottom, top, ...openings.flatMap(opening => [opening.bottom, opening.top])])].sort((a, b) => a - b);
+      for (let ix = 0; ix < xs.length - 1; ix++) for (let iy = 0; iy < ys.length - 1; iy++) {
+        const x1 = xs[ix], x2 = xs[ix + 1], y1 = ys[iy], y2 = ys[iy + 1];
+        if (x2 - x1 < .005 || y2 - y1 < .005) continue;
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        if (openings.some(opening => cx > opening.left && cx < opening.right && cy > opening.bottom && cy < opening.top)) continue;
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(wall.rotate ? .075 : x2 - x1, y2 - y1, wall.rotate ? x2 - x1 : .075),
+          new THREE.MeshStandardMaterial({ color: wall.glazed ? '#b8ddd7' : '#e6ddc9', roughness: .7, transparent: wall.glazed, opacity: wall.glazed ? .19 : 1, depthWrite: !wall.glazed }),
+        );
+        mesh.position.set(wall.x + (wall.rotate ? 0 : cx), (y1 + y2) / 2, wall.z + (wall.rotate ? cx : 0));
+        mesh.userData.architecture = wall.glazed ? 'glass' : 'wall';
+        this.scene.add(mesh); this.track(mesh); wall.cutouts.push(mesh);
+      }
+    }
   }
   private floorPoint(event: PointerEvent, height=0) {
     const rect = this.renderer.domElement.getBoundingClientRect();
