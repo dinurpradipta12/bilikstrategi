@@ -10,7 +10,7 @@ import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROO
 
 const CHARACTERS = [...AVATAR_MODELS];
 const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine','team_radio'].includes(key))])];
-type CharacterBones = { head?: THREE.Bone; upperArms: Array<THREE.Bone | undefined>; lowerArms: Array<THREE.Bone | undefined>; upperLegs: Array<THREE.Bone | undefined>; lowerLegs: Array<THREE.Bone | undefined> };
+type CharacterBones = { hips?: THREE.Bone; spine?: THREE.Bone; head?: THREE.Bone; upperArms: Array<THREE.Bone | undefined>; lowerArms: Array<THREE.Bone | undefined>; upperLegs: Array<THREE.Bone | undefined>; lowerLegs: Array<THREE.Bone | undefined> };
 type Rig = { root: THREE.Group; model: THREE.Group; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; action: string; bones: CharacterBones; mug: THREE.Group };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
@@ -515,6 +515,8 @@ export class OfficeScene {
     mug.traverse(child => { child.userData.sharedTemplate = true; });
     const rig: Rig = {
       root, model, mixer, actions, action: '', mug, bones: {
+        hips: model.getObjectByName('Hips') as THREE.Bone,
+        spine: model.getObjectByName('Spine') as THREE.Bone,
         head,
         upperArms: [model.getObjectByName('UpperArm_L') as THREE.Bone, model.getObjectByName('UpperArm_R') as THREE.Bone],
         lowerArms: [model.getObjectByName('LowerArm_L') as THREE.Bone, model.getObjectByName('LowerArm_R') as THREE.Bone],
@@ -557,7 +559,10 @@ export class OfficeScene {
       const used=occupied.get(item.id)||new Set<number>(),side=used.has(0)?1:0;
       used.add(side);occupied.set(item.id,used);assignments.set(entry.slot,{item,side});
     }
-    return assignments.get(slot);
+    const placement=assignments.get(slot);
+    if(!placement) return undefined;
+    const shared=[...assignments.values()].filter(seat=>seat.item.id===placement.item.id).length>1;
+    return {...placement,offset:shared?(placement.side?.32:-.32):0};
   }
 
   private seatItem(slot:number,zone:OfficeZone) {
@@ -578,12 +583,12 @@ export class OfficeScene {
     const item=this.seatItem(slot,zone);
     if(!item) {
       const destination=zonePosition(slot,zone,this.deskLayout);
-      return zone==='desk'?{...destination,y:.13}:destination;
+      return zone==='desk'?{...destination,y:.18}:destination;
     }
-    const i=slot%DESKS_PER_ROOM,loungeSide=zone==='lounge'?this.loungeSeat(slot)?.side:i%2;
-    const dx=zone==='lounge'?(loungeSide? .35:-.35):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.08:0;
+    const i=slot%DESKS_PER_ROOM,loungeOffset=zone==='lounge'?this.loungeSeat(slot)?.offset:0;
+    const dx=zone==='lounge'?(loungeOffset||0):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?-.04:0;
     const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
-    const seatLift=zone==='lounge'?.14:zone==='garden'||zone==='meeting'?.09:0;
+    const seatLift=zone==='lounge'?.2:zone==='garden'||zone==='meeting'?.14:0;
     return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation,y:(item.y||0)+seatLift};
   }
   private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot):[number,number][]|null {
@@ -771,14 +776,20 @@ export class OfficeScene {
       this.playAction(rig, settled ? 'Idle' : 'Walk');
       rig.mixer.update(this.moving ? dt : 0);
       if (seated) {
-        rig.bones.upperLegs.forEach(leg => { if (leg) leg.rotation.x = -1.18; });
-        rig.bones.lowerLegs.forEach(leg => { if (leg) leg.rotation.x = 1.3; });
+        if(rig.bones.hips) rig.bones.hips.rotation.x=.28;
+        if(rig.bones.spine) rig.bones.spine.rotation.x=-.24;
+        rig.bones.upperLegs.forEach(leg => { if (leg) leg.rotation.x = -1.46; });
+        rig.bones.lowerLegs.forEach(leg => { if (leg) leg.rotation.x = 1.4; });
       }
       if (working) {
         const tap = this.moving ? Math.sin(t * 9) * .08 : 0;
-        rig.bones.upperArms.forEach((arm, index) => { if (arm) arm.rotation.x = -.92 + (index ? tap : -tap); });
-        rig.bones.lowerArms.forEach((arm, index) => { if (arm) arm.rotation.x = -.5 + (index ? -tap : tap); });
+        rig.bones.upperArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.92 + (index ? tap : -tap);arm.rotation.z=index?.12:-.12;} });
+        rig.bones.lowerArms.forEach((arm, index) => { if (arm) {arm.rotation.x = -.5 + (index ? -tap : tap);arm.rotation.z=index?-.08:.08;} });
         if (rig.bones.head) rig.bones.head.rotation.x = .08 + (this.moving ? Math.sin(t * 1.7) * .025 : 0);
+      } else if(seated) {
+        rig.bones.upperArms.forEach((arm,index)=>{if(arm){arm.rotation.x=-.3;arm.rotation.z=index?.65:-.65;}});
+        rig.bones.lowerArms.forEach((arm,index)=>{if(arm){arm.rotation.x=-.4;arm.rotation.z=index?-.15:.15;}});
+        if(rig.bones.head) rig.bones.head.rotation.x=-.03;
       }
       const coffee = settled && occupant.zone === 'pantry';
       const sip = coffee && this.moving ? Math.max(0, Math.sin(t * 0.9)) : 0;

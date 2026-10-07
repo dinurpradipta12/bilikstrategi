@@ -218,6 +218,7 @@ test('lounge and garden seats follow moved furniture; missing seats return avata
   const m={...alice,activity:{zone:'lounge',until:Date.now()+300000}};
   engine.setMembers([{member:m,slot:0}]);const p=engine.occupants.get('1');
   const destination=engine.destination(0,'lounge');
+  assert.equal(engine.loungeSeat(0).offset,0);
   assert.ok(Math.abs(p.rig.root.position.x-destination.x)<1e-8);assert.equal(p.rig.root.rotation.y,Math.PI/2);
   const route=engine.routeTo(0,[5,.5],'lounge');assert.ok(route?.length);assert.ok(Math.abs(route.at(-1)[0]-destination.x)<1e-8);
   engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'desk');
@@ -242,14 +243,22 @@ test('paused avatars use separate sofa seats and sit at the cushion height',()=>
   engine.setMembers([{member:{...alice,id:'10',status:'paused'},slot:10},{member:{...alice,id:'11',status:'paused'},slot:11}]);
   const first=engine.occupants.get('10'),second=engine.occupants.get('11'),a=engine.destination(10,'lounge'),b=engine.destination(11,'lounge');
   assert.notDeepEqual([a.x,a.z],[b.x,b.z]);assert.ok(engine.seatItem(10,'lounge'));assert.ok(engine.seatItem(11,'lounge'));
+  assert.equal(engine.loungeSeat(10).offset,0);assert.equal(engine.loungeSeat(11).offset,0);
   engine.animateFrame(50);
-  assert.equal(first.rig.root.position.y,.14);assert.equal(second.rig.root.position.y,.14);
+  assert.equal(first.rig.root.position.y,.2);assert.equal(second.rig.root.position.y,.2);
   const hips=new THREE.Vector3();first.rig.model.getObjectByName('Hips').getWorldPosition(hips);
-  assert.ok(hips.y>.54&&hips.y<.59,`hips should rest on cushion, received ${hips.y}`);
+  assert.ok(hips.y>.6&&hips.y<.66,`hips should rest above the cushion, received ${hips.y}`);
+  assert.equal(first.rig.bones.hips.rotation.x,.28);assert.equal(first.rig.bones.spine.rotation.x,-.24);
+  assert.equal(first.rig.bones.upperArms[0].rotation.z,-.65);assert.equal(first.rig.bones.upperArms[1].rotation.z,.65);
 
   const desk=office();animation(desk);desk.setMembers([{member:alice,slot:0}]);desk.animateFrame(50);
   const worker=desk.occupants.get('1');worker.rig.model.getObjectByName('Hips').getWorldPosition(hips);
-  assert.equal(worker.rig.root.position.y,.13);assert.ok(hips.y>.53&&hips.y<.58,`desk hips should rest on chair, received ${hips.y}`);
+  assert.equal(worker.rig.root.position.y,.18);assert.ok(hips.y>.59&&hips.y<.64,`desk hips should rest above chair, received ${hips.y}`);
+  assert.equal(worker.rig.bones.upperArms[0].rotation.z,-.12);assert.equal(worker.rig.bones.upperArms[1].rotation.z,.12);
+
+  const shared=office();shared.setMembers([{member:{...alice,id:'0',status:'paused'},slot:0},{member:{...alice,id:'1',status:'paused'},slot:1}]);
+  assert.equal(shared.loungeSeat(0).item.id,shared.loungeSeat(1).item.id);
+  assert.deepEqual(new Set([shared.loungeSeat(0).offset,shared.loungeSeat(1).offset]),new Set([-.32,.32]));
 });
 
 
