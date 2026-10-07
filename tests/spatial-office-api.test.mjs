@@ -37,7 +37,7 @@ function fixture({ inactive = false, outsider = false, storage = true, role = 'm
     url: 'https://office.example/api/spatial-office', headers: new Headers({ origin }),
     cookies: { get: key => key === 'clickup_access_token' && token ? { value: token } : { value: 'spoofed-owner' } },
     json: async () => ({ avatar, userId: id }),
-    text: async () => JSON.stringify({ version:7, ...action, userId: id, isAdmin: true }),
+    text: async () => JSON.stringify({ version:8, ...action, userId: id, isAdmin: true }),
   });
   return { ...context.exports, request, writes, spaceWrites };
 }
@@ -125,6 +125,15 @@ test('only database admins can assign or delete desks; assignment requires an ac
   assert.ok(admin.spaceWrites[1].desks[0].removed);
   assert.equal((await admin.PATCH(admin.request({action:{type:'assign',memberId:'outsider',slot:9}}))).status,409);
   assert.equal(admin.spaceWrites.length,2);
+});
+test('only database admins can configure the shared office playlist',async()=>{
+  const action={type:'music',title:'Fokus tim',url:'https://open.spotify.com/playlist/37i9dQZF1DX8NTLI2TtZa6'};
+  const member=fixture(),admin=fixture({role:'admin'});
+  assert.equal((await member.PATCH(member.request({action}))).status,403);
+  assert.equal(member.spaceWrites.length,0);
+  assert.equal((await admin.PATCH(admin.request({action}))).status,200);
+  assert.equal(admin.spaceWrites[0].music.title,'Fokus tim');
+  assert.equal(admin.spaceWrites[0].music.updatedBy,'1');
 });
 test('admin layout deletion safely relocates the owner in the same write',async()=>{
   const admin=fixture({role:'owner'}),p=model.deskPosition(0);

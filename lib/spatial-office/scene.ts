@@ -9,7 +9,7 @@ import { ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode
 import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
 const CHARACTERS = [...AVATAR_MODELS];
-const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine'].includes(key))])];
+const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine','team_radio'].includes(key))])];
 type CharacterBones = { head?: THREE.Bone; upperArms: Array<THREE.Bone | undefined>; lowerArms: Array<THREE.Bone | undefined>; upperLegs: Array<THREE.Bone | undefined>; lowerLegs: Array<THREE.Bone | undefined> };
 type Rig = { root: THREE.Group; model: THREE.Group; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; action: string; bones: CharacterBones; mug: THREE.Group };
 type Occupant = {
@@ -190,6 +190,21 @@ export class OfficeScene {
   }
 
   private asset(name: string, x: number, z: number, y = 0, rotation = 0, parent: THREE.Object3D = this.scene) {
+    if(name==='team_radio') {
+      const group=new THREE.Group(); group.name='team-radio';
+      const piece=(geometry:THREE.BufferGeometry,color:string,px:number,py:number,pz:number,rx=0)=>{const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,roughness:.55,metalness:.08}));mesh.position.set(px,py,pz);mesh.rotation.x=rx;group.add(mesh);this.track(mesh);return mesh;};
+      piece(new THREE.BoxGeometry(.86,.58,.34),'#cfa574',0,.31,0);
+      piece(new THREE.BoxGeometry(.72,.46,.025),'#3f4c48',0,.31,.183);
+      for(const px of [-.235,.235]) {
+        piece(new THREE.CylinderGeometry(.145,.145,.035,24),'#1e2927',px,.28,.205,Math.PI/2);
+        piece(new THREE.CylinderGeometry(.09,.09,.042,20),'#71877d',px,.28,.225,Math.PI/2);
+      }
+      piece(new THREE.BoxGeometry(.22,.075,.025),'#8be1bb',0,.47,.205);
+      for(const px of [-.07,0,.07]) piece(new THREE.BoxGeometry(.025,.04+Math.abs(px)*.22,.018),'#d7ffe9',px,.47,.222);
+      for(const px of [-.31,.31]) piece(new THREE.CylinderGeometry(.035,.035,.035,16),'#e5d2a4',px,.53,.205,Math.PI/2);
+      const antenna=piece(new THREE.CylinderGeometry(.012,.012,.62,8),'#5e6964',.29,.88,0);antenna.rotation.z=-.22;
+      group.position.set(x,y,z);group.rotation.y=rotation;parent.add(group);return group;
+    }
     if(name==='coffee_machine') {
       const group=new THREE.Group();
       for(const [w,h,d,cy,cz,color] of [[.44,.43,.32,.215,0,'#344c43'],[.3,.12,.08,.23,-.2,'#d8bd89']] as const) {

@@ -56,7 +56,7 @@ test('exit and garden paths use the front and side glass doors', () => {
 test('saved layouts gain private offices once, preserving claims and user edits', () => {
   const old={revision:7,layoutRevision:3,claims:{a:4},ornaments:[{id:'plant-front',asset:'floor_plant',x:-5,z:4.8,rotation:0,room:0}]};
   const upgraded=spaceModel.normalizeSpace(old,[member]);
-  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,7);
+  assert.equal(upgraded.claims.a,4); assert.equal(upgraded.revision,7); assert.equal(upgraded.version,8);
   assert.equal(upgraded.ornaments.filter(o=>o.id==='manager-desk').length,0);
   const saved={...upgraded,ornaments:upgraded.ornaments.filter(o=>o.id!=='manager-art')};
   assert.equal(spaceModel.normalizeSpace(saved,[member]).ornaments.some(o=>o.id==='manager-art'),false);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spaceModel as space, loadTS } from './spatial-office-module-loader.mjs';
+import { musicModel, spaceModel as space, loadTS } from './spatial-office-module-loader.mjs';
 import { travelPath, zonePosition } from '../lib/spatial-office/model.ts';
 const members = [{ id: '1' }, { id: '2' }, { id: '3' }];
 
@@ -193,7 +193,7 @@ test('changing desk again before arriving still leaves the original chair throug
 test('new furnishing migration seeds every area once and preserves removals, claims and lighting',()=>{
   const members=Array.from({length:14},(_,i)=>({id:String(i)}));
   const old=space.normalizeSpace({version:4,claims:{'0':10},ornaments:space.DEFAULT_ORNAMENTS.map(o=>o.id.startsWith('lead-')?{...o,z:o.z+1.5}:o),revision:8},members);
-  assert.equal(old.version,7);assert.equal(old.claims['0'],10);
+  assert.equal(old.version,8);assert.equal(old.claims['0'],10);
   assert.ok(old.ornaments.some(o=>o.room===1&&o.asset==='whiteboard'));
   assert.doesNotThrow(()=>space.parseOrnaments(old.ornaments,2));
   const edited={...old,ornaments:old.ornaments.filter(o=>o.id!=='meeting-chair-0'),lights:{'0:meeting':'off'}};
@@ -217,6 +217,28 @@ test('lighting automatic and manual modes are bounded to existing office areas',
   const saved=space.applySharedAction(base,{type:'light',key:'0:meeting',mode:'on'},'a',false);
   assert.equal(saved.lights['0:meeting'],'on');
   for(const action of [{type:'light',key:'99:meeting',mode:'on'},{type:'light',key:'0:unknown',mode:'on'},{type:'light',key:'0:meeting',mode:'bad'}]) assert.throws(()=>space.applySharedAction(base,action,'a',true));
+});
+test('music sources are normalized and only admins can change the shared playlist',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'}]);
+  const spotify=musicModel.resolveMusicSource('https://open.spotify.com/playlist/37i9dQZF1DX8NTLI2TtZa6?si=tracking');
+  assert.equal(spotify.provider,'spotify');assert.match(spotify.playerUrl,/\/embed\/playlist\//);
+  assert.equal(musicModel.resolveMusicSource('https://music.apple.com/id/playlist/focus/pl.123').provider,'apple');
+  assert.equal(musicModel.resolveMusicSource('https://music.youtube.com/playlist?list=PL12345678').provider,'youtube');
+  assert.equal(musicModel.resolveMusicSource('https://cdn.example.com/team.mp3').kind,'audio');
+  assert.throws(()=>musicModel.resolveMusicSource('http://example.com/music.mp3'),/HTTPS/);
+  assert.throws(()=>space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',false),/admin/);
+  const saved=space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',true);
+  assert.equal(saved.music.title,'Fokus tim');assert.equal(saved.music.updatedBy,'a');assert.equal(saved.music.provider,'spotify');
+  assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(saved)),[{id:'a'}]).music.title,'Fokus tim');
+  assert.equal(space.applySharedAction(saved,{type:'music',url:'',title:''},'a',true).music,null);
+});
+test('radio migration adds it once and preserves deliberate deletion after version eight',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'}]);
+  assert.equal(base.ornaments.filter(item=>item.asset==='team_radio').length,1);
+  const withoutRadio={...base,version:7,ornaments:base.ornaments.filter(item=>item.asset!=='team_radio')};
+  assert.equal(space.normalizeSpace(withoutRadio,[{id:'a'}]).ornaments.filter(item=>item.asset==='team_radio').length,1);
+  const deleted={...base,ornaments:base.ornaments.filter(item=>item.asset!=='team_radio')};
+  assert.equal(space.normalizeSpace(deleted,[{id:'a'}]).ornaments.filter(item=>item.asset==='team_radio').length,0);
 });
 test('sticky notes enforce ownership, version conflict, board existence and text limits',()=>{
   const base=space.normalizeSpace(null,[{id:'a'},{id:'b'}]);

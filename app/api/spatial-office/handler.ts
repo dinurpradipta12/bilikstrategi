@@ -139,13 +139,13 @@ export async function PATCH(req: NextRequest) {
     if (raw.length > 300000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
-  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity', 'light', 'note'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
-  if(action.version!==7) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
-  if (['layout','assign','remove-desk'].includes(action.type) && !snapshot.canEditOffice) return json({ error: 'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
+  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity', 'light', 'note', 'music'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if(action.version!==8) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
+  if (['layout','assign','remove-desk','music'].includes(action.type) && !snapshot.canEditOffice) return json({ error: action.type==='music'?'Hanya admin atau owner yang dapat mengganti playlist kantor.':'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
-      if(action.type==='light'||action.type==='note') return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
+      if(action.type==='light'||action.type==='note'||action.type==='music') return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
       if (action.type === 'activity') {
         const viewer=snapshot.members.find((member: {id:string})=>member.id===snapshot.viewerId);
         if(action.zone!=='auto'&&(viewer?.status!=='working'||viewer?.presenceIdle)) throw new Error('Check-in dan aktifkan kembali sesi Anda sebelum memilih aktivitas kantor.');

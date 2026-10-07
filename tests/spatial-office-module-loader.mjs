@@ -12,4 +12,5 @@ export function loadTS(path, deps = {}, globals = {}) {
   }, ...globals };
   vm.runInNewContext(source, context); return context.exports;
 }
-export const spaceModel = loadTS('../lib/spatial-office/space.ts', { './model': model });
+export const musicModel = loadTS('../lib/spatial-office/music.ts');
+export const spaceModel = loadTS('../lib/spatial-office/space.ts', { './model': model, './music': musicModel });

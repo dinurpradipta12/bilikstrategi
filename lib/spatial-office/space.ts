@@ -1,4 +1,5 @@
 import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type OfficeActivityZone, type DeskLayout, type OfficeMember } from './model';
+import { normalizeOfficeMusic, resolveMusicSource, type OfficeMusic } from './music';
 
 export const ORNAMENTS = {
   coffee_machine: { label:'Mesin kopi', category:'Perangkat meja', width:.44,depth:.4,height:.43 },
@@ -33,6 +34,7 @@ export const ORNAMENTS = {
   cushion: { label: 'Bantal', category: 'Dekorasi', width:.56,depth:.56,height:.23 },
   storage_box: { label: 'Kotak penyimpanan', category: 'Dekorasi', width:.58,depth:.42,height:.48 },
   trash_bin: { label: 'Tempat sampah', category: 'Dekorasi', width:.36,depth:.36,height:.42 },
+  team_radio: { label: 'Radio tim', category: 'Kantor', width:.86,depth:.36,height:1.2 },
 } as const;
 
 // Actual supplied GLB bounds after Z-up conversion: min/max X, Z and Y.
@@ -70,6 +72,7 @@ export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> 
   cushion: [-0.28,0.28,-0.28,0.28,0,0.24],
   storage_box: [-0.29,0.29,-0.21,0.21,0,0.4725],
   trash_bin: [-0.18,0.18,-0.18,0.18,0.005,0.42],
+  team_radio: [-.43,.43,-.18,.18,0,1.2],
 };
 export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; scale?: [number,number,number]; color?: string; rotation: number; room: number };
 function sameOrnament(a: Ornament | undefined, b: Ornament) {
@@ -81,9 +84,9 @@ export const ROOM_LIGHTS = {
 } as const;
 export type LightMode='auto'|'on'|'off';
 export type StickyNote={id:string;boardId:string;authorId:string;text:string;color:string;revision:number};
-export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean};
+export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean}|{type:'music';url:string;title:string};
 export function lightEnabled(mode:LightMode|undefined,night:boolean) { return mode==='on'||(mode!=='off'&&night); }
-export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
+export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; music:OfficeMusic|null; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
 export const OBJECT_COLORS = ['original', '#52684e', '#394c68', '#cfaa77', '#b68c92', '#efe7d5', '#59545a'] as const;
 export function validObjectColor(color: unknown) { return color === undefined || color === 'original' || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)); }
 const privateOffice = (name: string, x: number): Ornament[] => [
@@ -108,6 +111,7 @@ export const DEFAULT_ORNAMENTS: Ornament[] = [
   { id:'lamp-back', asset:'floor_lamp', x:.5, z:-5.2, rotation:0, room:0 },
   { id:'plant-front', asset:'floor_plant', x:-5, z:2.8, rotation:0, room:0 },
   { id:'rug-lounge', asset:'area_rug', x:9, z:-3, rotation:0, room:0 },
+  { id:'workspace-radio', asset:'team_radio', x:1.35, z:-5.4, rotation:0, room:0 },
   ...EXECUTIVE_ORNAMENTS.filter(item=>!isExecutiveKit(item.id)),
 ];
 // Every movable fixture has a stable ID; versioned seeding never restores deleted objects.
@@ -132,6 +136,13 @@ export function applySharedAction(space:OfficeSpace,action:SharedOfficeAction,vi
     const [area,name]=String(action.key).split(':');
     if(!/^\d+$/.test(area)||Number(area)>=spaceCapacity(space,Object.keys(space.claims).length)/DESKS_PER_ROOM||!Object.hasOwn(ROOM_LIGHTS,name)||!['auto','on','off'].includes(action.mode)||action.key!==`${Number(area)}:${name}`) throw new Error('Pengaturan lampu tidak valid.');
     return {...space,revision:space.revision+1,lights:{...space.lights,[action.key]:action.mode}};
+  }
+  if(action.type==='music') {
+    if(!admin) throw new Error('Hanya admin atau owner yang dapat mengganti playlist kantor.');
+    if(typeof action.url!=='string'||typeof action.title!=='string'||action.title.trim().length>80) throw new Error('Nama playlist maksimum 80 karakter.');
+    if(!action.url.trim()) return {...space,revision:space.revision+1,music:null};
+    const source=resolveMusicSource(action.url);
+    return {...space,revision:space.revision+1,music:{provider:source.provider,url:source.url,title:action.title.trim()||`${source.label} kantor`,updatedAt:Date.now(),updatedBy:viewerId}};
   }
   if(!space.ornaments.some(o=>o.id===action.boardId&&o.asset==='whiteboard')) throw new Error('Papan tulis tidak tersedia.');
   if(typeof action.id!=='string'||!/^[a-zA-Z0-9_-]{1,64}$/.test(action.id)) throw new Error('Catatan tidak valid.');
@@ -197,6 +208,7 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     }
     return item;
   }) : DEFAULT_ORNAMENTS.map(item => ({ ...item }));
+  if(Array.isArray(raw.ornaments)&&(raw.version||0)<8&&!ornaments.some(item=>item.id==='workspace-radio')) ornaments.push({...DEFAULT_ORNAMENTS.find(item=>item.id==='workspace-radio')!});
   if (Array.isArray(raw.ornaments) && (raw.version || 0) < 2) for (const item of EXECUTIVE_ORNAMENTS) if (!ornaments.some(o => o.id === item.id)) ornaments.push({ ...item });
   const furnishedRooms=(raw.version||0)>=5&&Array.isArray(raw.furnishedRooms)?[...raw.furnishedRooms]:[];
   const areas=Math.max(1,Math.ceil((Math.max(-1,...Object.values(claims),...(raw.desks||[]).map(d=>d.slot))+1)/DESKS_PER_ROOM));
@@ -205,7 +217,7 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     for(const item of [...(area?DEFAULT_ORNAMENTS:[]),...ROOM_FURNITURE]) {const id=area?`${item.id}-area-${area}`:item.id;if(!ornaments.some(o=>o.id===id)) ornaments.push({...item,id,room:area});}
     furnishedRooms.push(area);
   }
-  return { version:7, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
+  return { version:8, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],music:normalizeOfficeMusic(raw.music),furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
