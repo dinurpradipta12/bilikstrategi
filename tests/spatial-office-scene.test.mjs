@@ -11,7 +11,8 @@ import * as avatarVisual from '../lib/spatial-office/avatar-visual.ts';
 import { spaceModel, loadTS } from './spatial-office-module-loader.mjs';
 
 class Element {
-  children = []; dataset = {}; style = {}; textContent = ''; hidden = false;
+  children = []; dataset = {}; style = {}; textContent = ''; hidden = false; className = ''; offsetWidth = 180; offsetHeight = 70;
+  classList = { contains: name => this.className.split(/\s+/).includes(name) };
   append(...items) { this.children.push(...items); }
   appendChild(item) { this.children.push(item); }
   addEventListener() {}

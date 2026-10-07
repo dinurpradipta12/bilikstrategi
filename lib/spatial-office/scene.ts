@@ -674,8 +674,16 @@ export class OfficeScene {
     this.project.copy(position).project(this.camera);
     const inFrame = Math.abs(this.project.x) < 1.1 && Math.abs(this.project.y) < 1.1 && this.project.z < 1;
     element.style.visibility = inFrame ? 'visible' : 'hidden';
-    element.style.left = `${(this.project.x * 0.5 + 0.5) * this.host.clientWidth}px`;
-    element.style.top = `${(-this.project.y * 0.5 + 0.5) * this.host.clientHeight}px`;
+    const projectedLeft = (this.project.x * 0.5 + 0.5) * this.host.clientWidth;
+    const projectedTop = (-this.project.y * 0.5 + 0.5) * this.host.clientHeight;
+    if (element.classList.contains('office-avatar-label')) {
+      const halfWidth = Math.min(element.offsetWidth / 2, this.host.clientWidth / 2 - 8);
+      element.style.left = `${THREE.MathUtils.clamp(projectedLeft, halfWidth + 8, this.host.clientWidth - halfWidth - 8)}px`;
+      element.style.top = `${THREE.MathUtils.clamp(projectedTop, element.offsetHeight + 8, this.host.clientHeight - 8)}px`;
+      return;
+    }
+    element.style.left = `${projectedLeft}px`;
+    element.style.top = `${projectedTop}px`;
   }
 
   private animate = (now: number) => this.animateFrame(now);
