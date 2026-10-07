@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { AVATAR_MODELS, AVATAR_COLORS, AVATAR_LABELS, type AvatarStyle } from '@/lib/spatial-office/model';
+import AvatarPreview from './AvatarPreview';
 
 const colors = ['Warna aset', 'Cokelat', 'Emas', 'Pink', 'Sage', 'Biru', 'Lavender', 'Krem'];
 export default function AvatarEditor({ value, onChange, onSave, onClose, demo, storage }: {
@@ -15,10 +16,12 @@ export default function AvatarEditor({ value, onChange, onSave, onClose, demo, s
     finally { setSaving(false); }
   }}>
     <h4>Gaya karakter</h4><p>Perubahan langsung terlihat di kantor. {demo ? 'Pilihan simulasi disimpan di browser ini.' : 'Avatar tersimpan untuk akun Anda dan terlihat oleh tim.'}</p>
-    <label>Model karakter<select value={value.model} onChange={event => onChange({ ...value, model: event.target.value as AvatarStyle['model'] })}>{AVATAR_MODELS.map(model => <option key={model} value={model}>{AVATAR_LABELS[model]}</option>)}</select></label>
-    <label>Gaya rambut<select value={value.hair} onChange={event => onChange({ ...value, hair: event.target.value as AvatarStyle['hair'] })}>{AVATAR_MODELS.map(model => <option key={model} value={model}>Gaya {AVATAR_LABELS[model]}</option>)}</select></label>
-    {(['hairColor', 'shirtColor'] as const).map(field => <label key={field}>{field === 'hairColor' ? 'Warna rambut' : 'Warna pakaian'}<select value={value[field]} onChange={event => onChange({ ...value, [field]: event.target.value })}>{AVATAR_COLORS.map((color, i) => <option key={color} value={color}>{colors[i]}</option>)}</select></label>)}
-    <label className="office-avatar-checkbox"><input type="checkbox" checked={value.glasses} onChange={event => onChange({ ...value, glasses: event.target.checked })} /> Kacamata</label>
+    <div className="office-avatar-editor-layout"><div className="office-avatar-fields">
+      <label>Model karakter<select value={value.model} onChange={event => onChange({ ...value, model: event.target.value as AvatarStyle['model'] })}>{AVATAR_MODELS.map(model => <option key={model} value={model}>{AVATAR_LABELS[model]}</option>)}</select></label>
+      <label>Gaya rambut<select value={value.hair} onChange={event => onChange({ ...value, hair: event.target.value as AvatarStyle['hair'] })}>{AVATAR_MODELS.map(model => <option key={model} value={model}>Gaya {AVATAR_LABELS[model]}</option>)}</select></label>
+      {(['hairColor', 'shirtColor'] as const).map(field => <label key={field}>{field === 'hairColor' ? 'Warna rambut' : 'Warna pakaian'}<select value={value[field]} onChange={event => onChange({ ...value, [field]: event.target.value })}>{AVATAR_COLORS.map((color, i) => <option key={color} value={color}>{colors[i]}</option>)}</select></label>)}
+      <label className="office-avatar-checkbox"><input type="checkbox" checked={value.glasses} onChange={event => onChange({ ...value, glasses: event.target.checked })} /> Kacamata</label>
+    </div><AvatarPreview value={value} /></div>
     {!demo && !storage && <p role="status">Pratinjau tersedia. Penyimpanan akun belum terhubung ke database.</p>}
     {error && <p role="alert">{error}</p>}
     <div className="office-demo-controls"><button type="submit" disabled={saving || (!demo && !storage)}>{saving ? 'Menyimpan…' : 'Simpan avatar'}</button><button type="button" disabled={saving} onClick={onClose}>Batal</button></div>

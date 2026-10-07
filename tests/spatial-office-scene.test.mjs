@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import * as model from '../lib/spatial-office/model.ts';
+import * as avatarVisual from '../lib/spatial-office/avatar-visual.ts';
 import { spaceModel, loadTS } from './spatial-office-module-loader.mjs';
 
 class Element {
@@ -21,6 +22,7 @@ const { OfficeScene } = loadTS('../lib/spatial-office/scene.ts', {
   three: THREE, 'three/addons/loaders/GLTFLoader.js': { GLTFLoader }, 'three/addons/controls/OrbitControls.js': { OrbitControls },
   'three/addons/utils/BufferGeometryUtils.js': { mergeGeometries }, './model': model, './space': spaceModel,
   'three/addons/utils/SkeletonUtils.js': { clone: cloneSkeleton },
+  './avatar-visual': avatarVisual,
 }, { document: { createElement: () => new Element() }, requestAnimationFrame:()=>0 });
 const templates = new Map();
 const characterClips = new Map();
@@ -48,6 +50,14 @@ test('first snapshot seats existing workers immediately; snapshots retain the sa
   engine.setMembers([{ member: { ...alice }, slot: 0 }]); assert.equal(engine.occupants.get('1').rig, first.rig);
   engine.setMembers([{ member: { ...alice, status: 'paused' }, slot: 0 }]);
   assert.equal(engine.occupants.size,0);
+});
+test('glasses use the supplied rig eye line instead of the mouth line', () => {
+  const engine = office(), avatar = { ...model.defaultAvatar('doctor'), model: 'doctor', hair: 'doctor', glasses: true };
+  engine.setMembers([{ member: { ...alice, avatar }, slot: 0 }]);
+  const head = engine.occupants.get('1').rig.model.getObjectByName('Head');
+  const frames = head.children.filter(child => child.geometry?.type === 'TorusGeometry');
+  assert.equal(frames.length, 2);
+  assert.ok(frames.every(frame => frame.position.y === .155 && frame.position.z === .242));
 });
 test('claiming another desk retains position and schedules movement, then roster deletion removes avatar only', () => {
   const engine = office(); engine.setMembers([{ member: alice, slot: 0 }]);

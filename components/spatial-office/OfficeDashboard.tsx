@@ -284,7 +284,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     else if(await saveSpace({type:'layout',ornaments,desks:space.desks,layoutRevision:space.layoutRevision})) closeObjectMenu();
   };
 
-  return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${panel ? `office-panel-${panel}` : ''}`} aria-label="Kantor 3D">
+  return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
     {immersive && <header className="office-game-hud">
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>

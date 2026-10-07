@@ -781,6 +781,12 @@
 .office-avatar-editor select { width:100%; border:1px solid #d5ddce; border-radius:7px; padding:9px; background:#f8faf3; color:#40583e; font-size:12px; }
 .office-avatar-editor .office-avatar-checkbox { flex-direction:row; align-items:center; }
 .office-avatar-editor input { accent-color:#52684e; }
+.office-avatar-editor-layout { display:grid; grid-template-columns:minmax(0,1fr) 190px; align-items:start; gap:14px; }
+.office-avatar-preview { position:relative; height:248px; overflow:hidden; border:1px solid #d5dfce; border-radius:14px; background:radial-gradient(circle at 50% 35%,#fffdf4 0,#edf3e6 58%,#d9e4d0 100%); }
+.office-avatar-preview-canvas { position:absolute; inset:0; }
+.office-avatar-preview canvas { display:block; width:100%; height:100%; }
+.office-avatar-preview-label { position:absolute; z-index:1; top:10px; left:10px; padding:5px 7px; border-radius:7px; background:#fffef3d9; color:#698064; font-size:8px; font-weight:700; letter-spacing:1.1px; pointer-events:none; }
+.office-avatar-preview-status { position:absolute; inset:0; display:grid; place-items:center; padding:20px; color:#75846f; font-size:10px; text-align:center; }
 .office-edit-avatar { padding:9px 14px; border:1px solid #cad8c0; border-radius:8px; background:#eef4e7; color:#49613f; font-size:11px; margin:8px 0; }
 .spatial-office select:focus-visible { outline:3px solid #a17a43; outline-offset:2px; }
 
@@ -812,6 +818,8 @@
 .office-game>.office-error { position:absolute; z-index:13; left:18px; top:145px; max-width:min(420px,calc(100% - 36px)); background:#fff4dfef; font-size:10px; }
 .office-game>.office-bottom-grid { display:none; }
 .office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { display:block; position:absolute; z-index:14; right:18px; top:96px; bottom:112px; width:330px; overflow:auto; margin:0; border-radius:16px; box-shadow:0 8px 30px #213c3221; background:#fffef8; }
+.office-game.office-avatar-editing.office-panel-member>.office-bottom-grid { width:min(600px,calc(100% - 36px)); }
+.spatial-office.office-avatar-editing:not(.office-game)>.office-bottom-grid { grid-template-columns:minmax(0,1fr) minmax(480px,1.35fr); }
 .office-game.office-panel-team .office-detail-panel,.office-game.office-panel-member .office-team-panel { display:none; }
 .office-game .office-member-grid { grid-template-columns:1fr; max-height:none; }
 .office-close-drawer { position:absolute; z-index:15; right:12px; top:10px; border:0; background:#e7eee1; color:#47613f; width:27px; height:27px; border-radius:50%; font-size:20px; }
@@ -895,6 +903,8 @@
   .office-game .office-desks-panel,.office-game .office-editor-panel,.office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { top:auto; bottom:96px; right:10px; width:calc(100% - 20px); max-height:52dvh; padding:14px; }
   .office-game .office-editor-save { bottom:-14px; margin-left:-14px; margin-right:-14px; margin-bottom:-14px; padding-left:14px; padding-right:14px; }
   .office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { padding:0; }
+  .office-avatar-editor-layout { grid-template-columns:1fr; }
+  .office-avatar-preview { height:210px; grid-row:1; }
   .office-close-drawer { top:10px; bottom:auto; right:12px; }
   .office-game>.office-error { left:10px; top:126px; max-width:calc(100% - 20px); }
   .office-game-toast { top:calc(env(safe-area-inset-top,0px) + 10px); max-width:calc(100% - 20px); }

@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { applyAvatarAppearance } from './avatar-visual';
 import { ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
 import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
@@ -489,44 +490,10 @@ export class OfficeScene {
     const style = member.avatar || defaultAvatar(member.id);
     const model = cloneSkeleton(this.templates.get(style.model)!) as THREE.Group;
     model.scale.setScalar(1.35);
-    const hairMesh = (root: THREE.Object3D) => {
-      let result: THREE.SkinnedMesh | undefined;
-      root.traverse(child => {
-        if (result || !(child instanceof THREE.SkinnedMesh)) return;
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        if (materials.some(material => material.name === 'hair')) result = child;
-      });
-      return result;
-    };
-    const sourceHair = hairMesh(this.templates.get(style.hair)!);
-    const currentHair = hairMesh(model);
-    if (sourceHair && currentHair) currentHair.geometry = sourceHair.geometry;
-    model.traverse(child => {
-      if (!(child instanceof THREE.Mesh)) return;
-      child.userData.sharedGeometry = true; child.castShadow = true; child.receiveShadow = true;
-      const originals = Array.isArray(child.material) ? child.material : [child.material];
-      const materials = originals.map(original => {
-        const material = original.clone();
-        if (material instanceof THREE.MeshStandardMaterial) {
-          if (material.name === 'hair' && style.hairColor !== 'original') material.color.set(style.hairColor);
-          if (material.name === 'shirt' && style.shirtColor !== 'original') material.color.set(style.shirtColor);
-          material.roughness = Math.max(material.roughness, .72);
-        }
-        this.materials.add(material); return material;
-      });
-      child.material = Array.isArray(child.material) ? materials : materials[0];
-    });
+    const resources = applyAvatarAppearance(model, this.templates.get(style.hair)!, style);
+    resources.materials.forEach(material => this.materials.add(material)); resources.geometries.forEach(geometry => this.geometries.add(geometry));
     const root = new THREE.Group(); root.add(model); this.scene.add(root);
     const head = model.getObjectByName('Head') as THREE.Bone | undefined;
-    if (style.glasses && head) {
-      const material = new THREE.MeshStandardMaterial({ color: '#263c3a', roughness: .45 }); this.materials.add(material);
-      for (const x of [-.105, .105]) {
-        const geometry = new THREE.TorusGeometry(.085, .012, 8, 20); this.geometries.add(geometry);
-        const lens = new THREE.Mesh(geometry, material); lens.position.set(x, .035, .185); lens.userData.sharedMaterial = true; head.add(lens);
-      }
-      const geometry = new THREE.BoxGeometry(.065, .018, .018); this.geometries.add(geometry);
-      const bridge = new THREE.Mesh(geometry, material); bridge.position.set(0, .035, .185); head.add(bridge);
-    }
     const mixer = new THREE.AnimationMixer(model), actions = new Map<string, THREE.AnimationAction>();
     for (const clip of this.characterClips.get(style.model) || []) actions.set(clip.name, mixer.clipAction(clip));
     const mug = this.asset('coffee_mug', 0.26, 0.3, 0.83, 0, root); mug.visible = false;
