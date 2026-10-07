@@ -3,20 +3,26 @@ import type { AvatarStyle } from './model';
 
 export type AvatarVisualResources = { materials: THREE.Material[]; geometries: THREE.BufferGeometry[] };
 
-function hairMesh(root: THREE.Object3D) {
+function meshWithMaterial(root: THREE.Object3D, materialName: string) {
   let result: THREE.SkinnedMesh | undefined;
   root.traverse(child => {
     if (result || !(child instanceof THREE.SkinnedMesh)) return;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    if (materials.some(material => material.name === 'hair')) result = child;
+    if (materials.some(material => material.name === materialName)) result = child;
   });
   return result;
 }
 
 export function applyAvatarAppearance(model: THREE.Group, hairTemplate: THREE.Group, style: AvatarStyle): AvatarVisualResources {
   const materials: THREE.Material[] = [], geometries: THREE.BufferGeometry[] = [];
-  const sourceHair = hairMesh(hairTemplate), currentHair = hairMesh(model);
+  const sourceHair = meshWithMaterial(hairTemplate, 'hair'), currentHair = meshWithMaterial(model, 'hair');
   if (sourceHair && currentHair) currentHair.geometry = sourceHair.geometry;
+  // The boy/girl choices describe the full visual style. Reuse their compatible
+  // lower-body geometry so a masculine hairstyle does not leave a skirt behind.
+  if (style.hair === 'boy' || style.hair === 'girl') {
+    const sourceOutfit = meshWithMaterial(hairTemplate, 'pants'), currentOutfit = meshWithMaterial(model, 'pants');
+    if (sourceOutfit && currentOutfit) currentOutfit.geometry = sourceOutfit.geometry;
+  }
   model.traverse(child => {
     if (!(child instanceof THREE.Mesh)) return;
     child.userData.sharedGeometry = true; child.castShadow = true; child.receiveShadow = true;
@@ -31,8 +37,21 @@ export function applyAvatarAppearance(model: THREE.Group, hairTemplate: THREE.Gr
       materials.push(material); return material;
     });
     child.material = Array.isArray(child.material) ? copies : copies[0];
+    if (originals.some(material => material.name === 'mouth')) child.visible = false;
   });
   const head = model.getObjectByName('Head') as THREE.Bone | undefined;
+  if (head) {
+    const material = new THREE.MeshStandardMaterial({ color: '#b76570', roughness: .62 });
+    const curve = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(-.052, .076, .224),
+      new THREE.Vector3(0, .025, .23),
+      new THREE.Vector3(.052, .076, .224),
+    );
+    const geometry = new THREE.TubeGeometry(curve, 16, .006, 6, false);
+    const smile = new THREE.Mesh(geometry, material);
+    smile.name = 'AvatarSmile'; smile.castShadow = true; head.add(smile);
+    materials.push(material); geometries.push(geometry);
+  }
   if (style.glasses && head) {
     const material = new THREE.MeshStandardMaterial({ color: '#263c3a', roughness: .45 }); materials.push(material);
     for (const x of [-.078, .078]) {

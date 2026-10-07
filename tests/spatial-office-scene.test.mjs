@@ -59,6 +59,24 @@ test('glasses use the supplied rig eye line instead of the mouth line', () => {
   assert.equal(frames.length, 2);
   assert.ok(frames.every(frame => frame.position.y === .155 && frame.position.z === .242));
 });
+test('boy and girl styles select trousers or skirt and replace the dotted mouth with a smile', () => {
+  const materialMesh = (root, name) => {
+    let result;
+    root.traverse(child => {
+      if (!result && child.isSkinnedMesh && (Array.isArray(child.material) ? child.material : [child.material]).some(material => material.name === name)) result = child;
+    });
+    return result;
+  };
+  const studentWithBoyStyle = cloneSkeleton(templates.get('student'));
+  avatarVisual.applyAvatarAppearance(studentWithBoyStyle, templates.get('boy'), { ...model.defaultAvatar('student-boy'), model: 'student', hair: 'boy' });
+  assert.equal(materialMesh(studentWithBoyStyle, 'pants').geometry, materialMesh(templates.get('boy'), 'pants').geometry);
+  assert.equal(materialMesh(studentWithBoyStyle, 'mouth').visible, false);
+  assert.ok(studentWithBoyStyle.getObjectByName('AvatarSmile'));
+
+  const studentWithGirlStyle = cloneSkeleton(templates.get('student'));
+  avatarVisual.applyAvatarAppearance(studentWithGirlStyle, templates.get('girl'), { ...model.defaultAvatar('student-girl'), model: 'student', hair: 'girl' });
+  assert.equal(materialMesh(studentWithGirlStyle, 'pants').geometry, materialMesh(templates.get('girl'), 'pants').geometry);
+});
 test('claiming another desk retains position and schedules movement, then roster deletion removes avatar only', () => {
   const engine = office(); engine.setMembers([{ member: alice, slot: 0 }]);
   const person = engine.occupants.get('1'), initial = person.rig.root.position.clone();
