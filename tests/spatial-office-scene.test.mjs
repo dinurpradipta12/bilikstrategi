@@ -217,8 +217,9 @@ test('lounge and garden seats follow moved furniture; missing seats return avata
   engine.setOrnaments(moved,0,false,'');
   const m={...alice,activity:{zone:'lounge',until:Date.now()+300000}};
   engine.setMembers([{member:m,slot:0}]);const p=engine.occupants.get('1');
-  assert.ok(Math.abs(p.rig.root.position.x-7.35)<1e-8);assert.equal(p.rig.root.rotation.y,Math.PI/2);
-  const route=engine.routeTo(0,[5,.5],'lounge');assert.ok(route?.length);assert.ok(Math.abs(route.at(-1)[0]-7.35)<1e-8);
+  const destination=engine.destination(0,'lounge');
+  assert.ok(Math.abs(p.rig.root.position.x-destination.x)<1e-8);assert.equal(p.rig.root.rotation.y,Math.PI/2);
+  const route=engine.routeTo(0,[5,.5],'lounge');assert.ok(route?.length);assert.ok(Math.abs(route.at(-1)[0]-destination.x)<1e-8);
   engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'desk');
 });
 
@@ -226,10 +227,29 @@ test('paused attendance always leaves the desk and uses another lounge sofa when
   const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;
   engine.setOrnaments(items.filter(o=>o.id!=='lounge-sofa-5'),0,false,'');
   engine.setMembers([{member:{...alice,status:'working'},slot:10}]);const person=engine.occupants.get('1');
+  engine.routeTo=()=>null;
   engine.setMembers([{member:{...alice,status:'paused'},slot:10}]);
   assert.equal(person.zone,'lounge');assert.ok(person.route.length);assert.notEqual(engine.seatItem(10,'lounge'),undefined);
+  const destination=engine.destination(10,'lounge'),last=person.route.at(-1);
+  assert.deepEqual([last.x,last.z],[destination.x,destination.z]);
   engine.setOrnaments(items.filter(o=>!o.id.startsWith('lounge-sofa-')),0,false,'');
   assert.equal(person.zone,'lounge');assert.ok(person.route.length);
+});
+
+test('paused avatars use separate sofa seats and sit at the cushion height',()=>{
+  const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;animation(engine);
+  engine.setOrnaments(items.filter(o=>o.id!=='lounge-sofa-5'),0,false,'');
+  engine.setMembers([{member:{...alice,id:'10',status:'paused'},slot:10},{member:{...alice,id:'11',status:'paused'},slot:11}]);
+  const first=engine.occupants.get('10'),second=engine.occupants.get('11'),a=engine.destination(10,'lounge'),b=engine.destination(11,'lounge');
+  assert.notDeepEqual([a.x,a.z],[b.x,b.z]);assert.ok(engine.seatItem(10,'lounge'));assert.ok(engine.seatItem(11,'lounge'));
+  engine.animateFrame(50);
+  assert.equal(first.rig.root.position.y,.14);assert.equal(second.rig.root.position.y,.14);
+  const hips=new THREE.Vector3();first.rig.model.getObjectByName('Hips').getWorldPosition(hips);
+  assert.ok(hips.y>.54&&hips.y<.59,`hips should rest on cushion, received ${hips.y}`);
+
+  const desk=office();animation(desk);desk.setMembers([{member:alice,slot:0}]);desk.animateFrame(50);
+  const worker=desk.occupants.get('1');worker.rig.model.getObjectByName('Hips').getWorldPosition(hips);
+  assert.equal(worker.rig.root.position.y,.13);assert.ok(hips.y>.53&&hips.y<.58,`desk hips should rest on chair, received ${hips.y}`);
 });
 
 

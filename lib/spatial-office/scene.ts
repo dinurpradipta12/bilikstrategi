@@ -534,18 +534,38 @@ export class OfficeScene {
     next.reset().fadeIn(.16).play(); rig.action = name;
   }
 
+  private loungeSeat(slot:number) {
+    const available=this.ornaments.filter(o=>o.room===this.room&&o.id.startsWith('lounge-sofa-')).sort((a,b)=>a.id.localeCompare(b.id));
+    const assignments=new Map<number,{item:Ornament;side:number}>(),occupied=new Map<string,Set<number>>();
+    const loungeMembers=this.current.filter(({member})=>memberZone(member,Date.now())==='lounge').sort((a,b)=>a.slot-b.slot||a.member.id.localeCompare(b.member.id));
+    const waiting:typeof loungeMembers=[];
+    for(const entry of loungeMembers) {
+      const index=entry.slot%DESKS_PER_ROOM;
+      const sofa=Math.floor(index/2)%3*2+(index>=6?1:0),base=`lounge-sofa-${sofa}`;
+      const item=available.find(candidate=>candidate.id===base||candidate.id===`${base}-area-${this.room}`);
+      if(!item) {if(entry.member.status==='paused') waiting.push(entry);continue;}
+      const used=occupied.get(item.id)||new Set<number>();
+      const preferred=index%2,side=used.has(preferred)?(preferred?0:1):preferred;
+      used.add(side);occupied.set(item.id,used);assignments.set(entry.slot,{item,side});
+    }
+    for(const entry of waiting) {
+      const expected=zonePosition(entry.slot,'lounge',this.deskLayout);
+      const item=[...available].sort((a,b)=>(occupied.get(a.id)?.size||0)-(occupied.get(b.id)?.size||0)
+        ||Math.hypot(a.x-expected.x,a.z-expected.z)-Math.hypot(b.x-expected.x,b.z-expected.z)
+        ||a.id.localeCompare(b.id)).find(candidate=>(occupied.get(candidate.id)?.size||0)<2);
+      if(!item) continue;
+      const used=occupied.get(item.id)||new Set<number>(),side=used.has(0)?1:0;
+      used.add(side);occupied.set(item.id,used);assignments.set(entry.slot,{item,side});
+    }
+    return assignments.get(slot);
+  }
+
   private seatItem(slot:number,zone:OfficeZone) {
     const i=slot%DESKS_PER_ROOM;
     const meetingSeat=this.current.find(o=>o.slot===slot)?.member.activity?.seat??i%6;
-    const prefix=zone==='meeting'?`meeting-chair-${meetingSeat}`:zone==='garden'?`garden-chair-${i}`:zone==='lounge'?`lounge-sofa-${Math.floor(i/2)%3*2+(i>=6?1:0)}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
-    const exact=this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
-    const paused=this.current.find(o=>o.slot===slot)?.member.status==='paused';
-    if(exact||zone!=='lounge'||!paused) return exact;
-    // A saved office may have removed one of the original sofas. A paused
-    // attendance session still belongs in the lounge, so reuse another sofa
-    // instead of silently keeping that member at their work desk.
-    const sofas=this.ornaments.filter(o=>o.room===this.room&&o.id.startsWith('lounge-sofa-')).sort((a,b)=>a.id.localeCompare(b.id));
-    return sofas.length ? sofas[Math.floor(i/2)%sofas.length] : undefined;
+    if(zone==='lounge') return this.loungeSeat(slot)?.item;
+    const prefix=zone==='meeting'?`meeting-chair-${meetingSeat}`:zone==='garden'?`garden-chair-${i}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
+    return this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
   }
   private activeZone(member:OfficeMember,slot:number):OfficeZone {
     const zone=memberZone(member,Date.now());
@@ -556,10 +576,15 @@ export class OfficeScene {
   }
   private destination(slot:number,zone:OfficeZone) {
     const item=this.seatItem(slot,zone);
-    if(!item) return zonePosition(slot,zone,this.deskLayout);
-    const i=slot%DESKS_PER_ROOM,dx=zone==='lounge'?(i%2? .35:-.35):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.15:0;
+    if(!item) {
+      const destination=zonePosition(slot,zone,this.deskLayout);
+      return zone==='desk'?{...destination,y:.13}:destination;
+    }
+    const i=slot%DESKS_PER_ROOM,loungeSide=zone==='lounge'?this.loungeSeat(slot)?.side:i%2;
+    const dx=zone==='lounge'?(loungeSide? .35:-.35):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.08:0;
     const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
-    return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation, y:item.y||0};
+    const seatLift=zone==='lounge'?.14:zone==='garden'||zone==='meeting'?.09:0;
+    return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation,y:(item.y||0)+seatLift};
   }
   private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot):[number,number][]|null {
     // Leaving a rearranged meeting must navigate around the table before the door.
@@ -601,6 +626,9 @@ export class OfficeScene {
     let route=this.routeTo(occupant.slot,[p.x,p.z],zone);
     if(!route&&zone==='lounge'&&occupant.member.status==='paused') {
       route=travelPath(occupant.slot,[p.x,p.z],'lounge',occupant.slot,this.deskLayout);
+      const destination=this.destination(occupant.slot,'lounge');
+      const last=route.at(-1);
+      if(this.seatItem(occupant.slot,'lounge')&&(!last||Math.hypot(last[0]-destination.x,last[1]-destination.z)>.01)) route.push([destination.x,destination.z]);
     }
     if(!route) {this.blockedActivities.set(occupant.member.id,zone);zone='desk';}
     occupant.route=(route||travelPath(occupant.slot,[p.x,p.z],'desk',occupant.slot,this.deskLayout)).map(([x,z])=>new THREE.Vector3(x,0,z));
@@ -664,7 +692,9 @@ export class OfficeScene {
       }
       occupant.member = member; occupant.slot = slot; occupant.name.textContent = member.name;
       occupant.label.setAttribute('aria-label', member.status === 'paused' ? `${member.name}, sedang istirahat di lounge` : `${member.name}, sudah check-in`);
-      const zone = this.activeZone(member,slot); if (zone !== occupant.zone || (zone==='meeting'&&previous.find(p=>p.member.id===member.id)?.member.activity?.seat!==member.activity?.seat)) this.changeZone(occupant, zone);
+      const zone = this.activeZone(member,slot),destination=this.destination(slot,zone);
+      const loungeSeatChanged=zone==='lounge'&&!occupant.route.length&&Math.hypot(occupant.rig.root.position.x-destination.x,occupant.rig.root.position.z-destination.z)>.08;
+      if (zone !== occupant.zone || loungeSeatChanged || (zone==='meeting'&&previous.find(p=>p.member.id===member.id)?.member.activity?.seat!==member.activity?.seat)) this.changeZone(occupant, zone);
     }
   }
 
@@ -735,7 +765,7 @@ export class OfficeScene {
       const settled = !occupant.route.length;
       if(settled && occupant.zone==='exit') { this.removeOccupant(id,occupant); continue; }
       const working = settled && occupant.zone === 'desk';
-      const seated = settled && occupant.zone !== 'pantry';
+      const seated = settled && occupant.zone !== 'pantry' && (occupant.zone==='desk'||Boolean(this.seatItem(occupant.slot,occupant.zone)));
       rig.root.position.y = settled && 'y' in destination ? destination.y : 0;
       const t = this.time + occupant.offset;
       this.playAction(rig, settled ? 'Idle' : 'Walk');
