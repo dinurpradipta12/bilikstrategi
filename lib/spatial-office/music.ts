@@ -43,6 +43,25 @@ export function resolveMusicSource(input: unknown): MusicSource {
   throw new Error('Layanan didukung: Spotify, Apple Music, YouTube Music, SoundCloud, atau tautan audio langsung.');
 }
 
+export function musicPlayerUrl(source: MusicSource, origin = '') {
+  // Query parameters on signed audio URLs are part of their signature. Keep
+  // direct sources byte-for-byte identical and only decorate provider embeds.
+  if (source.kind === 'audio') return source.playerUrl;
+  const url = new URL(source.playerUrl);
+  if (source.provider === 'soundcloud') url.searchParams.set('auto_play', 'true');
+  else url.searchParams.set('autoplay', '1');
+  if (source.provider === 'youtube') {
+    url.searchParams.set('playsinline', '1');
+    url.searchParams.set('enablejsapi', '1');
+    if (origin) url.searchParams.set('origin', origin);
+  }
+  return url.toString();
+}
+
+export function supportsHandsFreePlayback(source: MusicSource) {
+  return source.kind === 'audio';
+}
+
 export function normalizeOfficeMusic(input: unknown): OfficeMusic | null {
   if (!input || typeof input !== 'object') return null;
   const value = input as Partial<OfficeMusic>;

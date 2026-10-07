@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { ExternalLink, GripHorizontal, Maximize2, Minimize2, Music2, Pause, Radio, Settings2, Volume2, X } from 'lucide-react';
-import { resolveMusicSource } from '@/lib/spatial-office/music';
+import { musicPlayerUrl, resolveMusicSource, supportsHandsFreePlayback } from '@/lib/spatial-office/music';
 import type { OfficeMusic } from '@/lib/spatial-office/music';
 import type { OfficeMusicPlayback, SharedOfficeAction } from '@/lib/spatial-office/space';
 
@@ -36,12 +36,14 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
   const dialog = useRef<HTMLDialogElement>(null);
   const player = useRef<HTMLElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
+  const primedAudioUrl = useRef('');
   const drag = useRef<PlayerDrag | null>(null);
   const [activeUrl, setActiveUrl] = useState('');
   const [localError, setLocalError] = useState('');
   const [minimized, setMinimized] = useState(false);
   const [position, setPosition] = useState<PlayerPosition | null>(null);
   const [autoplayBlocked,setAutoplayBlocked]=useState(false);
+  const [locallyMuted,setLocallyMuted]=useState(false);
   const source = useMemo(() => {
     try {
       return music ? resolveMusicSource(music.url) : null;
@@ -49,14 +51,13 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
       return null;
     }
   }, [music]);
-  const broadcastActive = Boolean(checkedIn && music && source && playback?.playing && playback.url===music.url);
-  const active = Boolean(broadcastActive && music && activeUrl === music.url);
+  const sharedBroadcastActive = Boolean(music && source && playback?.playing && playback.url===music.url);
+  const broadcastActive = Boolean(checkedIn && sharedBroadcastActive);
+  const active = Boolean(broadcastActive && !locallyMuted && music && activeUrl === music.url);
+  const handsFree=Boolean(source&&supportsHandsFreePlayback(source));
   const playerUrl=useMemo(()=>{
     if(!source) return '';
-    const url=new URL(source.playerUrl);
-    if(source.provider==='soundcloud') url.searchParams.set('auto_play','true');
-    else url.searchParams.set('autoplay','1');
-    return url.toString();
+    return musicPlayerUrl(source,typeof window==='undefined'?'':window.location.origin);
   },[source]);
 
   useEffect(() => {
@@ -69,17 +70,51 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
     let cancelled=false;
     queueMicrotask(()=>{
       if(cancelled) return;
-      if(!broadcastActive||!music) { setActiveUrl(''); setAutoplayBlocked(false); return; }
+      if(!broadcastActive||!music) { setActiveUrl(''); setAutoplayBlocked(false); setLocallyMuted(false); return; }
+      setLocallyMuted(false);
       setActiveUrl(music.url);
     });
     return ()=>{cancelled=true;};
   },[broadcastActive,music,playback?.updatedAt]);
 
   useEffect(()=>{
-    if(!active||source?.kind!=='audio'||!audio.current) return;
-    const attempt=audio.current.play();
+    const node=audio.current;
+    if(source?.kind!=='audio'||!node) return;
+    if(!active) { node.volume=0; return; }
+    if(playback?.startedAt) {
+      const elapsed=Math.max(0,(Date.now()-playback.startedAt)/1000);
+      node.currentTime=Number.isFinite(node.duration)&&node.duration>0?elapsed%node.duration:elapsed;
+    }
+    node.volume=1;
+    const attempt=node.play();
     if(attempt) void attempt.then(()=>setAutoplayBlocked(false)).catch(()=>setAutoplayBlocked(true));
-  },[active,playerUrl,source?.kind,playback?.updatedAt]);
+  },[active,playerUrl,source?.kind,playback?.startedAt,playback?.updatedAt]);
+
+  useEffect(()=>{
+    if(source?.kind!=='audio') return;
+    let cancelled=false;
+    const primeAudio=()=>{
+      const node=audio.current;
+      if(!node||primedAudioUrl.current===playerUrl) return;
+      node.muted=false;
+      node.volume=0;
+      const attempt=node.play();
+      if(attempt) void attempt.then(()=>{if(!cancelled) primedAudioUrl.current=playerUrl;}).catch(()=>{if(!cancelled) primedAudioUrl.current='';});
+    };
+    const prime=(event:Event)=>{
+      const target=event.target;
+      if(!checkedIn&&(!(target instanceof Element)||!target.closest('[data-floating-attendance]'))) return;
+      primeAudio();
+    };
+    document.addEventListener('pointerdown',prime,true);
+    document.addEventListener('keydown',prime,true);
+    if(checkedIn) queueMicrotask(primeAudio);
+    return ()=>{
+      cancelled=true;
+      document.removeEventListener('pointerdown',prime,true);
+      document.removeEventListener('keydown',prime,true);
+    };
+  },[checkedIn,source?.kind,playerUrl]);
 
   useEffect(() => {
     const keepInsideOffice = () => {
@@ -106,6 +141,7 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
 
   const stopPlayback = () => {
     setActiveUrl('');
+    setLocallyMuted(true);
     setAutoplayBlocked(false);
     setMinimized(false);
     setPosition(null);
@@ -177,22 +213,16 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
   const playerStyle: CSSProperties | undefined = position
     ? { left: position.left, top: position.top, right: 'auto', bottom: 'auto' }
     : undefined;
-  const syncAudio=()=>{
-    const node=audio.current;
-    if(!node||!playback?.startedAt) return;
-    const elapsed=Math.max(0,(Date.now()-playback.startedAt)/1000);
-    node.currentTime=Number.isFinite(node.duration)&&node.duration>0?elapsed%node.duration:elapsed;
-  };
-
   return <>
     <dialog ref={dialog} className="office-music-dialog office-utility-dialog" aria-labelledby="office-music-title" onCancel={event => { event.preventDefault(); close(); }}>
       <header><div><small>RADIO WORKSPACE · {onlineCount} CHECK-IN</small><h2 id="office-music-title"><Radio size={22} /> Musik bersama</h2></div><button type="button" autoFocus onClick={close} aria-label="Tutup pemutar musik"><X size={18} /></button></header>
-      <p>Tombol putar mengirim siaran ke semua anggota yang sedang check-in. Browser tetap dapat meminta satu ketukan pada pemutar sebelum mengizinkan suara pertama kali di setiap perangkat.</p>
-      {music && source ? <section className="office-music-current"><span className="office-music-provider"><Music2 size={17} />{source.label}</span><strong>{music.title}</strong><a href={music.url} target="_blank" rel="noreferrer">Buka sumber <ExternalLink size={13} /></a><button className="office-music-listen" type="button" disabled={!checkedIn||busy||!ready} onClick={()=>void togglePlayback()}>{broadcastActive ? <><Pause size={17} />Hentikan siaran tim</> : <><Volume2 size={17} />Putar untuk semua tim</>}</button>{broadcastActive&&<small>Siaran aktif di {onlineCount} akun check-in. Jika suara belum terdengar, tekan play sekali pada pemutar perangkat tersebut.</small>}{!checkedIn && <small>Check-in dan aktifkan sesi Anda untuk mendengarkan radio kantor.</small>}</section> : <div className="office-music-empty"><Radio size={28} /><strong>Belum ada playlist kantor</strong><span>Admin dapat menambahkan sumber musik di bawah.</span></div>}
+      <p>Tombol putar menyinkronkan musik ke semua anggota yang sedang check-in. Audio langsung disiapkan saat anggota berinteraksi dengan aplikasi agar siaran berikutnya dapat berbunyi otomatis.</p>
+      {music && source ? <section className="office-music-current"><span className="office-music-provider"><Music2 size={17} />{source.label}</span><strong>{music.title}</strong><a href={music.url} target="_blank" rel="noreferrer">Buka sumber <ExternalLink size={13} /></a><button className="office-music-listen" type="button" disabled={!checkedIn||busy||!ready} onClick={()=>void togglePlayback()}>{broadcastActive ? <><Pause size={17} />Hentikan siaran tim</> : <><Volume2 size={17} />Putar untuk semua tim</>}</button>{broadcastActive&&handsFree&&<small>Siaran audio otomatis aktif untuk {onlineCount} akun check-in.</small>}{broadcastActive&&!handsFree&&<small>{source.label} membatasi autoplay dari perangkat lain. Gunakan tautan MP3, M4A, AAC, OGG, atau WAV agar suara mulai otomatis setelah check-in.</small>}{!checkedIn && <small>Check-in dan aktifkan sesi Anda untuk mendengarkan radio kantor.</small>}</section> : <div className="office-music-empty"><Radio size={28} /><strong>Belum ada playlist kantor</strong><span>Admin dapat menambahkan sumber musik di bawah.</span></div>}
       {canEdit && <form key={`${music?.url || 'empty'}:${music?.title || ''}`} className="office-music-form" onSubmit={save}><h3><Settings2 size={16} /> Atur playlist tim</h3><label>Nama playlist<input name="title" defaultValue={music?.title || ''} maxLength={80} onChange={() => setLocalError('')} placeholder="Contoh: Fokus pagi" /></label><label>Tautan musik<input name="url" type="url" required defaultValue={music?.url || ''} maxLength={1000} onChange={() => setLocalError('')} placeholder="https://open.spotify.com/playlist/…" /></label><small>Spotify, Apple Music, YouTube Music, SoundCloud, MP3, M4A, AAC, OGG, dan WAV.</small><div><button type="submit" disabled={busy || !ready}>{busy ? 'Menyimpan…' : 'Simpan playlist'}</button>{music && <button type="button" className="is-danger" disabled={busy || !ready} onClick={() => void clear()}>Hapus playlist</button>}</div></form>}
       {(localError || error) && <p role="alert" className="office-utility-error">{localError || error}</p>}
       {!ready && <p role="status">Penyimpanan kantor belum terhubung.</p>}
     </dialog>
+    {source?.kind==='audio'&&music&&<audio ref={audio} className="office-audio-engine" src={playerUrl} preload="auto" loop onEnded={()=>{if(primedAudioUrl.current===playerUrl&&audio.current){audio.current.currentTime=0;void audio.current.play();}}}/>}
     {active && music && source && <aside ref={player} style={playerStyle} className={`office-shared-player${minimized ? ' is-minimized' : ''}`} aria-label={`Sedang memutar ${music.title}`}>
       <header onPointerDown={startDrag} onPointerMove={movePlayer} onPointerUp={stopDrag} onPointerCancel={stopDrag}>
         <GripHorizontal className="office-player-grip" size={17} aria-hidden="true" />
@@ -203,7 +233,7 @@ export default function OfficeMusicPlayer({ open, music, playback, checkedIn, on
         </div>
       </header>
       <div className="office-player-media" aria-hidden={minimized}>
-        {source.kind === 'audio' ? <audio ref={audio} key={`${playerUrl}:${playback?.startedAt}`} src={playerUrl} controls autoPlay onLoadedMetadata={syncAudio} onPlay={()=>setAutoplayBlocked(false)} /> : <iframe key={`${playerUrl}:${playback?.startedAt}`} src={playerUrl} title={`Pemutar ${music.title}`} loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-presentation" tabIndex={minimized ? -1 : 0} />}
+        {source.kind === 'audio' ? <div className="office-player-audio-status"><Volume2 size={22}/><span>Audio kantor sedang disiarkan</span></div> : <iframe key={`${playerUrl}:${playback?.startedAt}`} src={playerUrl} title={`Pemutar ${music.title}`} loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-presentation" tabIndex={minimized ? -1 : 0} />}
       </div>
       {!minimized && <footer>{autoplayBlocked&&<span>Tekan play sekali untuk mengizinkan suara.</span>}<button type="button" onClick={onOpen}><Settings2 size={13} /> Buka radio</button></footer>}
     </aside>}

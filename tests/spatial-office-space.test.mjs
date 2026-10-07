@@ -224,7 +224,10 @@ test('music sources are normalized and only admins can change the shared playlis
   assert.equal(spotify.provider,'spotify');assert.match(spotify.playerUrl,/\/embed\/playlist\//);
   assert.equal(musicModel.resolveMusicSource('https://music.apple.com/id/playlist/focus/pl.123').provider,'apple');
   assert.equal(musicModel.resolveMusicSource('https://music.youtube.com/playlist?list=PL12345678').provider,'youtube');
-  assert.equal(musicModel.resolveMusicSource('https://cdn.example.com/team.mp3').kind,'audio');
+  const direct=musicModel.resolveMusicSource('https://cdn.example.com/team.mp3?signature=abc123');
+  assert.equal(direct.kind,'audio');assert.equal(musicModel.musicPlayerUrl(direct),direct.playerUrl);assert.equal(musicModel.supportsHandsFreePlayback(direct),true);
+  const youtube=musicModel.resolveMusicSource('https://music.youtube.com/playlist?list=PL12345678');
+  assert.match(musicModel.musicPlayerUrl(youtube,'https://office.example'),/autoplay=1/);assert.match(musicModel.musicPlayerUrl(youtube,'https://office.example'),/enablejsapi=1/);
   assert.throws(()=>musicModel.resolveMusicSource('http://example.com/music.mp3'),/HTTPS/);
   assert.throws(()=>space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',false),/admin/);
   const saved=space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',true);
