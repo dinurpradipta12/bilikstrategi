@@ -28,7 +28,7 @@ export default function AvatarPreview({ value }: { value: AvatarStyle }) {
     let resources = { materials: [] as THREE.Material[], geometries: [] as THREE.BufferGeometry[] };
     setState('loading');
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, .1, 10); camera.position.set(0, .72, 2.55); camera.lookAt(0, .65, 0);
+    const camera = new THREE.PerspectiveCamera(28, 1, .1, 10);
     let renderer: THREE.WebGLRenderer;
     try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' }); }
     catch { queueMicrotask(() => setState('error')); return; }
@@ -46,6 +46,12 @@ export default function AvatarPreview({ value }: { value: AvatarStyle }) {
       if (disposed) return;
       const model = cloneSkeleton(base.scene) as THREE.Group; model.scale.setScalar(1.38); model.rotation.y = -.08; scene.add(model);
       resources = applyAvatarAppearance(model, hair.scene, value);
+      model.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
+      const verticalDistance = size.y / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+      const horizontalDistance = size.x / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+      camera.position.set(center.x, center.y, center.z + Math.max(verticalDistance, horizontalDistance) * 1.12);
+      camera.lookAt(center); camera.updateProjectionMatrix();
       mixer = new THREE.AnimationMixer(model); const idle = base.animations.find(clip => clip.name === 'Idle'); if (idle) mixer.clipAction(idle).play();
       const clock = new THREE.Clock();
       const animate = () => { if (disposed) return; frame = requestAnimationFrame(animate); mixer?.update(Math.min(clock.getDelta(), .05)); renderer.render(scene, camera); };
