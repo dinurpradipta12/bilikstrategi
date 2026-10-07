@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { musicModel, spaceModel as space, loadTS } from './spatial-office-module-loader.mjs';
-import { travelPath, zonePosition } from '../lib/spatial-office/model.ts';
+import { deskPosition, travelPath, zonePosition } from '../lib/spatial-office/model.ts';
 const members = [{ id: '1' }, { id: '2' }, { id: '3' }];
 
 test('ownership survives reload/reordering and roster removal frees only that desk', () => {
@@ -70,14 +70,23 @@ test('ornaments allow saved garden/interior placement and reject walls, corridor
 });
 
 test('wall snapping uses the asymmetric asset footprint on all four solid walls', () => {
-  for(const asset of ['framed_art','pinboard','bookshelf']) for(const [x,z,axis,edge,side] of [[-3,-11.5,'z',-12,1],[-5.5,-9,'x',-6,1],[-.5,-9,'x',0,-1],[-3,-6.5,'z',-6,-1]]) {
-    const item={id:'wall-item',asset,x,z,y:asset==='bookshelf'?0:.9,rotation:Math.PI/4,room:0};
+  for(const asset of ['framed_art','pinboard','bookshelf','window']) for(const [x,z,axis,edge,side] of asset==='window'?[[-3,-11.5,'z',-12,1],[-5.5,-9,'x',-6,1],[-.5,-9,'x',0,-1],[-4.5,-6.5,'z',-6,-1]]:[[-3,-11.5,'z',-12,1],[-5.5,-9,'x',-6,1],[-.5,-9,'x',0,-1],[-3,-6.5,'z',-6,-1]]) {
+    const item={id:'wall-item',asset,x,z,y:asset==='bookshelf'?0:undefined,rotation:Math.PI/4,room:0};
     const snapped=space.snapOrnament(item,item,true),b=space.ornamentFootprint(snapped);
     assert.ok(Math.abs(b[`${axis}${side>0?'min':'max'}`]-(edge+side*.075))<.00001);
     assert.doesNotThrow(()=>space.parseOrnaments([snapped],1,[{slot:10,x:-3,z:-9,rotation:0,removed:true}]));
     const inside={...snapped,[axis]:snapped[axis]-side*.1};
     assert.throws(()=>space.parseOrnaments([inside],1),/dinding/);
   }
+});
+
+test('desktop objects can be placed on a workstation surface and cannot float above a desk',()=>{
+  const desk=deskPosition(0,[]);
+  const mug={id:'desk-mug',asset:'coffee_mug',x:desk.x,z:desk.z,y:space.DESK_SURFACE_Y,rotation:desk.rotation,room:0};
+  assert.equal(space.isDeskTopPlacement(mug,[]),true);
+  assert.doesNotThrow(()=>space.parseOrnaments([mug],1,[]));
+  assert.equal(space.isDeskTopPlacement({...mug,x:desk.x+2},[]),false);
+  assert.throws(()=>space.parseOrnaments([{...mug,x:desk.x+2}],1,[]),/meja|lorong/);
 });
 
 test('invalid movement cannot replace a valid draft; dragging clamps to the current room', () => {

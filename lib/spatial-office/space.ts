@@ -35,6 +35,7 @@ export const ORNAMENTS = {
   storage_box: { label: 'Kotak penyimpanan', category: 'Dekorasi', width:.58,depth:.42,height:.48 },
   trash_bin: { label: 'Tempat sampah', category: 'Dekorasi', width:.36,depth:.36,height:.42 },
   team_radio: { label: 'Radio tim', category: 'Kantor', width:.86,depth:.36,height:1.2 },
+  window: { label: 'Jendela dinding', category: 'Kantor', width:1.9,depth:.15,height:1.5 },
 } as const;
 
 // Actual supplied GLB bounds after Z-up conversion: min/max X, Z and Y.
@@ -73,6 +74,7 @@ export const ORNAMENT_BOUNDS: Record<keyof typeof ORNAMENTS, readonly number[]> 
   storage_box: [-0.29,0.29,-0.21,0.21,0,0.4725],
   trash_bin: [-0.18,0.18,-0.18,0.18,0.005,0.42],
   team_radio: [-.43,.43,-.18,.18,0,1.2],
+  window: [-.95,.95,-.075,.075,0,1.5],
 };
 export type Ornament = { id: string; asset: keyof typeof ORNAMENTS; x: number; z: number; y?: number; scale?: [number,number,number]; color?: string; rotation: number; room: number };
 function sameOrnament(a: Ornament | undefined, b: Ornament) {
@@ -304,7 +306,20 @@ const placementRoom = (item: Pick<Ornament,'x'|'z'>) => {
   if(item.x > 6) return item.z < 1.5 ? [6,12,-5,1.5] : [6,12,1.5,6];
   return [-6,6,-6,6];
 };
-export const isWallOrnament = (item: Ornament) => item.asset==='framed_art'||item.asset==='pinboard';
+export const isWallOrnament = (item: Ornament) => item.asset==='framed_art'||item.asset==='pinboard'||item.asset==='window';
+export const DESK_SURFACE_Y = .79;
+export function isDeskTopPlacement(item: Ornament, desks: DeskLayout[] = []) {
+  const bounds=ornamentFootprint(item);
+  if(bounds.ymin < DESK_SURFACE_Y-.025 || bounds.ymin > DESK_SURFACE_Y+.065) return false;
+  for(let slot=0;slot<DESKS_PER_ROOM;slot++) {
+    const desk=deskPosition(item.room*DESKS_PER_ROOM+slot,desks);
+    if(desk.removed) continue;
+    const c=Math.cos(desk.rotation),s=Math.sin(desk.rotation);
+    const corners=bounds.corners.map(([x,z])=>[(x-desk.x)*c-(z-desk.z)*s,(x-desk.x)*s+(z-desk.z)*c]);
+    if(corners.every(([x,z])=>Math.abs(x)<=.69&&Math.abs(z)<=.365)) return true;
+  }
+  return false;
+}
 // Keep the full GLB footprint on the room-facing surface, including rotation.
 // Call with the previous position so dragging cannot jump through a partition.
 export function snapOrnament(item: Ornament, previous: Ornament = item, attach = false): Ornament {
@@ -318,7 +333,7 @@ export function snapOrnament(item: Ornament, previous: Ornament = item, attach =
     const wall=walls[0];
     if(attach || wall.distance<.65) {
       next.rotation=wall.rotation;
-      if(isWallOrnament(next) && next.y===undefined) next.y=.9;
+      if(isWallOrnament(next) && next.y===undefined) next.y=next.asset==='window'?.65:.9;
       const b=ornamentFootprint(next);
       if(wall.axis==='x') next.x+=wall.edge+wall.sign*gap-(wall.sign>0?b.xmin:b.xmax);
       else next.z+=wall.edge+wall.sign*gap-(wall.sign>0?b.zmin:b.zmax);
@@ -336,6 +351,9 @@ export function ornamentError(item: Ornament, desks: DeskLayout[] = []): string 
   const [xmin,xmax,zmin,zmax]=placementRoom(item),gap=.074;
   if(b.xmin<xmin+gap||b.xmax>xmax-gap||b.zmin<zmin+gap||b.zmax>zmax-gap) return 'Objek menembus dinding atau keluar ruangan. Geser ke sisi dalam atau gunakan Tempel ke dinding.';
   if(b.ymax>2.701) return 'Objek terlalu tinggi. Turunkan agar tetap di bawah bagian atas dinding.';
+  // A tabletop object occupies the desk's existing footprint, so it must not
+  // be rejected by floor clearance rules for the chair and walking routes.
+  if(isDeskTopPlacement(item,desks)) return '';
   item=center;
   if (item.asset !== 'area_rug') for (const [x,z,rotated] of [[-1.5,-6,0],[4.5,-7.5,0],[9,-7.5,0],[4.5,6,0],[12,4.5,1]]) {
     const along = rotated ? Math.abs(item.z-z) : Math.abs(item.x-x), across = rotated ? Math.abs(item.x-x) : Math.abs(item.z-z);

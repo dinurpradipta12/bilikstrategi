@@ -5,11 +5,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { applyAvatarAppearance } from './avatar-visual';
-import { ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
+import { DESK_SURFACE_Y, ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
 import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
 const CHARACTERS = [...AVATAR_MODELS];
-const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine','team_radio'].includes(key))])];
+const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine','team_radio','window'].includes(key))])];
 type CharacterBones = { hips?: THREE.Bone; spine?: THREE.Bone; head?: THREE.Bone; upperArms: Array<THREE.Bone | undefined>; lowerArms: Array<THREE.Bone | undefined>; upperLegs: Array<THREE.Bone | undefined>; lowerLegs: Array<THREE.Bone | undefined> };
 type Rig = { root: THREE.Group; model: THREE.Group; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; action: string; bones: CharacterBones; mug: THREE.Group };
 type Occupant = {
@@ -17,7 +17,7 @@ type Occupant = {
   route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; name: HTMLSpanElement; offset: number;
 };
 export type ObjectMenuTarget = { id: string; x: number; y: number };
-export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onObjectMenu: (target: ObjectMenuTarget) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void };
+export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onObjectMenu: (target: ObjectMenuTarget) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number, y?: number) => void };
 
 export class OfficeScene {
   private scene = new THREE.Scene();
@@ -217,6 +217,19 @@ export class OfficeScene {
       for(const [top,bottom,height,cy,color] of [[1.25,1.25,.12,.8,'#d5bd97'],[.28,.48,.72,.36,'#61756a']] as const) {
         const mesh=new THREE.Mesh(new THREE.CylinderGeometry(top,bottom,height,40),new THREE.MeshStandardMaterial({color,roughness:.7}));mesh.position.y=cy;mesh.castShadow=true;group.add(mesh);this.track(mesh);
       }
+      group.position.set(x,y,z);group.rotation.y=rotation;parent.add(group);return group;
+    }
+    if(name==='window') {
+      const group=new THREE.Group(); group.name='custom-window';
+      const piece=(w:number,h:number,d:number,px:number,py:number,pz:number,color:string,opacity=1)=>{
+        const material=new THREE.MeshStandardMaterial({color,roughness:.34,metalness:.12,transparent:opacity<1,opacity,depthWrite:opacity===1});
+        const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);mesh.position.set(px,py,pz);mesh.castShadow=opacity===1;mesh.receiveShadow=true;group.add(mesh);this.track(mesh);return mesh;
+      };
+      // Wall-mounted double pane with a dark green frame and center mullion.
+      piece(1.9,.085,.15,0,.045,0,'#263f37'); piece(1.9,.085,.15,0,1.455,0,'#263f37');
+      piece(.085,1.5,.15,-.9075,.75,0,'#263f37'); piece(.085,1.5,.15,.9075,.75,0,'#263f37');
+      piece(.055,1.29,.12,0,.75,0,'#526f62');
+      piece(.82,1.27,.035,-.44,.75,.025,'#b9e4e5',.34);piece(.82,1.27,.035,.44,.75,.025,'#b9e4e5',.34);
       group.position.set(x,y,z);group.rotation.y=rotation;parent.add(group);return group;
     }
     const model = this.templates.get(name)!.clone(true);
@@ -461,11 +474,11 @@ export class OfficeScene {
       this.outline.material.color.set((!selected.startsWith('desk:') && ornamentError(items.find(item => item.id === selected)!, this.deskLayout)) ? '#db6c60' : '#d49745');
     } else if (this.outline) this.outline.visible = false;
   }
-  private floorPoint(event: PointerEvent) {
+  private floorPoint(event: PointerEvent, height=0) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), new THREE.Vector3());
+    return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -height), new THREE.Vector3());
   }
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
@@ -485,10 +498,19 @@ export class OfficeScene {
     if (this.objectClick && Math.hypot(event.clientX-this.objectClick.x,event.clientY-this.objectClick.y)>5) this.objectClick=null;
     if (!this.dragging || !this.editMode) return;
     if(this.objectClick) return;
-    const point = this.floorPoint(event); if (!point) return;
+    const floor = this.floorPoint(event); if (!floor) return;
+    let point=floor,y=0;
+    if(!this.dragging.id.startsWith('desk:')) {
+      const surfaceHit=this.raycaster.intersectObjects([...this.desks.values()].filter(group=>group.visible),true).find(hit=>{
+        let current:THREE.Object3D|null=hit.object;
+        while(current){if(current.userData.tableSurface)return true;current=current.parent;}
+        return false;
+      });
+      if(surfaceHit){point=surfaceHit.point;y=DESK_SURFACE_Y;}
+    }
     event.stopImmediatePropagation();
     const x = Math.round((point.x + this.dragging.dx) * 4) / 4, z = Math.round((point.z + this.dragging.dz) * 4) / 4;
-    this.options.onMoveOrnament(this.dragging.id, THREE.MathUtils.clamp(x, -18, 19), THREE.MathUtils.clamp(z, -13.5, 6));
+    this.options.onMoveOrnament(this.dragging.id, THREE.MathUtils.clamp(x, -18, 19), THREE.MathUtils.clamp(z, -13.5, 6),y);
   };
   private pointerUp = (event: PointerEvent) => {
     if (this.objectClick && event.type !== 'pointercancel' && Math.hypot(event.clientX-this.objectClick.x,event.clientY-this.objectClick.y)<=5) {

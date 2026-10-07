@@ -27,7 +27,7 @@ const { OfficeScene } = loadTS('../lib/spatial-office/scene.ts', {
 }, { document: { createElement: () => new Element() }, requestAnimationFrame:()=>0 });
 const templates = new Map();
 const characterClips = new Map();
-for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS).filter(k=>!['round_meeting_table','coffee_machine','team_radio'].includes(k)), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
+for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS).filter(k=>!['round_meeting_table','coffee_machine','team_radio','window'].includes(k)), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
   const path = model.AVATAR_MODELS.includes(asset) ? model.AVATAR_ASSETS[asset] : asset;
   const bytes = await readFile(new URL(`../src/Char-assets/${path}.glb`, import.meta.url));
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
@@ -104,6 +104,11 @@ test('ornament draft move/rotate/add/remove/cancel reconcile without mutating te
   engine.setOrnaments([], 0, true, ''); assert.equal(engine.decorations.size, 0);
   engine.setOrnaments(base, 0, false, ''); assert.equal(engine.decorations.get('plant-back').position.x, -5); assert.equal(engine.outline.visible, false);
   assert.deepEqual(templates.get('floor_plant').position.toArray(), original.toArray());
+});
+test('custom window library item renders without requiring a missing GLB',()=>{
+  const engine=office(),window=engine.asset('window',-3,-6,.65,Math.PI/2);
+  let meshes=0;window.traverse(object=>{if(object.isMesh)meshes++;});
+  assert.ok(meshes>=7);assert.equal(window.position.y,.65);assert.equal(window.rotation.y,Math.PI/2);
 });
 test('workspace radio is rendered as a selectable procedural object',()=>{
   const engine=office(),radio=engine.decorations.get('workspace-radio');

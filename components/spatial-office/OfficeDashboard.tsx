@@ -367,13 +367,13 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={id=>{if(draft)return;selectMember(id);if(demo||id===data.viewerId){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
+      <OfficeCanvas signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={id=>{if(draft)return;selectMember(id);if(demo||id===data.viewerId){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
           else {
             const legacyItems=JSON.stringify(draft.desks)===JSON.stringify(space.desks)?space.ornaments:undefined;
-            setDraft({...draft,ornaments:moveOrnament(draft.ornaments,id,{x,z},rooms,draft.desks,false,legacyItems)});
+            setDraft({...draft,ornaments:moveOrnament(draft.ornaments,id,{x,z,...(y===undefined?{}:{y})},rooms,draft.desks,false,legacyItems)});
           }
           setSpaceError('');
         } catch(failure) { setSpaceError(failure instanceof Error ? failure.message : 'Posisi belum valid.'); }

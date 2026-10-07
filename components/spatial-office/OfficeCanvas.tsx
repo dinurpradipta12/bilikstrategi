@@ -13,7 +13,7 @@ type Props = {
   members: { member: OfficeMember; slot: number }[];
   lights: Record<string,LightMode>; schedule?: AttendanceSchedule; desks: DeskLayout[];
   room: number; ornaments: Ornament[]; editing: boolean; selectedOrnament: string;
-  onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void;
+  onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number, y?: number) => void;
   onObjectMenu: (target: ObjectMenuTarget) => void; children?: ReactNode;
   motion: boolean; selected: string; onSelect: (id: string) => void;
   signText: string;
@@ -40,7 +40,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
         onSelectDesk: slot => editCallbacks.current.onSelectDesk(slot),
         onObjectMenu: target=>editCallbacks.current.onObjectMenu(target),
         onSelectOrnament: id => editCallbacks.current.onSelectOrnament(id),
-        onMoveOrnament: (id, x, z) => editCallbacks.current.onMoveOrnament(id, x, z),
+        onMoveOrnament: (id, x, z, y) => editCallbacks.current.onMoveOrnament(id, x, z, y),
       });
       scene.current = engine;
     } catch {
