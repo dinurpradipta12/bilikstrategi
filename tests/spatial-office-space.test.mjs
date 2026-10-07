@@ -232,6 +232,15 @@ test('music sources are normalized and only admins can change the shared playlis
   assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(saved)),[{id:'a'}]).music.title,'Fokus tim');
   assert.equal(space.applySharedAction(saved,{type:'music',url:'',title:''},'a',true).music,null);
 });
+test('avatar chat is trimmed, attributed to the verified member and bounded',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'},{id:'b'}]);
+  const saved=space.applySharedAction(base,{type:'chat',text:'  Halo tim!  '},'a',false);
+  assert.equal(saved.chats.a.text,'Halo tim!');assert.ok(saved.chats.a.sentAt>0);
+  assert.equal(saved.chats.b,undefined);
+  assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(saved)),[{id:'a'},{id:'b'}]).chats.a.text,'Halo tim!');
+  assert.throws(()=>space.applySharedAction(base,{type:'chat',text:'   '},'a',false),/1–150/);
+  assert.throws(()=>space.applySharedAction(base,{type:'chat',text:'x'.repeat(151)},'a',false),/1–150/);
+});
 test('radio migration adds it once and preserves deliberate deletion after version eight',()=>{
   const base=space.normalizeSpace(null,[{id:'a'}]);
   assert.equal(base.ornaments.filter(item=>item.asset==='team_radio').length,1);

@@ -746,9 +746,11 @@ export class OfficeScene {
       if (coffee && rig.bones.head) rig.bones.head.rotation.x = -sip * .08;
       rig.mug.visible = settled && occupant.zone === 'pantry';
       if (settled) rig.root.rotation.y = destination.rotation;
-      const text = settled ? bubbleLabel(member, occupant.zone, this.moving ? Date.now() : 0) : '';
+      const bubbleNow=Date.now(),chatActive=Boolean(member.chat&&bubbleNow>=member.chat.sentAt&&bubbleNow-member.chat.sentAt<15_000);
+      const text = settled ? bubbleLabel(member, occupant.zone, this.moving||chatActive ? bubbleNow : 0) : '';
       if (occupant.bubble.textContent !== text) occupant.bubble.textContent = text;
-      occupant.bubble.hidden = !text || (id !== this.selected && (!this.moving || (t + occupant.slot * 3) % 25 >= 5));
+      occupant.bubble.hidden = !text || (!chatActive && id !== this.selected && (!this.moving || (t + occupant.slot * 3) % 25 >= 5));
+      occupant.bubble.dataset.chat=String(chatActive);
       occupant.label.dataset.zone = occupant.zone;
       occupant.label.dataset.walking = String(!settled);
       occupant.label.dataset.status = member.status;

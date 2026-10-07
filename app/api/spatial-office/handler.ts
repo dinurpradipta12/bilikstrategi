@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
       ...member, presenceIdle: (()=>{
         const email=officeRoster.find(item=>item.id===member.id)?.email.toLowerCase();
         const tracked=presenceRows.find(p=>p.user_email?.toLowerCase()===email && Number(p.session_check_in_timestamp)>0 && Number(p.session_check_in_timestamp)===member.startedAt);
-        return Boolean(tracked && resolvePresenceSnapshot({isOnline:true,isPaused:member.status==='paused',lastActivityAt:tracked.last_activity_at,lastSeenAt:tracked.last_seen_at,lastForegroundAt:tracked.last_foreground_at}).state!=='active');
+        return Boolean(tracked && member.status !== 'paused' && resolvePresenceSnapshot({isOnline:true,isPaused:false,lastActivityAt:tracked.last_activity_at,lastSeenAt:tracked.last_seen_at,lastForegroundAt:tracked.last_foreground_at}).state!=='active');
       })(), tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
       avatar: avatars.get(`spatial-avatar:${teamId}:${member.id}`) || undefined,
     }));
@@ -139,12 +139,17 @@ export async function PATCH(req: NextRequest) {
     if (raw.length > 300000) return json({ error: 'Data terlalu besar.' }, 413);
     action = JSON.parse(raw);
   } catch { return json({ error: 'Data perubahan tidak valid.' }, 400); }
-  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity', 'light', 'note', 'music'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
+  if (!action || !['claim', 'assign', 'remove-desk', 'layout', 'activity', 'light', 'note', 'music', 'chat'].includes(action.type)) return json({ error: 'Perintah kantor tidak valid.' }, 400);
   if(action.version!==8) return json({error:'Kantor telah diperbarui. Muat ulang halaman sebelum mengubah meja.'},409);
   if (['layout','assign','remove-desk','music'].includes(action.type) && !snapshot.canEditOffice) return json({ error: action.type==='music'?'Hanya admin atau owner yang dapat mengganti playlist kantor.':'Hanya admin atau owner yang dapat mengatur meja dan ornamen.' }, 403);
   const teamId = process.env.CLICKUP_WORKSPACE_ID || process.env.CLICKUP_TEAM_ID || '90182855619';
   try {
     const space = await mutateOfficeSpace(teamId, snapshot.members, current => {
+      if(action.type==='chat') {
+        const viewer=snapshot.members.find((member: {id:string})=>member.id===snapshot.viewerId);
+        if(viewer?.status==='offline'||viewer?.presenceIdle) throw new Error('Check-in dan aktifkan sesi Anda sebelum mengirim pesan.');
+        return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
+      }
       if(action.type==='light'||action.type==='note'||action.type==='music') return applySharedAction(current,action,snapshot.viewerId,snapshot.canEditOffice);
       if (action.type === 'activity') {
         const viewer=snapshot.members.find((member: {id:string})=>member.id===snapshot.viewerId);

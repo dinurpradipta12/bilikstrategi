@@ -11,6 +11,7 @@ export type OfficeMember = {
   tasks?: OfficeTask[];
   avatar?: AvatarStyle;
   activity?: { zone: OfficeActivityZone; until: number; seat?: number };
+  chat?: { text: string; sentAt: number };
 };
 export type OfficeSnapshot = { viewerRole?: string; canEditOffice?: boolean; space?: import('./space').OfficeSpace; spaceStorage?: boolean; members: OfficeMember[]; syncedAt: string; viewerId?: string; avatarStorage?: boolean };
 export type RosterMember = { id: string; name: string; email: string; aliases?: string[] };
@@ -293,7 +294,9 @@ export function typingHand(index: number, bodyLift: number, tap = 0): [number, n
 }
 
 export function bubbleLabel(member: OfficeMember, zone: OfficeZone = 'desk', now = Date.now()) {
-  if (member.status !== 'working' || member.presenceIdle || zone === 'exit') return '';
+  if (member.status === 'offline' || member.presenceIdle || zone === 'exit') return '';
+  if (member.chat && now >= member.chat.sentAt && now - member.chat.sentAt < 15_000) return member.chat.text.slice(0, 150);
+  if (member.status !== 'working') return '';
   const lines = zone === 'meeting' ? [member.project?`Kita bahas progres ${member.project}, yuk.`:'Kita mulai dari progres masing-masing, ya.', 'Ada kendala yang perlu kita selesaikan bersama?', 'Aku catat keputusan meeting hari ini.', 'Setelah ini kita bagi langkah selanjutnya, ya.'] : zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.']
     : zone === 'garden' ? ['Enak juga duduk di taman.', 'Cari udara segar sebentar, yuk.', 'Ada ide baru yang mau dibahas?', 'Teduh sekali di sini.']
     : zone === 'lounge' ? ['Istirahat sebentar, yuk.', 'Bagaimana kabar kalian hari ini?', 'Nanti kita lanjut ngobrol setelah rehat.', 'Ada rekomendasi makan siang?']

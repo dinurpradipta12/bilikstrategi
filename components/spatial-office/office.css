@@ -270,6 +270,12 @@
 .office-bubble[hidden],.office-desk-label[hidden] {
   display:none
 }
+.office-bubble[data-chat=true] {
+  color:#294b38;
+  background:#e9f6df;
+  border-color:#a8c99d;
+  box-shadow:0 4px 16px #264b3430
+}
 .office-desk-label {
   font-size:9px;
   color:#858e80;
@@ -811,6 +817,12 @@
 .office-game .office-game-dock { position:absolute; z-index:12; left:50%; bottom:max(18px,env(safe-area-inset-bottom)); transform:translateX(-50%); padding:7px; border-radius:20px; background:#fffef1f2; border:1px solid #d3dcc9; box-shadow:0 8px 32px #283b3926; margin:0; max-width:calc(100% - 24px); }
 .office-game .office-game-dock button,.office-game .office-game-dock>a { flex-direction:column; gap:6px; min-width:62px; padding:9px 10px; background:transparent; border:0; }
 .office-game-dock button:hover,.office-game-dock a:hover,.office-game-dock button[aria-pressed=true] { background:#e2edd9; color:#38512f; }
+.office-avatar-chat { position:absolute; z-index:13; left:50%; bottom:calc(max(18px,env(safe-area-inset-bottom)) + 82px); transform:translateX(-50%); display:flex; align-items:center; gap:6px; width:min(380px,calc(100% - 28px)); padding:6px 7px 6px 12px; border:1px solid #cad8c2; border-radius:16px; background:#fffef5f2; box-shadow:0 8px 28px #263d3924; }
+.office-avatar-chat input { min-width:0; flex:1; border:0; outline:0; background:transparent; color:#304638; font:11px/1.4 inherit; }
+.office-avatar-chat input::placeholder { color:#7a8b7b; }
+.office-avatar-chat span { color:#8a9788; font-size:8px; font-variant-numeric:tabular-nums; }
+.office-avatar-chat button { display:grid; place-items:center; flex:0 0 30px; width:30px; height:30px; padding:0; border:0; border-radius:10px; background:#4f7357; color:#fff; cursor:pointer; }
+.office-avatar-chat button:disabled { opacity:.42; cursor:not-allowed; }
 .office-game .office-view-controls { top:96px; left:18px; }
 .office-game .office-camera-controls { bottom:26px; right:18px; }
 .office-game .office-camera-hint { bottom:26px; max-width:24%; }
@@ -898,6 +910,7 @@
   .office-game .office-camera-controls { bottom:105px; right:10px; }
   .office-game .office-camera-hint { bottom:110px; left:10px; max-width:48%; }
   .office-game .office-game-dock { bottom:max(14px,env(safe-area-inset-bottom)); gap:1px; padding:5px; border-radius:16px; }
+  .office-avatar-chat { bottom:calc(max(14px,env(safe-area-inset-bottom)) + 70px); width:min(340px,calc(100% - 20px)); }
   .office-game .office-game-dock button,.office-game .office-game-dock>a { min-width:44px; padding:9px 6px; font-size:8px; white-space:nowrap; }
   .office-game .office-desks-panel,.office-game .office-editor-panel,.office-game.office-panel-team>.office-bottom-grid,.office-game.office-panel-member>.office-bottom-grid { top:auto; bottom:96px; right:10px; width:calc(100% - 20px); max-height:52dvh; padding:14px; }
   .office-game .office-editor-save { bottom:-14px; margin-left:-14px; margin-right:-14px; margin-bottom:-14px; padding-left:14px; padding-right:14px; }

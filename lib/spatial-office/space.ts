@@ -84,9 +84,10 @@ export const ROOM_LIGHTS = {
 } as const;
 export type LightMode='auto'|'on'|'off';
 export type StickyNote={id:string;boardId:string;authorId:string;text:string;color:string;revision:number};
-export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean}|{type:'music';url:string;title:string};
+export type OfficeChat={text:string;sentAt:number};
+export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean}|{type:'music';url:string;title:string}|{type:'chat';text:string};
 export function lightEnabled(mode:LightMode|undefined,night:boolean) { return mode==='on'||(mode!=='off'&&night); }
-export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; music:OfficeMusic|null; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
+export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; music:OfficeMusic|null; chats:Record<string,OfficeChat>; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
 export const OBJECT_COLORS = ['original', '#52684e', '#394c68', '#cfaa77', '#b68c92', '#efe7d5', '#59545a'] as const;
 export function validObjectColor(color: unknown) { return color === undefined || color === 'original' || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)); }
 const privateOffice = (name: string, x: number): Ornament[] => [
@@ -132,6 +133,10 @@ export const ROOM_FURNITURE: Ornament[] = [
 ];
 export function applySharedAction(space:OfficeSpace,action:SharedOfficeAction,viewerId:string,admin:boolean):OfficeSpace {
   if(!Object.hasOwn(space.claims,viewerId)) throw new Error('Anda bukan anggota kantor.');
+  if(action.type==='chat') {
+    if(typeof action.text!=='string'||!action.text.trim()||action.text.trim().length>150) throw new Error('Pesan harus berisi 1–150 karakter.');
+    return {...space,revision:space.revision+1,chats:{...space.chats,[viewerId]:{text:action.text.trim(),sentAt:Date.now()}}};
+  }
   if(action.type==='light') {
     const [area,name]=String(action.key).split(':');
     if(!/^\d+$/.test(area)||Number(area)>=spaceCapacity(space,Object.keys(space.claims).length)/DESKS_PER_ROOM||!Object.hasOwn(ROOM_LIGHTS,name)||!['auto','on','off'].includes(action.mode)||action.key!==`${Number(area)}:${name}`) throw new Error('Pengaturan lampu tidak valid.');
@@ -217,7 +222,8 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
     for(const item of [...(area?DEFAULT_ORNAMENTS:[]),...ROOM_FURNITURE]) {const id=area?`${item.id}-area-${area}`:item.id;if(!ornaments.some(o=>o.id===id)) ornaments.push({...item,id,room:area});}
     furnishedRooms.push(area);
   }
-  return { version:8, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],music:normalizeOfficeMusic(raw.music),furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
+  const chats=Object.fromEntries(sorted.flatMap(member=>{const chat=raw.chats?.[member.id];return chat&&typeof chat.text==='string'&&chat.text.trim()&&chat.text.length<=150&&Number.isFinite(chat.sentAt)?[[member.id,{text:chat.text.trim(),sentAt:chat.sentAt}]]:[];}));
+  return { version:8, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],music:normalizeOfficeMusic(raw.music),chats,furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');

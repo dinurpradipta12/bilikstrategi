@@ -105,6 +105,18 @@ test('activity is scoped to verified user and invalid destinations never write',
   assert.equal(f.spaceWrites[0].activities['99'],undefined);
   assert.equal((await f.PATCH(f.request({ action:{ type:'activity', zone:'external' } }))).status,409);
 });
+test('checked-in and paused members can chat as themselves; checked-out members cannot',async()=>{
+  const active=fixture({sessions:[{user_id:'1',check_in_timestamp:Date.now(),is_paused:false}]});
+  assert.equal((await active.PATCH(active.request({id:'99',action:{type:'chat',text:' Halo kantor '}}))).status,200);
+  assert.equal(active.spaceWrites[0].chats['1'].text,'Halo kantor');assert.equal(active.spaceWrites[0].chats['99'],undefined);
+  const paused=fixture({sessions:[{user_id:'1',check_in_timestamp:Date.now(),is_paused:true}]});
+  const pausedSnapshot=await (await paused.GET(paused.request())).json();
+  assert.equal(pausedSnapshot.members[0].presenceIdle,false);
+  assert.equal((await paused.PATCH(paused.request({action:{type:'chat',text:'Istirahat sebentar'}}))).status,200);
+  const offline=fixture();
+  assert.equal((await offline.PATCH(offline.request({action:{type:'chat',text:'Tidak boleh'}}))).status,409);
+  assert.equal(offline.spaceWrites.length,0);
+});
 test('desk transforms require a database admin role and are checked for collisions', async () => {
   const action={ type:'layout', layoutRevision:0, ornaments:[], desks:[{ slot:0, x:-4.6, z:-2.2, rotation:0 }] };
   const member=fixture(), admin=fixture({ role:'admin' });

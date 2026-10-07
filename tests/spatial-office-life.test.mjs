@@ -34,6 +34,13 @@ test('offline/sleeping bubbles are empty and each leisure area has varied conver
   assert.equal(bubbleLabel(member, 'exit'), '');
   for (const zone of ['pantry','garden','lounge']) assert.equal(new Set(Array.from({ length:4 }, (_, i) => bubbleLabel({...member,status:'working'}, zone, i*11000))).size, 4);
 });
+test('member chat overrides automatic bubbles briefly, including during a pause',()=>{
+  const now=100_000,chat={text:'Ada yang bisa bantu review?',sentAt:now-1_000};
+  assert.equal(bubbleLabel({...member,chat},'lounge',now),chat.text);
+  assert.equal(bubbleLabel({...member,status:'working',chat},'desk',now),chat.text);
+  assert.equal(bubbleLabel({...member,chat},'lounge',now+15_000),'');
+  assert.equal(bubbleLabel({...member,status:'offline',chat},'exit',now),'');
+});
 test('movable desks reject blocked layouts; seat, keyboard and route follow saved orientation', () => {
   const layout = spaceModel.parseDesks([{ slot:0, x:-4.6, z:-2.2, rotation:0 }], 1);
   const d = deskPosition(0, layout), p = zonePosition(0, 'desk', layout);

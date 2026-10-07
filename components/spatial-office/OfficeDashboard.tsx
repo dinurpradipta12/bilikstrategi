@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -65,6 +65,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const [room, setRoom] = useState(0);
   const [motion, setMotion] = useState(true);
   const [query, setQuery] = useState('');
+  const [chatText,setChatText]=useState('');
   const [demoCounter, setDemoCounter] = useState(7);
 
   useEffect(()=>{
@@ -153,9 +154,9 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const currentRoom = Math.min(room, rooms - 1);
   const members = useMemo(() => data.members.flatMap(member => {
     const slot = data.seats.get(member.id)!;
-    member = { ...member, activity: space.activities[member.id] };
+    member = { ...member, activity: space.activities[member.id], chat:space.chats[member.id] };
     return Math.floor(slot / DESKS_PER_ROOM) === currentRoom ? [{ member: editing?.id === member.id ? { ...member, avatar: editing.avatar } : member, slot }] : [];
-  }), [data, space.activities, currentRoom, editing]);
+  }), [data, space.activities, space.chats, currentRoom, editing]);
   const dataReady = demo || Boolean(data.syncedAt);
   const active = data.members.filter(member => member.status !== 'offline').length;
   const paused = data.members.filter(member => member.status === 'paused').length;
@@ -232,7 +233,12 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     try {
       let next: OfficeSpace;
       if (demo) {
-        if(action.type==='light'||action.type==='note'||action.type==='music') next=applySharedAction(space,action,viewerId||'',canEdit);
+        if(action.type==='chat') {
+          const viewer=data.members.find(m=>m.id===viewerId);
+          if(viewer?.status==='offline'||viewer?.presenceIdle) throw new Error('Check-in dan aktifkan sesi sebelum mengirim pesan.');
+          next=applySharedAction(space,action,viewerId||'',canEdit);
+        }
+        else if(action.type==='light'||action.type==='note'||action.type==='music') next=applySharedAction(space,action,viewerId||'',canEdit);
         else if (action.type === 'activity') {
           const viewer=data.members.find(m=>m.id===viewerId);
           if(action.zone!=='auto'&&(viewer?.status!=='working'||viewer.presenceIdle)) throw new Error('Check-in dan aktifkan sesi sebelum memilih aktivitas.');
@@ -259,11 +265,17 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       else if(action.type==='assign') setNotice('Pemilik meja berhasil diperbarui.');
       else if(action.type==='remove-desk') setNotice('Meja dihapus. Anda dapat memulihkannya melalui Edit ruangan.');
       else if(action.type==='music') setNotice(action.url.trim()?'Playlist kantor diperbarui.':'Playlist kantor dihapus.');
-      else if(action.type==='light'||action.type==='note') { /* Shared utility stays open. */ }
+      else if(action.type==='light'||action.type==='note'||action.type==='chat') { /* Shared utility stays open. */ }
       else { setNotice(`${deskLabel(action.slot)} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
     return true;
     } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); return false; }
     finally { setSpaceSaving(false); }
+  };
+  const sendAvatarChat=async(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    const text=chatText.trim();
+    if(!text||!viewerCheckedIn||spaceSaving) return;
+    if(await saveSpace({type:'chat',text})) setChatText('');
   };
   const selectDesk = (slot: number) => { setObjectMenu({id:`desk:${slot}`,x:45,y:45,room:currentRoom}); setSpaceError(''); };
   const openLayout = () => {
@@ -344,6 +356,11 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Jeda: lounge · Checkout: keluar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
+    {immersive&&<form className="office-avatar-chat" onSubmit={event=>void sendAvatarChat(event)}>
+      <input aria-label="Pesan bubble avatar" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Ketik pesan avatar…':'Check-in untuk mengobrol'}/>
+      <span>{chatText.length}/150</span>
+      <button type="submit" disabled={!chatText.trim()||!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} aria-label="Kirim pesan avatar"><Send size={15}/></button>
+    </form>}
     <div className="office-game-dock" aria-label="Aksi kantor">
       <button type="button" disabled={Boolean(draft)} aria-pressed={panel === 'team'} onClick={() => { setPanel(panel === 'team' ? null : 'team'); }}><Users size={18} /><span>Tim</span></button>
       <button type="button" aria-label="Aktivitas avatar saya" disabled={!viewerId||Boolean(draft)} onClick={()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');}}><MapPin size={18}/><span>Aktivitas</span></button>
