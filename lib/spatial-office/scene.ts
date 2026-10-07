@@ -583,12 +583,15 @@ export class OfficeScene {
     const item=this.seatItem(slot,zone);
     if(!item) {
       const destination=zonePosition(slot,zone,this.deskLayout);
-      return zone==='desk'?{...destination,y:.18}:destination;
+      return zone==='desk'?{...destination,y:.14}:destination;
     }
     const i=slot%DESKS_PER_ROOM,loungeOffset=zone==='lounge'?this.loungeSeat(slot)?.offset:0;
-    const dx=zone==='lounge'?(loungeOffset||0):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?-.04:0;
+    // The sofa GLB's cushion is forward of its backrest after the asset's
+    // Z-up conversion. Place the hips on the front half of the cushion so
+    // the avatar's long back hair and torso clear the raised sofa back.
+    const dx=zone==='lounge'?(loungeOffset||0):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.28:0;
     const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
-    const seatLift=zone==='lounge'?.2:zone==='garden'||zone==='meeting'?.14:0;
+    const seatLift=zone==='lounge'?.14:zone==='garden'||zone==='meeting'?.14:0;
     return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation,y:(item.y||0)+seatLift};
   }
   private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot):[number,number][]|null {
