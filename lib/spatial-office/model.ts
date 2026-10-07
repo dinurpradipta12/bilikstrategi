@@ -103,7 +103,16 @@ export function memberHash(id: string) {
 export function statusLabel(member: OfficeMember) {
   return member.status === 'paused' ? 'Sedang istirahat' : member.status === 'offline' ? 'Belum check-in' : 'Sudah check-in';
 }
-export const AVATAR_MODELS = ['operations', 'research', 'copywriter', 'designer', 'qa', 'analyst', 'hr', 'finance'] as const;
+export const AVATAR_MODELS = ['boy', 'girl', 'farmer', 'chef', 'doctor', 'police', 'student', 'princess', 'wizard', 'pirate', 'ninja', 'sporty'] as const;
+export const AVATAR_ASSETS: Record<typeof AVATAR_MODELS[number], string> = {
+  boy: 'v2-char/01_boy', girl: 'v2-char/02_girl', farmer: 'v2-char/03_farmer', chef: 'v2-char/04_chef',
+  doctor: 'v2-char/05_doctor', police: 'v2-char/06_police', student: 'v2-char/07_student', princess: 'v2-char/08_princess',
+  wizard: 'v2-char/09_wizard', pirate: 'v2-char/10_pirate', ninja: 'v2-char/11_ninja', sporty: 'v2-char/12_sporty',
+};
+export const AVATAR_LABELS: Record<typeof AVATAR_MODELS[number], string> = {
+  boy: 'Laki-laki', girl: 'Perempuan', farmer: 'Petani', chef: 'Koki', doctor: 'Dokter', police: 'Polisi',
+  student: 'Pelajar', princess: 'Putri', wizard: 'Penyihir', pirate: 'Bajak laut', ninja: 'Ninja', sporty: 'Sporty',
+};
 export const AVATAR_COLORS = ['original', '#3d302b', '#c58d51', '#d78296', '#759484', '#8795bd', '#b2a0c5', '#e9debd'] as const;
 export type AvatarStyle = { model: typeof AVATAR_MODELS[number]; hair: typeof AVATAR_MODELS[number]; hairColor: typeof AVATAR_COLORS[number]; shirtColor: typeof AVATAR_COLORS[number]; glasses: boolean };
 export type OfficeTask = { name: string; status: string };
@@ -111,13 +120,20 @@ export type OfficeActivityZone = 'desk' | 'lounge' | 'pantry' | 'garden' | 'meet
 export type OfficeZone = OfficeActivityZone | 'exit';
 export function defaultAvatar(id: string): AvatarStyle {
   const model = AVATAR_MODELS[memberHash(id) % AVATAR_MODELS.length];
-  return { model, hair: model, hairColor: 'original', shirtColor: 'original', glasses: model === 'designer' };
+  return { model, hair: model, hairColor: 'original', shirtColor: 'original', glasses: model === 'doctor' };
 }
 export function parseAvatar(value: unknown): AvatarStyle | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as AvatarStyle;
-  if (!AVATAR_MODELS.includes(v.model) || !AVATAR_MODELS.includes(v.hair) || !AVATAR_COLORS.includes(v.hairColor) || !AVATAR_COLORS.includes(v.shirtColor) || typeof v.glasses !== 'boolean') return null;
-  return { model: v.model, hair: v.hair, hairColor: v.hairColor, shirtColor: v.shirtColor, glasses: v.glasses };
+  const legacy = ['operations', 'research', 'copywriter', 'designer', 'qa', 'analyst', 'hr', 'finance'] as const;
+  const normalize = (name: unknown) => {
+    if (AVATAR_MODELS.includes(name as typeof AVATAR_MODELS[number])) return name as typeof AVATAR_MODELS[number];
+    const index = legacy.indexOf(name as typeof legacy[number]);
+    return index >= 0 ? AVATAR_MODELS[index] : null;
+  };
+  const model = normalize(v.model), hair = normalize(v.hair);
+  if (!model || !hair || !AVATAR_COLORS.includes(v.hairColor) || !AVATAR_COLORS.includes(v.shirtColor) || typeof v.glasses !== 'boolean') return null;
+  return { model, hair, hairColor: v.hairColor, shirtColor: v.shirtColor, glasses: v.glasses };
 }
 function timestamp(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : Date.parse(String(value ?? '')) || 0; }
 export function workedSeconds(member: OfficeMember, now: number) {

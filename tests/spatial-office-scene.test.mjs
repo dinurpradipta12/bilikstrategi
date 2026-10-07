@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import * as model from '../lib/spatial-office/model.ts';
 import { spaceModel, loadTS } from './spatial-office-module-loader.mjs';
 
@@ -19,16 +20,20 @@ class Element {
 const { OfficeScene } = loadTS('../lib/spatial-office/scene.ts', {
   three: THREE, 'three/addons/loaders/GLTFLoader.js': { GLTFLoader }, 'three/addons/controls/OrbitControls.js': { OrbitControls },
   'three/addons/utils/BufferGeometryUtils.js': { mergeGeometries }, './model': model, './space': spaceModel,
+  'three/addons/utils/SkeletonUtils.js': { clone: cloneSkeleton },
 }, { document: { createElement: () => new Element() }, requestAnimationFrame:()=>0 });
 const templates = new Map();
+const characterClips = new Map();
 for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.ORNAMENTS).filter(k=>!['round_meeting_table','coffee_machine'].includes(k)), 'floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'keyboard', 'coffee_mug', 'pinboard', 'sofa', 'drawer_cabinet', 'wood_chair'])) {
-  const bytes = await readFile(new URL(`../src/Char-assets/${asset}.glb`, import.meta.url));
+  const path = model.AVATAR_MODELS.includes(asset) ? model.AVATAR_ASSETS[asset] : asset;
+  const bytes = await readFile(new URL(`../src/Char-assets/${path}.glb`, import.meta.url));
   const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
   templates.set(asset, gltf.scene);
+  if (model.AVATAR_MODELS.includes(asset)) characterClips.set(asset, gltf.animations);
 }
 function office() {
   const engine = Object.create(OfficeScene.prototype);
-  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
+  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
   engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,[]).ornaments,0,false,''); return engine;
 }
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
@@ -38,6 +43,8 @@ test('first snapshot seats existing workers immediately; snapshots retain the sa
   engine.setMembers([{ member: alice, slot: 0 }]);
   const first = engine.occupants.get('1'), p = model.zonePosition(0, 'desk');
   assert.equal(first.route.length, 0); assert.equal(first.rig.root.position.x, p.x); assert.equal(first.rig.root.position.z, p.z);
+  assert.equal(first.rig.action, 'Idle'); assert.ok(first.rig.model.getObjectByName('Hips'));
+  assert.ok(first.rig.actions.has('Walk')); assert.ok(first.rig.model.children.some(child => child.type === 'SkinnedMesh' || child.children.some(node => node.type === 'SkinnedMesh')));
   engine.setMembers([{ member: { ...alice }, slot: 0 }]); assert.equal(engine.occupants.get('1').rig, first.rig);
   engine.setMembers([{ member: { ...alice, status: 'paused' }, slot: 0 }]);
   assert.equal(engine.occupants.size,0);

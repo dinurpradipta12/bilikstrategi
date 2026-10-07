@@ -3,12 +3,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
-import { AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, typingHand, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
+import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
 const CHARACTERS = [...AVATAR_MODELS];
 const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine'].includes(key))])];
-type Rig = { root: THREE.Group; body: THREE.Group; head: THREE.Group; arms: THREE.Group[]; hands: THREE.Group[]; mug: THREE.Group; legs: THREE.Group[] };
+type CharacterBones = { head?: THREE.Bone; upperArms: Array<THREE.Bone | undefined>; lowerArms: Array<THREE.Bone | undefined>; upperLegs: Array<THREE.Bone | undefined>; lowerLegs: Array<THREE.Bone | undefined> };
+type Rig = { root: THREE.Group; model: THREE.Group; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; action: string; bones: CharacterBones; mug: THREE.Group };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
   route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; name: HTMLSpanElement; offset: number;
@@ -23,6 +25,7 @@ export class OfficeScene {
   private controls: OrbitControls;
   private resize: ResizeObserver;
   private templates = new Map<string, THREE.Group>();
+  private characterClips = new Map<string, THREE.AnimationClip[]>();
   private occupants = new Map<string, Occupant>();
   private desks = new Map<number, THREE.Group>();
   private deskLabels = new Map<number, HTMLButtonElement>();
@@ -140,14 +143,20 @@ export class OfficeScene {
   private async load() {
     const loader = new GLTFLoader();
     try {
-      await Promise.all([...CHARACTERS, ...FURNITURE].map(async name => {
+      await Promise.all([
+        ...CHARACTERS.map(async name => {
+          const gltf = await loader.loadAsync(`/spatial-assets/${AVATAR_ASSETS[name]}.glb`);
+          if (this.disposed) return;
+          this.templates.set(name, gltf.scene); this.characterClips.set(name, gltf.animations); this.track(gltf.scene);
+        }),
+        ...FURNITURE.map(async name => {
         const gltf = await loader.loadAsync(`/spatial-assets/${name}.glb`);
         if (this.disposed) {
           gltf.scene.traverse(child => { if (child instanceof THREE.Mesh) { child.geometry.dispose(); for (const m of Array.isArray(child.material) ? child.material : [child.material]) m.dispose(); } });
           return;
         }
         // Furniture is static; merge vertex-coloured meshes to reduce draw calls.
-        if (FURNITURE.includes(name)) {
+        {
           gltf.scene.updateMatrixWorld(true);
           const geometries: THREE.BufferGeometry[] = [];
           gltf.scene.traverse(child => {
@@ -164,8 +173,8 @@ export class OfficeScene {
             this.templates.set(name, gltf.scene); this.track(gltf.scene);
           }
           if (merged) gltf.scene.traverse(child => { if (child instanceof THREE.Mesh) { child.geometry.dispose(); for (const m of Array.isArray(child.material) ? child.material : [child.material]) m.dispose(); } });
-        } else { this.templates.set(name, gltf.scene); this.track(gltf.scene); }
-      }));
+        }
+      })]);
       if (this.disposed) return;
       this.buildRoom();
       this.loaded = true;
@@ -478,54 +487,69 @@ export class OfficeScene {
 
   private rig(member: OfficeMember): Rig {
     const style = member.avatar || defaultAvatar(member.id);
-    const body = new THREE.Group();
-    const head = new THREE.Group(); head.position.set(0, 0, 1.76);
-    const arms = [-1, 1].map(() => new THREE.Group());
-    const hands = [-1, 1].map(() => new THREE.Group());
-    const legs = [-1, 1].map(side => { const pivot = new THREE.Group(); pivot.position.set(side * 0.22, 0, 0.86); return pivot; });
-    body.add(head, ...arms, ...hands, ...legs);
-    const hair = /^(hair|fringe|curl|top_curl|bob_|long_hair|pink_pigtail)/;
-    const accessory = /^(glasses|earcup|headphone|beret|cap_)/;
-    const parts: THREE.Mesh[] = [];
-    this.templates.get(style.model)!.traverse(child => { if (child instanceof THREE.Mesh && !hair.test(child.name) && !accessory.test(child.name)) parts.push(child.clone()); });
-    this.templates.get(style.hair)!.traverse(child => { if (child instanceof THREE.Mesh && (hair.test(child.name) || (accessory.test(child.name) && !child.name.startsWith('glasses')))) parts.push(child.clone()); });
-    if (style.glasses) this.templates.get('designer')!.traverse(child => { if (child instanceof THREE.Mesh && child.name.startsWith('glasses')) parts.push(child.clone()); });
-    for (const mesh of parts) {
-      mesh.geometry = mesh.geometry.clone();
-      const color = hair.test(mesh.name) ? style.hairColor : /shirt|sleeve/.test(mesh.name) ? style.shirtColor : 'original';
-      if (color !== 'original') {
-        const rgb = new THREE.Color(color); const attr = mesh.geometry.getAttribute('color');
-        if (attr) for (let i = 0; i < attr.count; i++) attr.setXYZ(i, rgb.r, rgb.g, rgb.b);
+    const model = cloneSkeleton(this.templates.get(style.model)!) as THREE.Group;
+    model.scale.setScalar(1.35);
+    const hairMesh = (root: THREE.Object3D) => {
+      let result: THREE.SkinnedMesh | undefined;
+      root.traverse(child => {
+        if (result || !(child instanceof THREE.SkinnedMesh)) return;
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        if (materials.some(material => material.name === 'hair')) result = child;
+      });
+      return result;
+    };
+    const sourceHair = hairMesh(this.templates.get(style.hair)!);
+    const currentHair = hairMesh(model);
+    if (sourceHair && currentHair) currentHair.geometry = sourceHair.geometry;
+    model.traverse(child => {
+      if (!(child instanceof THREE.Mesh)) return;
+      child.userData.sharedGeometry = true; child.castShadow = true; child.receiveShadow = true;
+      const originals = Array.isArray(child.material) ? child.material : [child.material];
+      const materials = originals.map(original => {
+        const material = original.clone();
+        if (material instanceof THREE.MeshStandardMaterial) {
+          if (material.name === 'hair' && style.hairColor !== 'original') material.color.set(style.hairColor);
+          if (material.name === 'shirt' && style.shirtColor !== 'original') material.color.set(style.shirtColor);
+          material.roughness = Math.max(material.roughness, .72);
+        }
+        this.materials.add(material); return material;
+      });
+      child.material = Array.isArray(child.material) ? materials : materials[0];
+    });
+    const root = new THREE.Group(); root.add(model); this.scene.add(root);
+    const head = model.getObjectByName('Head') as THREE.Bone | undefined;
+    if (style.glasses && head) {
+      const material = new THREE.MeshStandardMaterial({ color: '#263c3a', roughness: .45 }); this.materials.add(material);
+      for (const x of [-.105, .105]) {
+        const geometry = new THREE.TorusGeometry(.085, .012, 8, 20); this.geometries.add(geometry);
+        const lens = new THREE.Mesh(geometry, material); lens.position.set(x, .035, .185); lens.userData.sharedMaterial = true; head.add(lens);
       }
-      let pivot = body;
-      if (/^(sleeve|hand)_/.test(mesh.name)) {
-        pivot = (mesh.name.startsWith('hand') ? hands : arms)[mesh.name.endsWith('_L') ? 0 : 1];
-        mesh.geometry.computeBoundingBox(); mesh.geometry.translate(...mesh.geometry.boundingBox!.getCenter(new THREE.Vector3()).negate().toArray());
-      } else {
-        if (/^(leg|shoe)_/.test(mesh.name)) pivot = legs[mesh.name.endsWith('_L') ? 0 : 1];
-        else if (/^(head|ear_|eye|cheek|nose|mouth|glasses)/.test(mesh.name) || hair.test(mesh.name) || accessory.test(mesh.name)) pivot = head;
-        mesh.position.sub(pivot.position);
-      }
-      pivot.add(mesh);
+      const geometry = new THREE.BoxGeometry(.065, .018, .018); this.geometries.add(geometry);
+      const bridge = new THREE.Mesh(geometry, material); bridge.position.set(0, .035, .185); head.add(bridge);
     }
-    for (const pivot of [body, head, ...arms, ...hands, ...legs]) {
-      const meshes = pivot.children.filter((child): child is THREE.Mesh => child instanceof THREE.Mesh);
-      if (!meshes.length) continue;
-      const transformed = meshes.map(mesh => { mesh.updateMatrix(); return mesh.geometry.clone().applyMatrix4(mesh.matrix); });
-      const merged = mergeGeometries(transformed);
-      transformed.forEach(geometry => geometry.dispose());
-      if (merged) {
-        meshes.forEach(mesh => { pivot.remove(mesh); mesh.geometry.dispose(); });
-        const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
-        const mesh = new THREE.Mesh(merged, material); mesh.castShadow = true; mesh.receiveShadow = true;
-        pivot.add(mesh); this.geometries.add(merged); this.materials.add(material);
-      } else meshes.forEach(mesh => { mesh.userData.sharedTemplate = true; this.geometries.add(mesh.geometry); });
-    }
-    const converted = new THREE.Group(); converted.rotation.x = -Math.PI / 2; converted.scale.setScalar(0.53); converted.add(body);
-    const root = new THREE.Group(); root.add(converted); this.scene.add(root);
+    const mixer = new THREE.AnimationMixer(model), actions = new Map<string, THREE.AnimationAction>();
+    for (const clip of this.characterClips.get(style.model) || []) actions.set(clip.name, mixer.clipAction(clip));
     const mug = this.asset('coffee_mug', 0.26, 0.3, 0.83, 0, root); mug.visible = false;
     mug.traverse(child => { child.userData.sharedTemplate = true; });
-    return { root, body, head, arms, hands, legs, mug };
+    const rig: Rig = {
+      root, model, mixer, actions, action: '', mug, bones: {
+        head,
+        upperArms: [model.getObjectByName('UpperArm_L') as THREE.Bone, model.getObjectByName('UpperArm_R') as THREE.Bone],
+        lowerArms: [model.getObjectByName('LowerArm_L') as THREE.Bone, model.getObjectByName('LowerArm_R') as THREE.Bone],
+        upperLegs: [model.getObjectByName('UpperLeg_L') as THREE.Bone, model.getObjectByName('UpperLeg_R') as THREE.Bone],
+        lowerLegs: [model.getObjectByName('LowerLeg_L') as THREE.Bone, model.getObjectByName('LowerLeg_R') as THREE.Bone],
+      },
+    };
+    this.playAction(rig, 'Idle');
+    return rig;
+  }
+
+  private playAction(rig: Rig, name: string) {
+    if (rig.action === name) return;
+    const next = rig.actions.get(name) || rig.actions.get('Idle');
+    if (!next) return;
+    rig.actions.get(rig.action)?.fadeOut(.16);
+    next.reset().fadeIn(.16).play(); rig.action = name;
   }
 
   private seatItem(slot:number,zone:OfficeZone) {
@@ -652,14 +676,13 @@ export class OfficeScene {
   }
 
   private removeOccupant(id: string, occupant: Occupant) {
+    occupant.rig.mixer.stopAllAction(); occupant.rig.mixer.uncacheRoot(occupant.rig.model);
     this.scene.remove(occupant.rig.root);
     occupant.rig.root.traverse(child => {
       if (!(child instanceof THREE.Mesh)) return;
       // Merged rig parts are owned by this instance, template geometry is shared.
-      if (!child.userData.sharedTemplate) {
-        child.geometry.dispose(); this.geometries.delete(child.geometry);
-        for (const material of Array.isArray(child.material) ? child.material : [child.material]) { material.dispose(); this.materials.delete(material); }
-      }
+      if (!child.userData.sharedTemplate && !child.userData.sharedGeometry) { child.geometry.dispose(); this.geometries.delete(child.geometry); }
+      if (!child.userData.sharedTemplate && !child.userData.sharedMaterial) for (const material of Array.isArray(child.material) ? child.material : [child.material]) { material.dispose(); this.materials.delete(material); }
     });
     occupant.label.remove(); this.occupants.delete(id);
   }
@@ -712,33 +735,25 @@ export class OfficeScene {
       if(settled && occupant.zone==='exit') { this.removeOccupant(id,occupant); continue; }
       const working = settled && occupant.zone === 'desk';
       const seated = settled && occupant.zone !== 'pantry';
-      rig.body.rotation.x = 0;
       rig.root.position.y = settled && 'y' in destination ? destination.y : 0;
       const t = this.time + occupant.offset;
-      rig.body.position.z = seated ? 0.15 : this.moving ? Math.abs(Math.sin(t * 8)) * (settled ? 0.005 : 0.045) : 0;
-      rig.head.rotation.x = working && this.moving ? 0.045 + Math.sin(t * 1.7) * 0.025 : 0;
-      rig.head.rotation.z = seated && this.moving ? Math.sin(t * 0.6) * 0.045 : 0;
-      rig.head.position.y = 0;
+      this.playAction(rig, settled ? 'Idle' : 'Walk');
+      rig.mixer.update(this.moving ? dt : 0);
+      if (seated) {
+        rig.bones.upperLegs.forEach(leg => { if (leg) leg.rotation.x = -1.18; });
+        rig.bones.lowerLegs.forEach(leg => { if (leg) leg.rotation.x = 1.3; });
+      }
+      if (working) {
+        const tap = this.moving ? Math.sin(t * 9) * .08 : 0;
+        rig.bones.upperArms.forEach((arm, index) => { if (arm) arm.rotation.x = -.92 + (index ? tap : -tap); });
+        rig.bones.lowerArms.forEach((arm, index) => { if (arm) arm.rotation.x = -.5 + (index ? -tap : tap); });
+        if (rig.bones.head) rig.bones.head.rotation.x = .08 + (this.moving ? Math.sin(t * 1.7) * .025 : 0);
+      }
       const coffee = settled && occupant.zone === 'pantry';
       const sip = coffee && this.moving ? Math.max(0, Math.sin(t * 0.9)) : 0;
       rig.mug.position.set(0.26, 0.83 + sip * 0.27, 0.3 - sip * 0.06);
       rig.mug.rotation.x = sip * 0.3;
-      if (coffee) rig.head.rotation.x = -sip * 0.05;
-      rig.hands.forEach((hand, index) => {
-        const side = index ? 1 : -1;
-        // Keyboard top = 0.843m. Hands are 0.15 source-units high: their
-        // lower surface stays on the keys, while lateral motion suggests typing.
-        const tap = working && this.moving ? Math.sin(t * 9 + index * Math.PI) * 0.015 : 0;
-        if (working) hand.position.set(...typingHand(index, rig.body.position.z, tap));
-        else hand.position.set(side * 0.57, settled && occupant.zone === 'pantry' ? -0.5 : seated ? -0.32 : Math.sin(t * 8 + index * Math.PI) * 0.17, settled && occupant.zone === 'pantry' ? 1.58 : 0.95);
-        if (coffee && index === 1) hand.position.set(0.26 / 0.53, -rig.mug.position.z / 0.53, (rig.mug.position.y + 0.035) / 0.53 - rig.body.position.z);
-        const shoulder = new THREE.Vector3(side * 0.5, 0, 1.5);
-        const delta = hand.position.clone().sub(shoulder);
-        rig.arms[index].position.copy(shoulder).add(hand.position).multiplyScalar(0.5);
-        rig.arms[index].quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), delta.clone().normalize());
-        rig.arms[index].scale.set(0.72, 0.72, delta.length() / 0.74);
-      });
-      rig.legs.forEach((leg, index) => { leg.rotation.x = seated ? -1.12 : settled ? 0 : Math.sin(t * 8 + index * Math.PI) * 0.4; });
+      if (coffee && rig.bones.head) rig.bones.head.rotation.x = -sip * .08;
       rig.mug.visible = settled && occupant.zone === 'pantry';
       if (settled) rig.root.rotation.y = destination.rotation;
       const text = settled ? bubbleLabel(member, occupant.zone, this.moving ? Date.now() : 0) : '';
@@ -749,7 +764,7 @@ export class OfficeScene {
       occupant.label.dataset.status = member.status;
       occupant.label.dataset.selected = String(id === this.selected);
       occupant.label.dataset.paused = String(member.status === 'paused');
-      this.placeLabel(occupant.label, rig.root.position.clone().add(new THREE.Vector3(0, 1.86, 0)));
+      this.placeLabel(occupant.label, rig.root.position.clone().add(new THREE.Vector3(0, 1.7, 0)));
     }
     for (const [slot, label] of this.deskLabels) {
       const occupant = this.current.find(item => item.slot % DESKS_PER_ROOM === slot);

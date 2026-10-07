@@ -135,9 +135,12 @@ test('bubble rotation uses assigned tasks and cannot invent completion', async (
   assert.ok(labels.every(label => !label.includes('Someone else') && !label.includes('Already done')));
 });
 test('avatar accepts only supplied models and palette and strips arbitrary identity fields', async () => {
-  const { defaultAvatar, parseAvatar } = await import('../lib/spatial-office/model.ts');
+  const { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, parseAvatar } = await import('../lib/spatial-office/model.ts');
   const avatar = defaultAvatar('1');
+  assert.equal(AVATAR_MODELS.length, 12);
+  assert.ok(AVATAR_MODELS.every(model => AVATAR_ASSETS[model].startsWith('v2-char/')));
   assert.deepEqual(parseAvatar({ ...avatar, userId: 'someone-else' }), avatar);
+  assert.equal(parseAvatar({ ...avatar, model: 'designer' })?.model, 'chef');
   assert.equal(parseAvatar({ ...avatar, model: '../external.glb' }), null);
   assert.equal(parseAvatar({ ...avatar, shirtColor: 'url(external)' }), null);
 });
