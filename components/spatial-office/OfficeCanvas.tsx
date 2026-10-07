@@ -16,8 +16,9 @@ type Props = {
   onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number) => void;
   onObjectMenu: (target: ObjectMenuTarget) => void; children?: ReactNode;
   motion: boolean; selected: string; onSelect: (id: string) => void;
+  signText: string;
 };
-export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights }: Props) {
+export default function OfficeCanvas({ members, motion, selected, onSelect, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights, signText }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -53,7 +54,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, room
   useEffect(() => { scene.current?.setOrnaments(ornaments, room, editing, selectedOrnament); }, [ornaments, room, editing, selectedOrnament, attempt]);
   useEffect(() => { scene.current?.setLights(lights); }, [lights, attempt]);
   useEffect(() => { scene.current?.setDeskLayout(desks); }, [desks, attempt]);
-  useEffect(() => { scene.current?.setEnvironment(schedule); scene.current?.setBrand(OFFICE_BRAND); }, [schedule, attempt]);
+  useEffect(() => { scene.current?.setEnvironment(schedule); scene.current?.setBrand({ ...OFFICE_BRAND, name: signText }); }, [schedule, signText, attempt]);
   useEffect(() => { scene.current?.setPan(pan); }, [pan, attempt]);
   return <div className={`office-viewport ${editing ? 'is-editing' : ''}`}>
     <div className="office-webgl" ref={host} />

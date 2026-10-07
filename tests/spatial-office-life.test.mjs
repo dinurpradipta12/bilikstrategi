@@ -11,6 +11,7 @@ test('schedule and timezone control light, not avatar attendance; active overtim
   assert.equal(officeTime(night).phase, 'Malam');
   assert.equal(memberZone(member, morning), 'lounge');
   assert.equal(memberZone(member, night), 'lounge');
+  assert.equal(memberZone({ ...member, presenceIdle:true }, night), 'lounge');
   assert.equal(memberZone({ ...member, status: 'working' }, night), 'desk');
   assert.equal(memberZone({ ...member, status: 'offline' }, at('2026-10-10T01:00:00Z')), 'exit');
   const schedule = { timezone: 'Asia/Makassar', days: [{ day: 2, isWorking: true, startTime: '22:00', endTime: '06:00' }] };

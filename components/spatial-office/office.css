@@ -1003,3 +1003,6 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-shared-player.is-minimized{width:min(286px,calc(100% - 36px));box-shadow:0 10px 30px #172f292e}
 .office-shared-player.is-minimized .office-player-media{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
 @media(max-width:760px){.office-shared-player{left:10px;right:auto;bottom:96px}.office-shared-player.is-minimized{width:min(286px,calc(100% - 20px))}}
+
+.office-sign-dialog{max-width:500px}.office-sign-dialog h2{display:flex;align-items:center;gap:8px}.office-sign-dialog form{display:grid;gap:12px}.office-sign-dialog label{display:grid;gap:7px;font-size:11px}.office-sign-dialog input{box-sizing:border-box;width:100%;border:1px solid #cdd8ca;border-radius:11px;padding:11px 13px;background:#fff;color:#263d35;font:inherit}.office-sign-dialog form>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.office-sign-dialog form button{background:#335947;color:#fff}
+.office-shared-player footer{align-items:center;justify-content:space-between;gap:8px}.office-shared-player footer span{font-size:9px;color:#9b6338}.office-shared-player footer button{margin-left:auto}

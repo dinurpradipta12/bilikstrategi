@@ -354,13 +354,13 @@ export class OfficeScene {
     }
     this.wall(9,-7.5,6,false,true,true,'MEETING');
     // Hollow metal neon-box casing: visible depth with an illuminated front rim.
-    for (const x of [-3.88,3.88]) this.box(x,3.28,6.20,.13,1.04,.30,'#263f38');
-    for (const y of [2.76,3.80]) this.box(0,y,6.20,7.89,.13,.30,'#263f38');
-    for (const x of [-3.4,3.4]) this.box(x,2.82,6.08,.09,.4,.1,'#263f38');
+    for (const x of [-2.9,2.9]) this.box(x,3.28,6.20,.13,.86,.30,'#172d28');
+    for (const y of [2.85,3.71]) this.box(0,y,6.20,5.93,.13,.30,'#172d28');
+    for (const x of [-2.45,2.45]) this.box(x,2.9,6.08,.09,.32,.1,'#172d28');
     const glow = new THREE.MeshBasicMaterial({color:'#7fffd4',toneMapped:false});
     const rim = (x:number,y:number,w:number,h:number) => { const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,.025),glow); mesh.position.set(x,y,6.36); this.scene.add(mesh); this.track(mesh); mesh.castShadow=false; };
-    for (const x of [-3.84,3.84]) rim(x,3.28,.025,.98);
-    for (const y of [2.79,3.77]) rim(0,y,7.7,.025);
+    for (const x of [-2.86,2.86]) rim(x,3.28,.025,.78);
+    for (const y of [2.89,3.67]) rim(0,y,5.7,.025);
     for(const [key,room] of Object.entries(ROOM_LIGHTS)) {
       const light=new THREE.PointLight('#ffe4b0',0,key==='workspace'?13:8,2); light.position.set(room.x,2.65,room.z);this.scene.add(light);
       const material=new THREE.MeshStandardMaterial({color:'#eee4c9',emissive:'#ffe4b0',emissiveIntensity:0});
@@ -399,15 +399,15 @@ export class OfficeScene {
     this.brand = brand;
     if (!this.loaded) return;
     const canvas=document.createElement('canvas'); if (!canvas.getContext) return;
-    canvas.width=1536; canvas.height=144;
+    canvas.width=1280; canvas.height=176;
     const context=canvas.getContext('2d'); if (!context) return;
-    context.clearRect(0,0,1536,144);
+    context.fillStyle='#071916'; context.fillRect(0,0,1280,176);
     context.fillStyle='#a6ffe1'; context.shadowColor='#63edc1'; context.shadowBlur=13;
-    context.font='600 70px sans-serif'; context.textAlign='center'; context.textBaseline='middle';
-    context.fillText(/agency/i.test(brand.name) ? brand.name : `${brand.name} Agency`,768,76,1340);
+    context.font='600 62px sans-serif'; context.textAlign='center'; context.textBaseline='middle';
+    context.fillText(brand.name,640,91,1120);
     const texture=new THREE.CanvasTexture(canvas); texture.colorSpace=THREE.SRGBColorSpace; texture.wrapS=THREE.RepeatWrapping;
     if (this.sign) { const old=this.sign.material as THREE.MeshBasicMaterial; old.map?.dispose(); if(old.map) this.textures.delete(old.map); old.map=texture; old.needsUpdate=true; }
-    else { this.sign=new THREE.Mesh(new THREE.PlaneGeometry(7.5,.84),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false,toneMapped:false,side:THREE.DoubleSide})); this.sign.position.set(0,3.28,6.37); this.scene.add(this.sign); this.track(this.sign); }
+    else { this.sign=new THREE.Mesh(new THREE.PlaneGeometry(5.58,.7),new THREE.MeshBasicMaterial({map:texture,transparent:false,depthWrite:true,toneMapped:false,side:THREE.DoubleSide})); this.sign.position.set(0,3.28,6.37); this.scene.add(this.sign); this.track(this.sign); }
     this.signTexture=texture; this.textures.add(texture);
   }
   setPan(enabled: boolean) {
@@ -622,7 +622,7 @@ export class OfficeScene {
     }
     for (const { member, slot } of members) {
       let occupant = this.occupants.get(member.id);
-      if(member.presenceIdle) { if(occupant) this.removeOccupant(member.id,occupant); continue; }
+      if(member.presenceIdle&&member.status!=='paused') { if(occupant) this.removeOccupant(member.id,occupant); continue; }
       if(member.status==='offline') {
         if(occupant) { occupant.member=member; occupant.label.setAttribute('aria-label',`${member.name}, keluar kantor`); if(occupant.zone!=='exit') this.changeZone(occupant,'exit'); }
         continue;

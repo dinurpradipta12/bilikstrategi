@@ -49,8 +49,8 @@ test('first snapshot seats existing workers immediately; snapshots retain the sa
   assert.equal(first.rig.action, 'Idle'); assert.ok(first.rig.model.getObjectByName('Hips'));
   assert.ok(first.rig.actions.has('Walk')); assert.ok(first.rig.model.children.some(child => child.type === 'SkinnedMesh' || child.children.some(node => node.type === 'SkinnedMesh')));
   engine.setMembers([{ member: { ...alice }, slot: 0 }]); assert.equal(engine.occupants.get('1').rig, first.rig);
-  engine.setMembers([{ member: { ...alice, status: 'paused' }, slot: 0 }]);
-  assert.equal(engine.occupants.size,0);
+  engine.setMembers([{ member: { ...alice, status: 'paused', presenceIdle:true }, slot: 0 }]);
+  assert.equal(engine.occupants.size,1);assert.equal(first.zone,'lounge');assert.ok(first.route.length>0);
 });
 test('glasses use the supplied rig eye line instead of the mouth line', () => {
   const engine = office(), avatar = { ...model.defaultAvatar('doctor'), model: 'doctor', hair: 'doctor', glasses: true };
@@ -114,15 +114,21 @@ test('workspace radio is rendered as a selectable procedural object',()=>{
 function animation(engine) {
   Object.assign(engine,{visible:true,time:0,lastFrame:0,moving:true,skyMinute:Math.floor(Date.now()/60000),clouds:new THREE.Group(),camera:new THREE.PerspectiveCamera(),project:new THREE.Vector3(),host:{clientWidth:1024,clientHeight:768},controls:{update(){}},renderer:{render(){}}});
 }
-test('initial offline, paused and idle members stay outside; a new check-in enters through front glass',()=>{
+test('initial paused members rest in the lounge while offline and idle members stay outside',()=>{
   const engine=office(); animation(engine);
   engine.setMembers([{member:{...alice,status:'offline'},slot:0},{member:{...alice,id:'2',status:'paused'},slot:1},{member:{...alice,id:'3',presenceIdle:true},slot:2}]);
-  assert.equal(engine.occupants.size,0);
+  assert.equal(engine.occupants.size,1);assert.equal(engine.occupants.get('2').zone,'lounge');
   engine.setMembers([{member:alice,slot:0}]);
   const person=engine.occupants.get('1');
   assert.equal(person.rig.root.position.z,8);
   assert.ok(person.route.some(p=>p.x===4.5&&p.z===6));
   const route=person.route; engine.setMembers([{member:{...alice},slot:0}]); assert.equal(person.route,route);
+});
+test('a paused manager walks out of the private office and reaches a lounge sofa',()=>{
+  const engine=office();engine.setMembers([{member:alice,slot:10}]);const person=engine.occupants.get('1');
+  engine.setMembers([{member:{...alice,status:'paused'},slot:10}]);
+  assert.equal(person.zone,'lounge');assert.ok(person.route.length);assert.ok(person.route.some(p=>p.x===-1.5&&p.z===-6));
+  assert.ok(person.route.at(-1).x>6);
 });
 test('checkout walks through front glass then disappears; fresh snapshot does not replay departure',()=>{
   const engine=office(); animation(engine); engine.setMembers([{member:alice,slot:10}]);

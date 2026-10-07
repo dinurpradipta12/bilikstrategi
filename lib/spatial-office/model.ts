@@ -162,8 +162,11 @@ function calculateOfficeTime(now: number, schedule?: AttendanceSchedule) {
 }
 export function memberZone(member: OfficeMember, now: number): OfficeZone {
   // Attendance, not the clock or browser activity, controls visibility.
-  if (member.status === 'offline' || member.presenceIdle) return 'exit';
+  if (member.status === 'offline') return 'exit';
+  // A paused attendance session remains inside the office. Presence telemetry
+  // can briefly retain its previous idle value while the pause write settles.
   if (member.status === 'paused') return 'lounge';
+  if (member.presenceIdle) return 'exit';
   if (member.activity && member.activity.until > now) return member.activity.zone;
   const cycle = workedSeconds(member, now) % 1920;
   if (cycle >= 1800) return 'garden';

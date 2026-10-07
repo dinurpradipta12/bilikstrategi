@@ -229,8 +229,19 @@ test('music sources are normalized and only admins can change the shared playlis
   assert.throws(()=>space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',false),/admin/);
   const saved=space.applySharedAction(base,{type:'music',url:spotify.url,title:'Fokus tim'},'a',true);
   assert.equal(saved.music.title,'Fokus tim');assert.equal(saved.music.updatedBy,'a');assert.equal(saved.music.provider,'spotify');
+  const playing=space.applySharedAction(saved,{type:'music-playback',playing:true},'a',false);
+  assert.equal(playing.musicPlayback.playing,true);assert.equal(playing.musicPlayback.updatedBy,'a');
+  assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(playing)),[{id:'a'}]).musicPlayback.url,spotify.url);
+  assert.equal(space.applySharedAction(playing,{type:'music-playback',playing:false},'a',false).musicPlayback.playing,false);
   assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(saved)),[{id:'a'}]).music.title,'Fokus tim');
   assert.equal(space.applySharedAction(saved,{type:'music',url:'',title:''},'a',true).music,null);
+});
+test('only admins can update the bounded shared neon text',()=>{
+  const base=space.normalizeSpace(null,[{id:'a'}]);
+  assert.throws(()=>space.applySharedAction(base,{type:'sign',text:'Studio Baru'},'a',false),/admin/);
+  const saved=space.applySharedAction(base,{type:'sign',text:'  Studio Baru  '},'a',true);
+  assert.equal(saved.signText,'Studio Baru');assert.equal(space.normalizeSpace(JSON.parse(JSON.stringify(saved)),[{id:'a'}]).signText,'Studio Baru');
+  assert.throws(()=>space.applySharedAction(base,{type:'sign',text:'x'.repeat(49)},'a',true),/1–48/);
 });
 test('avatar chat is trimmed, attributed to the verified member and bounded',()=>{
   const base=space.normalizeSpace(null,[{id:'a'},{id:'b'}]);

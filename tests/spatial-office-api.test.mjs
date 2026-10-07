@@ -147,6 +147,21 @@ test('only database admins can configure the shared office playlist',async()=>{
   assert.equal(admin.spaceWrites[0].music.title,'Fokus tim');
   assert.equal(admin.spaceWrites[0].music.updatedBy,'1');
 });
+test('checked-in members control shared playback while only admins edit the neon sign',async()=>{
+  const seeded=spaceModel.applySharedAction(spaceModel.normalizeSpace(null,[{id:'1'}]),{type:'music',title:'Fokus',url:'https://open.spotify.com/playlist/37i9dQZF1DX8NTLI2TtZa6'},'1',true);
+  const member=fixture({sessions:[{user_id:'1',check_in_timestamp:Date.now(),is_paused:false}],initialSpace:seeded});
+  assert.equal((await member.PATCH(member.request({action:{type:'music-playback',playing:true}}))).status,200);
+  assert.equal(member.spaceWrites[0].musicPlayback.playing,true);
+  const pausedAt=Date.now()-60_000;
+  const paused=fixture({sessions:[{user_id:'1',check_in_timestamp:pausedAt,is_paused:true}],presence:[{user_email:'me@example.com',session_check_in_timestamp:pausedAt,last_activity_at:new Date(pausedAt).toISOString(),last_seen_at:new Date().toISOString(),last_foreground_at:new Date().toISOString()}],initialSpace:seeded});
+  assert.equal((await paused.PATCH(paused.request({action:{type:'music-playback',playing:true}}))).status,200);
+  assert.equal((await member.PATCH(member.request({action:{type:'sign',text:'Studio Tim'}}))).status,403);
+  const admin=fixture({role:'admin',initialSpace:seeded});
+  assert.equal((await admin.PATCH(admin.request({action:{type:'sign',text:'Studio Tim'}}))).status,200);
+  assert.equal(admin.spaceWrites[0].signText,'Studio Tim');
+  const offline=fixture({initialSpace:seeded});
+  assert.equal((await offline.PATCH(offline.request({action:{type:'music-playback',playing:true}}))).status,409);
+});
 test('admin layout deletion safely relocates the owner in the same write',async()=>{
   const admin=fixture({role:'owner'}),p=model.deskPosition(0);
   const action={type:'layout',layoutRevision:0,ornaments:[],desks:[{slot:0,x:p.x,z:p.z,rotation:p.rotation,removed:true}]};

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, Send, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -14,11 +14,13 @@ import OfficeUtilities from './OfficeUtilities';
 import OfficeActivityMenu, { OFFICE_ACTIONS } from './OfficeActivityMenu';
 import OfficeObjectMenu from './OfficeObjectMenu';
 import OfficeMusicPlayer from './OfficeMusicPlayer';
+import OfficeSignEditor from './OfficeSignEditor';
 import type { ObjectMenuTarget } from '@/lib/spatial-office/scene';
 import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
+const DEFAULT_SIGN_TEXT=/agency/i.test(OFFICE_BRAND.name)?OFFICE_BRAND.name:`${OFFICE_BRAND.name} Agency`;
 const DEMO_MEMBERS: OfficeMember[] = [
   { id: 'demo-1', name: 'Alya', status: 'working', project: 'Brand identity' },
   { id: 'demo-2', name: 'Bima', status: 'working', project: 'Website tim' },
@@ -43,6 +45,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const clock = officeTime(now, schedule);
   const [activityMenu,setActivityMenu]=useState(false);
   const [musicOpen,setMusicOpen]=useState(false);
+  const [signOpen,setSignOpen]=useState(false);
   const [objectLibrary,setObjectLibrary]=useState(false);
   const [utility,setUtility]=useState<{boardId:string|null}|null>(null);
   const [panel, setPanel] = useState<'team' | 'desks' | 'member' | null>(null);
@@ -139,11 +142,12 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     const broadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('bilik_attendance_channel') : null;
     if (broadcast) broadcast.onmessage = schedule;
     window.addEventListener('focus', schedule);
+    window.addEventListener('bilik-attendance-changed', schedule);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       disposed = true; clearInterval(interval); clearTimeout(timer); controller?.abort();
       broadcast?.close(); void supabase.removeChannel(realtime);
-      window.removeEventListener('focus', schedule); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('focus', schedule); window.removeEventListener('bilik-attendance-changed', schedule); document.removeEventListener('visibilitychange', visibility);
     };
   }, [demo, refresh]);
 
@@ -222,8 +226,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
 
   const viewerId = demo ? (selected || 'demo-1') : data.viewerId;
   const viewer=data.members.find(member=>member.id===viewerId);
-  const viewerCheckedIn=Boolean(viewer&&viewer.status!=='offline'&&!viewer.presenceIdle);
-  const checkedInCount=data.members.filter(member=>member.status!=='offline'&&!member.presenceIdle).length;
+  const viewerCheckedIn=Boolean(viewer&&viewer.status!=='offline'&&(!viewer.presenceIdle||viewer.status==='paused'));
+  const checkedInCount=data.members.filter(member=>member.status!=='offline'&&(!member.presenceIdle||member.status==='paused')).length;
   const applySpace = (next: OfficeSpace) => {
     if (demo) localStorage.setItem('office-demo-space-v3', JSON.stringify(next));
     setData(previous => ({ ...previous, space: next, seats: new Map(Object.entries(next.claims)) }));
@@ -238,7 +242,12 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           if(viewer?.status==='offline'||viewer?.presenceIdle) throw new Error('Check-in dan aktifkan sesi sebelum mengirim pesan.');
           next=applySharedAction(space,action,viewerId||'',canEdit);
         }
-        else if(action.type==='light'||action.type==='note'||action.type==='music') next=applySharedAction(space,action,viewerId||'',canEdit);
+        else if(action.type==='music-playback') {
+          const viewer=data.members.find(m=>m.id===viewerId);
+          if(viewer?.status==='offline'||(viewer?.presenceIdle&&viewer?.status!=='paused')) throw new Error('Check-in dan aktifkan sesi sebelum mengendalikan radio tim.');
+          next=applySharedAction(space,action,viewerId||'',canEdit);
+        }
+        else if(action.type==='light'||action.type==='note'||action.type==='music'||action.type==='sign') next=applySharedAction(space,action,viewerId||'',canEdit);
         else if (action.type === 'activity') {
           const viewer=data.members.find(m=>m.id===viewerId);
           if(action.zone!=='auto'&&(viewer?.status!=='working'||viewer.presenceIdle)) throw new Error('Check-in dan aktifkan sesi sebelum memilih aktivitas.');
@@ -265,7 +274,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       else if(action.type==='assign') setNotice('Pemilik meja berhasil diperbarui.');
       else if(action.type==='remove-desk') setNotice('Meja dihapus. Anda dapat memulihkannya melalui Edit ruangan.');
       else if(action.type==='music') setNotice(action.url.trim()?'Playlist kantor diperbarui.':'Playlist kantor dihapus.');
-      else if(action.type==='light'||action.type==='note'||action.type==='chat') { /* Shared utility stays open. */ }
+      else if(action.type==='sign') setNotice('Tulisan neon kantor diperbarui.');
+      else if(action.type==='light'||action.type==='note'||action.type==='chat'||action.type==='music-playback') { /* Shared utility stays open. */ }
       else { setNotice(`${deskLabel(action.slot)} sekarang milik Anda.`); setRoom(Math.floor(action.slot / DESKS_PER_ROOM)); }
     return true;
     } catch (failure) { setSpaceError(failure instanceof Error && failure.name === 'TimeoutError' ? 'Koneksi penyimpanan melewati batas waktu. Posisi tetap ada di draft; coba Simpan denah lagi.' : failure instanceof Error ? failure.message : 'Perubahan belum tersimpan.'); return false; }
@@ -340,7 +350,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={id=>{if(draft)return;selectMember(id);if(demo||id===data.viewerId){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
+      <OfficeCanvas signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={id=>{if(draft)return;selectMember(id);if(demo||id===data.viewerId){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
@@ -367,6 +377,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       <button type="button" aria-label="Lampu ruangan" onClick={()=>{setUtility({boardId:null});setSpaceError('');}}><Lightbulb size={18}/><span>Lampu</span></button>
       {space.ornaments.some(o=>o.room===currentRoom&&o.asset==='whiteboard')&&<button type="button" aria-label="Buka papan ide" disabled={Boolean(draft)} onClick={()=>{setUtility({boardId:space.ornaments.find(o=>o.room===currentRoom&&o.asset==='whiteboard')!.id});setSpaceError('');}}><StickyNote size={18}/><span>Papan ide</span></button>}
       {space.ornaments.some(o=>o.room===currentRoom&&o.asset==='team_radio')&&<button type="button" aria-label="Buka radio tim" disabled={Boolean(draft)} onClick={()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}}><Radio size={18}/><span>Radio</span></button>}
+      {canEdit&&<button type="button" aria-label="Ganti tulisan neon" disabled={Boolean(draft)||!sharedReady} onClick={()=>{setSignOpen(true);setSpaceError('');}}><Type size={18}/><span>Neon</span></button>}
       <Link href="/attendance"><Check size={18} /><span>Presensi</span></Link>
       <button type="button" disabled={!viewerId || Boolean(draft)} onClick={() => { if (viewerId) { selectMember(viewerId); setEditing({ id: viewerId, avatar: data.members.find(m => m.id === viewerId)?.avatar || defaultAvatar(viewerId) }); } }}><Users size={18} /><span>Avatar</span></button>
       {canEdit && <button type="button" aria-label="Tambah objek" disabled={!sharedReady||spaceSaving} onClick={()=>{if(!draft)openLayout();setObjectLibrary(true);setObjectMenu(null);}}><Plus size={18}/><span>Tambah objek</span></button>}
@@ -375,7 +386,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     </div>
     {activityMenu&&<OfficeActivityMenu member={data.members.find(m=>m.id===viewerId)} activity={space.activities[viewerId||'']} now={now} ready={sharedReady} busy={spaceSaving} error={spaceError} onClose={()=>setActivityMenu(false)} onPick={zone=>saveSpace({type:'activity',zone})}/>}
     {utility&&<OfficeUtilities key={utility.boardId||'lights'} space={space} room={currentRoom} night={clock.phase==='Malam'} boardId={utility.boardId} viewerId={viewerId||''} canEdit={canEdit} busy={spaceSaving} ready={sharedReady} error={spaceError} onSave={saveSpace} onClose={()=>setUtility(null)} names={Object.fromEntries(data.members.map(m=>[m.id,m.name]))} onEdit={()=>{const id=utility.boardId;setUtility(null);openLayout();if(id)setSelectedOrnament(id);}}/>}
-    <OfficeMusicPlayer open={musicOpen} music={space.music} checkedIn={viewerCheckedIn} onlineCount={checkedInCount} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} error={spaceError} onOpen={()=>{setMusicOpen(true);setSpaceError('');}} onClose={()=>{setMusicOpen(false);setSpaceError('');}} onSave={saveSpace}/>
+    {signOpen&&<OfficeSignEditor value={space.signText||DEFAULT_SIGN_TEXT} ready={sharedReady} busy={spaceSaving} error={spaceError} onClose={()=>{setSignOpen(false);setSpaceError('');}} onSave={saveSpace}/>}
+    <OfficeMusicPlayer open={musicOpen} music={space.music} playback={space.musicPlayback} checkedIn={viewerCheckedIn} onlineCount={checkedInCount} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} error={spaceError} onOpen={()=>{setMusicOpen(true);setSpaceError('');}} onClose={()=>{setMusicOpen(false);setSpaceError('');}} onSave={saveSpace}/>
     {canEdit && !sharedReady && immersive && dataReady && <div className="office-game-toast is-persistent" role="status">Penyimpanan kantor belum terhubung. Klaim dan editor belum aktif.</div>}
     {notice && immersive && <div className="office-game-toast is-notice" role="status"><span className="office-toast-mark"><Check size={13}/></span><span>{notice}</span><button type="button" aria-label="Tutup pemberitahuan" onClick={() => setNotice('')}>×</button></div>}
     {panel === 'desks' && <aside className="office-desks-panel" aria-label="Kepemilikan meja">
