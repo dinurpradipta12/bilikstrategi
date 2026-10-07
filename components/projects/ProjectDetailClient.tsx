@@ -102,7 +102,9 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
   const projectId = id || (params?.id as string);
   const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
   const [mounted, setMounted] = useState(false);
-  const saveMetaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metaMutationVersionRef = useRef(0);
+  const metaPendingWritesRef = useRef(0);
+  const metaWriteChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const [realProject, setRealProject] = useState<any>(null);
   const [realTasks, setRealTasks] = useState<any[]>([]);
@@ -122,6 +124,9 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
 
   // Modals state
   const [isEditOverviewOpen, setIsEditOverviewOpen] = useState(false);
+  const [overviewDraft, setOverviewDraft] = useState<ProjectMeta | null>(null);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [overviewError, setOverviewError] = useState('');
   const [isEditClientOpen, setIsEditClientOpen] = useState(false);
   const [isEditTeamOpen, setIsEditTeamOpen] = useState(false);
   const [isAddFileOpen, setIsAddFileOpen] = useState(false);
@@ -163,10 +168,13 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       if (!projectId) return;
 
       let loadedFromServer = false;
+      const requestVersion = metaMutationVersionRef.current;
       try {
         const res = await fetch(`/api/supabase/project-meta?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
+          const requestIsCurrent = requestVersion === metaMutationVersionRef.current && metaPendingWritesRef.current === 0;
+          if (!requestIsCurrent) return;
           if (data.meta && typeof data.meta === 'object') {
             setMeta(data.meta);
             localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(data.meta));
@@ -311,49 +319,76 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
     return undefined;
   }, [projectId]);
 
-  // Save meta to the shared Supabase-backed API first; localStorage is only a browser cache.
-  const updateMeta = (newMeta: ProjectMeta) => {
-    setMeta(newMeta);
-    if (projectId) {
-      localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(newMeta));
-
-      if (saveMetaTimerRef.current) {
-        clearTimeout(saveMetaTimerRef.current);
-      }
-
-      saveMetaTimerRef.current = setTimeout(() => {
-        fetch('/api/supabase/project-meta', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, meta: newMeta }),
-        })
-          .then(() =>
-            fetch('/api/supabase/projects', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'update',
-                id: projectId,
-                description: newMeta.description,
-                status: newMeta.status,
-                notification_silent: true,
-              }),
-            }).catch(() => {})
-          )
-          .catch((err) => {
-            console.warn('[ProjectDetail] Could not sync project meta to Supabase:', err);
-          });
-      }, 250);
-    }
+  // Serialize writes and keep poll responses from replacing newer local changes.
+  const persistProjectMeta = (newMeta: ProjectMeta) => {
+    if (!projectId) return Promise.reject(new Error('Project belum tersedia.'));
+    metaMutationVersionRef.current += 1;
+    metaPendingWritesRef.current += 1;
+    const operation = metaWriteChainRef.current.catch(() => {}).then(async () => {
+      const response = await fetch('/api/supabase/project-meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, meta: newMeta }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.warning) throw new Error(result.error || result.warning || 'Data project belum tersimpan.');
+      void fetch('/api/supabase/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          id: projectId,
+          description: newMeta.description,
+          status: newMeta.status,
+          notification_silent: true,
+        }),
+      }).catch(() => {});
+    });
+    const finishWrite = () => {
+      metaPendingWritesRef.current = Math.max(0, metaPendingWritesRef.current - 1);
+    };
+    metaWriteChainRef.current = operation.then(finishWrite, finishWrite);
+    return operation;
   };
 
-  useEffect(() => {
-    return () => {
-      if (saveMetaTimerRef.current) {
-        clearTimeout(saveMetaTimerRef.current);
-      }
-    };
-  }, []);
+  const updateMeta = (newMeta: ProjectMeta) => {
+    setMeta(newMeta);
+    if (!projectId) return;
+    localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(newMeta));
+    void persistProjectMeta(newMeta).catch((error) => {
+      console.warn('[ProjectDetail] Could not sync project meta to Supabase:', error);
+    });
+  };
+
+  const openOverviewEditor = () => {
+    setOverviewDraft(structuredClone(meta));
+    setOverviewError('');
+    setIsEditOverviewOpen(true);
+  };
+
+  const closeOverviewEditor = () => {
+    if (overviewSaving) return;
+    setIsEditOverviewOpen(false);
+    setOverviewDraft(null);
+    setOverviewError('');
+  };
+
+  const saveOverview = async () => {
+    if (!overviewDraft || overviewSaving) return;
+    setOverviewSaving(true);
+    setOverviewError('');
+    try {
+      await persistProjectMeta(overviewDraft);
+      setMeta(overviewDraft);
+      localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(overviewDraft));
+      setIsEditOverviewOpen(false);
+      setOverviewDraft(null);
+    } catch (error) {
+      setOverviewError(error instanceof Error ? error.message : 'Milestone belum tersimpan. Coba lagi.');
+    } finally {
+      setOverviewSaving(false);
+    }
+  };
 
   // Fetch Supabase projects, ClickUp projects & tasks
   useEffect(() => {
@@ -447,11 +482,12 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
     if (!projectId) return;
 
     const loadProjectMeta = async () => {
+      const requestVersion = metaMutationVersionRef.current;
       try {
         const res = await fetch(`/api/supabase/project-meta?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        if (data.meta && typeof data.meta === 'object') {
+        if (data.meta && typeof data.meta === 'object' && requestVersion === metaMutationVersionRef.current && metaPendingWritesRef.current === 0) {
           setMeta(data.meta);
           localStorage.setItem(`bilik_project_meta_${projectId}`, JSON.stringify(data.meta));
         }
@@ -575,7 +611,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
             <SyncUpButton variant="header" roomTitle={`SyncUp - ${currentProject.name}`} />
 
             <button
-              onClick={() => setIsEditOverviewOpen(true)}
+              onClick={openOverviewEditor}
               className="flex items-center gap-1.5 px-3 py-2 border border-[#E8E8EC] text-xs font-semibold text-[#24324A] rounded-xl hover:bg-[#F7F7F8] transition-colors cursor-pointer"
             >
               <Edit3 className="w-3.5 h-3.5 text-[#F26B5E]" />
@@ -688,7 +724,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-[#24324A]">Deskripsi Deliverable & Scope</h3>
                 <button
-                  onClick={() => setIsEditOverviewOpen(true)}
+                  onClick={openOverviewEditor}
                   className="text-xs font-semibold text-[#F26B5E] hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <Edit3 className="w-3 h-3" />
@@ -923,7 +959,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
               </div>
 
               <button
-                onClick={() => setIsEditOverviewOpen(true)}
+                onClick={openOverviewEditor}
                 className="flex items-center gap-1.5 px-3.5 py-2 bg-[#24324A] text-white text-xs font-semibold rounded-xl hover:bg-[#1A2536] transition-colors cursor-pointer shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5 text-[#F26B5E]" />
@@ -1519,7 +1555,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
       />
 
       {/* MODAL 1: EDIT OVERVIEW & SCOPE MODAL */}
-      {isEditOverviewOpen &&
+      {isEditOverviewOpen && overviewDraft &&
         createPortal(
           <div data-mobile-modal className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
             <div data-mobile-modal-panel className="w-full max-w-xl bg-[#FFFFFF] border border-[#E8E8EC] rounded-xl shadow-2xl overflow-hidden">
@@ -1528,7 +1564,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   <Edit3 className="w-4 h-4 text-[#F26B5E]" />
                   <span>Edit Project Scope & Milestones</span>
                 </h2>
-                <button onClick={() => setIsEditOverviewOpen(false)} className="p-1 text-[#737680] hover:text-[#202124]">
+                <button type="button" disabled={overviewSaving} onClick={closeOverviewEditor} className="p-1 text-[#737680] hover:text-[#202124] disabled:opacity-50">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1537,8 +1573,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                 <div>
                   <label className="block text-xs font-bold text-[#202124] mb-1">Status Project Overall</label>
                   <select
-                    value={meta.status || currentProject.status}
-                    onChange={(e) => setMeta({ ...meta, status: e.target.value as any })}
+                    value={overviewDraft.status || currentProject.status}
+                    onChange={(e) => setOverviewDraft({ ...overviewDraft, status: e.target.value as ProjectMeta['status'] })}
                     className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg font-bold text-[#24324A] focus:outline-none focus:border-[#24324A]"
                   >
                     <option value="in_progress">🚀 In Progress (Sedang Berjalan)</option>
@@ -1552,8 +1588,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   <label className="block text-xs font-semibold text-[#202124] mb-1">Deskripsi Deliverable & Scope Pekerjaan</label>
                   <textarea
                     rows={4}
-                    value={meta.description}
-                    onChange={(e) => setMeta({ ...meta, description: e.target.value })}
+                    value={overviewDraft.description}
+                    onChange={(e) => setOverviewDraft({ ...overviewDraft, description: e.target.value })}
                     className="w-full px-3 py-2 text-xs border border-[#E8E8EC] rounded-lg focus:outline-none focus:border-[#24324A]"
                     placeholder="Tuliskan scope deliverable project..."
                   />
@@ -1571,7 +1607,7 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                           date: new Date().toISOString().split('T')[0],
                           status: 'pending',
                         };
-                        setMeta({ ...meta, milestones: [...meta.milestones, newMs] });
+                        setOverviewDraft({ ...overviewDraft, milestones: [...overviewDraft.milestones, newMs] });
                       }}
                       className="text-[11px] font-semibold text-[#F26B5E] hover:underline flex items-center gap-1"
                     >
@@ -1581,16 +1617,15 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   </div>
 
                   <div className="space-y-2 text-xs">
-                    {meta.milestones.map((m, idx) => (
+                    {overviewDraft.milestones.map((m, idx) => (
                       <div key={m.id} className="p-3 border border-[#E8E8EC] rounded-lg space-y-2 bg-[#F7F7F8]">
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
                             value={m.name}
                             onChange={(e) => {
-                              const updated = [...meta.milestones];
-                              updated[idx].name = e.target.value;
-                              setMeta({ ...meta, milestones: updated });
+                              const updated = overviewDraft.milestones.map((item, itemIndex) => itemIndex === idx ? { ...item, name: e.target.value } : item);
+                              setOverviewDraft({ ...overviewDraft, milestones: updated });
                             }}
                             className="flex-1 px-2.5 py-1 text-xs border border-[#E8E8EC] rounded bg-[#FFFFFF]"
                             placeholder="Nama Milestone"
@@ -1599,18 +1634,16 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                             type="date"
                             value={m.date}
                             onChange={(e) => {
-                              const updated = [...meta.milestones];
-                              updated[idx].date = e.target.value;
-                              setMeta({ ...meta, milestones: updated });
+                              const updated = overviewDraft.milestones.map((item, itemIndex) => itemIndex === idx ? { ...item, date: e.target.value } : item);
+                              setOverviewDraft({ ...overviewDraft, milestones: updated });
                             }}
                             className="px-2 py-1 text-xs border border-[#E8E8EC] rounded bg-[#FFFFFF]"
                           />
                           <select
                             value={m.status}
                             onChange={(e) => {
-                              const updated = [...meta.milestones];
-                              updated[idx].status = e.target.value as any;
-                              setMeta({ ...meta, milestones: updated });
+                              const updated = overviewDraft.milestones.map((item, itemIndex) => itemIndex === idx ? { ...item, status: e.target.value as Milestone['status'] } : item);
+                              setOverviewDraft({ ...overviewDraft, milestones: updated });
                             }}
                             className="px-2 py-1 text-xs border border-[#E8E8EC] rounded bg-[#FFFFFF]"
                           >
@@ -1621,8 +1654,8 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                           <button
                             type="button"
                             onClick={() => {
-                              const updated = meta.milestones.filter((item) => item.id !== m.id);
-                              setMeta({ ...meta, milestones: updated });
+                              const updated = overviewDraft.milestones.filter((item) => item.id !== m.id);
+                              setOverviewDraft({ ...overviewDraft, milestones: updated });
                             }}
                             className="p-1 text-[#737680] hover:text-[#D95858]"
                           >
@@ -1634,21 +1667,23 @@ export default function ProjectDetailClient({ id }: { id?: string }) {
                   </div>
                 </div>
 
+                {overviewError && <p role="alert" className="text-xs text-[#B42318] bg-[#FFF0ED] border border-[#FFD1C9] rounded-lg px-3 py-2">{overviewError}</p>}
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E8E8EC]">
                   <button
-                    onClick={() => setIsEditOverviewOpen(false)}
-                    className="px-4 py-2 text-xs font-medium text-[#737680] hover:bg-[#F7F7F8] rounded-lg"
+                    type="button"
+                    disabled={overviewSaving}
+                    onClick={closeOverviewEditor}
+                    className="px-4 py-2 text-xs font-medium text-[#737680] hover:bg-[#F7F7F8] rounded-lg disabled:opacity-50"
                   >
                     Batal
                   </button>
                   <button
-                    onClick={() => {
-                      updateMeta(meta);
-                      setIsEditOverviewOpen(false);
-                    }}
-                    className="px-5 py-2 text-xs font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs"
+                    type="button"
+                    disabled={overviewSaving}
+                    onClick={() => void saveOverview()}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-[#24324A] hover:bg-[#1A2536] rounded-lg shadow-xs disabled:opacity-60"
                   >
-                    Simpan Perubahan
+                    {overviewSaving ? 'Menyimpan…' : 'Simpan Perubahan'}
                   </button>
                 </div>
               </div>

@@ -91,8 +91,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    globalProjectMetaStore.set(projectId, projectMeta);
-
     try {
       const { error } = await supabase
         .from('project_meta')
@@ -107,13 +105,10 @@ export async function POST(req: NextRequest) {
 
       if (error) {
         console.warn('[Project Meta API] Supabase upsert error:', error.message);
-        return NextResponse.json({
-          success: true,
-          projectId,
-          meta: projectMeta,
-          warning: error.message,
-        });
+        return NextResponse.json({ error: 'Metadata project belum tersimpan ke database.' }, { status: 503 });
       }
+
+      globalProjectMetaStore.set(projectId, projectMeta);
 
       if (!notificationSilent) {
         const projectName = String(projectMeta.name || projectMeta.title || projectId);
@@ -146,12 +141,7 @@ export async function POST(req: NextRequest) {
       }
     } catch (error: unknown) {
       console.warn('[Project Meta API] Supabase upsert exception:', getErrorMessage(error));
-      return NextResponse.json({
-        success: true,
-        projectId,
-        meta: projectMeta,
-        warning: getErrorMessage(error) || 'Supabase meta sync skipped',
-      });
+      return NextResponse.json({ error: 'Metadata project belum tersimpan ke database.' }, { status: 503 });
     }
 
     return NextResponse.json({ success: true, projectId, meta: projectMeta });
