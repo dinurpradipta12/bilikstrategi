@@ -122,13 +122,13 @@ function clearPersistedSession(userName: string) {
   }
 }
 
-function broadcastAttendanceChange() {
-  window.dispatchEvent(new CustomEvent(ATTENDANCE_EVENT));
+function broadcastAttendanceChange(action: AttendanceAction) {
+  window.dispatchEvent(new CustomEvent(ATTENDANCE_EVENT, { detail: { action } }));
 
   if ('BroadcastChannel' in window) {
     try {
       const channel = new window.BroadcastChannel('bilik_attendance_channel');
-      channel.postMessage({ type: 'SYNC_ATTENDANCE' });
+      channel.postMessage({ type: 'SYNC_ATTENDANCE', action });
       channel.close();
     } catch {
       // Cross-tab broadcast is an enhancement; polling remains active.
@@ -408,11 +408,11 @@ export default function FloatingAttendance() {
         setNotice(nextAction === 'checkin'
           ? 'Check-in berhasil. Timer kerja sudah berjalan.'
           : nextAction === 'pause'
-            ? 'Timer presensi sedang dijeda.'
+            ? 'Timer dijeda. Avatar menuju lounge.'
             : 'Timer presensi kembali berjalan.');
       }
 
-      broadcastAttendanceChange();
+      broadcastAttendanceChange(nextAction);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Aksi presensi gagal diproses.');
       setPanelOpen(true);

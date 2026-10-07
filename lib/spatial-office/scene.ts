@@ -538,10 +538,18 @@ export class OfficeScene {
     const i=slot%DESKS_PER_ROOM;
     const meetingSeat=this.current.find(o=>o.slot===slot)?.member.activity?.seat??i%6;
     const prefix=zone==='meeting'?`meeting-chair-${meetingSeat}`:zone==='garden'?`garden-chair-${i}`:zone==='lounge'?`lounge-sofa-${Math.floor(i/2)%3*2+(i>=6?1:0)}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
-    return this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
+    const exact=this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
+    const paused=this.current.find(o=>o.slot===slot)?.member.status==='paused';
+    if(exact||zone!=='lounge'||!paused) return exact;
+    // A saved office may have removed one of the original sofas. A paused
+    // attendance session still belongs in the lounge, so reuse another sofa
+    // instead of silently keeping that member at their work desk.
+    const sofas=this.ornaments.filter(o=>o.room===this.room&&o.id.startsWith('lounge-sofa-')).sort((a,b)=>a.id.localeCompare(b.id));
+    return sofas.length ? sofas[Math.floor(i/2)%sofas.length] : undefined;
   }
   private activeZone(member:OfficeMember,slot:number):OfficeZone {
     const zone=memberZone(member,Date.now());
+    if(member.status==='paused'&&zone==='lounge') {this.blockedActivities.delete(member.id);return zone;}
     if(this.blockedActivities.get(member.id)===zone) return 'desk';
     this.blockedActivities.delete(member.id);
     return ['lounge','garden','pantry','meeting'].includes(zone)&&!this.seatItem(slot,zone)?'desk':zone;
@@ -590,7 +598,10 @@ export class OfficeScene {
   }
   private changeZone(occupant: Occupant, zone: OfficeZone) {
     const p = occupant.rig.root.position;
-    const route=this.routeTo(occupant.slot,[p.x,p.z],zone);
+    let route=this.routeTo(occupant.slot,[p.x,p.z],zone);
+    if(!route&&zone==='lounge'&&occupant.member.status==='paused') {
+      route=travelPath(occupant.slot,[p.x,p.z],'lounge',occupant.slot,this.deskLayout);
+    }
     if(!route) {this.blockedActivities.set(occupant.member.id,zone);zone='desk';}
     occupant.route=(route||travelPath(occupant.slot,[p.x,p.z],'desk',occupant.slot,this.deskLayout)).map(([x,z])=>new THREE.Vector3(x,0,z));
     occupant.zone = zone;

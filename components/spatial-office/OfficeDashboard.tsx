@@ -125,6 +125,23 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       }
     };
     const schedule = () => { clearTimeout(timer); timer = setTimeout(load, 500); };
+    const attendanceChanged = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+      if (['checkin', 'pause', 'resume', 'checkout'].includes(action || '')) {
+        setData(previous => {
+          if (!previous.viewerId) return previous;
+          const status: OfficeMember['status'] = action === 'pause' ? 'paused' : action === 'checkout' ? 'offline' : 'working';
+          let changed = false;
+          const members = previous.members.map(member => {
+            if (member.id !== previous.viewerId || (member.status === status && !member.presenceIdle)) return member;
+            changed = true;
+            return { ...member, status, presenceIdle: false };
+          });
+          return changed ? { ...previous, members } : previous;
+        });
+      }
+      schedule();
+    };
     const visibility = () => { if (!document.hidden) schedule(); };
     void load();
     const interval = setInterval(load, 10_000);
@@ -142,12 +159,12 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     const broadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('bilik_attendance_channel') : null;
     if (broadcast) broadcast.onmessage = schedule;
     window.addEventListener('focus', schedule);
-    window.addEventListener('bilik-attendance-changed', schedule);
+    window.addEventListener('bilik-attendance-changed', attendanceChanged);
     document.addEventListener('visibilitychange', visibility);
     return () => {
       disposed = true; clearInterval(interval); clearTimeout(timer); controller?.abort();
       broadcast?.close(); void supabase.removeChannel(realtime);
-      window.removeEventListener('focus', schedule); window.removeEventListener('bilik-attendance-changed', schedule); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('focus', schedule); window.removeEventListener('bilik-attendance-changed', attendanceChanged); document.removeEventListener('visibilitychange', visibility);
     };
   }, [demo, refresh]);
 

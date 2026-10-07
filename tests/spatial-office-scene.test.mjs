@@ -222,6 +222,16 @@ test('lounge and garden seats follow moved furniture; missing seats return avata
   engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'desk');
 });
 
+test('paused attendance always leaves the desk and uses another lounge sofa when its assigned sofa was removed',()=>{
+  const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;
+  engine.setOrnaments(items.filter(o=>o.id!=='lounge-sofa-5'),0,false,'');
+  engine.setMembers([{member:{...alice,status:'working'},slot:10}]);const person=engine.occupants.get('1');
+  engine.setMembers([{member:{...alice,status:'paused'},slot:10}]);
+  assert.equal(person.zone,'lounge');assert.ok(person.route.length);assert.notEqual(engine.seatItem(10,'lounge'),undefined);
+  engine.setOrnaments(items.filter(o=>!o.id.startsWith('lounge-sofa-')),0,false,'');
+  assert.equal(person.zone,'lounge');assert.ok(person.route.length);
+});
+
 
 test('corridor glazing has no old mullion and no suspended beam across its workspace opening',()=>{
   const engine=office();
