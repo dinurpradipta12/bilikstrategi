@@ -349,7 +349,7 @@ export default function Sidebar({ floating = false }: { floating?: boolean }) {
 
   return (
     <aside
-      className={`fixed top-0 ${floating ? 'right-0' : 'left-0'} bottom-0 z-40 bg-[#FFFFFF] border-r border-[#E8E8EC] transition-all duration-300 flex flex-col ${
+      className={`fixed top-0 left-0 bottom-0 z-40 bg-[#FFFFFF] border-r border-[#E8E8EC] transition-all duration-300 flex flex-col ${
         collapsed ? 'w-16' : 'w-64'
       }`}
     >

@@ -65,6 +65,12 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const [query, setQuery] = useState('');
   const [demoCounter, setDemoCounter] = useState(7);
 
+  useEffect(()=>{
+    if(!notice) return;
+    const timer=window.setTimeout(()=>setNotice(''),4200);
+    return ()=>window.clearTimeout(timer);
+  },[notice]);
+
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     const update = () => setMotion(!preference.matches);
@@ -345,8 +351,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     </div>
     {activityMenu&&<OfficeActivityMenu member={data.members.find(m=>m.id===viewerId)} activity={space.activities[viewerId||'']} now={now} ready={sharedReady} busy={spaceSaving} error={spaceError} onClose={()=>setActivityMenu(false)} onPick={zone=>saveSpace({type:'activity',zone})}/>}
     {utility&&<OfficeUtilities key={utility.boardId||'lights'} space={space} room={currentRoom} night={clock.phase==='Malam'} boardId={utility.boardId} viewerId={viewerId||''} canEdit={canEdit} busy={spaceSaving} ready={sharedReady} error={spaceError} onSave={saveSpace} onClose={()=>setUtility(null)} names={Object.fromEntries(data.members.map(m=>[m.id,m.name]))} onEdit={()=>{const id=utility.boardId;setUtility(null);openLayout();if(id)setSelectedOrnament(id);}}/>}
-    {canEdit && !sharedReady && immersive && dataReady && <div className="office-game-toast" role="status">Penyimpanan kantor belum terhubung. Klaim dan editor belum aktif.</div>}
-    {notice && immersive && <div className="office-game-toast" role="status"><span>{notice}</span><button type="button" aria-label="Tutup pemberitahuan" onClick={() => setNotice('')}>×</button></div>}
+    {canEdit && !sharedReady && immersive && dataReady && <div className="office-game-toast is-persistent" role="status">Penyimpanan kantor belum terhubung. Klaim dan editor belum aktif.</div>}
+    {notice && immersive && <div className="office-game-toast is-notice" role="status"><span className="office-toast-mark"><Check size={13}/></span><span>{notice}</span><button type="button" aria-label="Tutup pemberitahuan" onClick={() => setNotice('')}>×</button></div>}
     {panel === 'desks' && <aside className="office-desks-panel" aria-label="Kepemilikan meja">
       <div className="office-panel-title"><h3>Pilih meja Anda</h3><button type="button" onClick={() => setPanel(null)} aria-label="Tutup pilihan meja">×</button></div>
       <p>Meja terisi tetap milik penggunanya meski offline. Pindah ke meja kosong akan melepas meja lama Anda.</p>
