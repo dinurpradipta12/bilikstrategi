@@ -245,9 +245,9 @@ test('paused avatars use separate sofa seats and sit at the cushion height',()=>
   assert.notDeepEqual([a.x,a.z],[b.x,b.z]);assert.ok(engine.seatItem(10,'lounge'));assert.ok(engine.seatItem(11,'lounge'));
   assert.equal(engine.loungeSeat(10).offset,0);assert.equal(engine.loungeSeat(11).offset,0);
   engine.animateFrame(50);
-  assert.equal(first.rig.root.position.y,.14);assert.equal(second.rig.root.position.y,.14);
+  assert.ok(Math.abs(first.rig.root.position.y-(.67-.419))<1e-8);assert.ok(Math.abs(second.rig.root.position.y-(.67-.419))<1e-8);
   const hips=new THREE.Vector3();first.rig.model.getObjectByName('Hips').getWorldPosition(hips);
-  assert.ok(hips.y>.6&&hips.y<.66,`hips should rest above the cushion, received ${hips.y}`);
+  assert.ok(hips.y>.66&&hips.y<.68,`hips should meet the sofa cushion surface, received ${hips.y}`);
   assert.equal(first.rig.bones.hips.rotation.x,.28);assert.equal(first.rig.bones.spine.rotation.x,-.24);
   assert.equal(first.rig.bones.upperArms[0].rotation.z,-.65);assert.equal(first.rig.bones.upperArms[1].rotation.z,.65);
 

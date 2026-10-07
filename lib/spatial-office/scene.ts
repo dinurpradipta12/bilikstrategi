@@ -537,39 +537,45 @@ export class OfficeScene {
   }
 
   private loungeSeat(slot:number) {
-    const available=this.ornaments.filter(o=>o.room===this.room&&o.id.startsWith('lounge-sofa-')).sort((a,b)=>a.id.localeCompare(b.id));
-    const assignments=new Map<number,{item:Ornament;side:number}>(),occupied=new Map<string,Set<number>>();
+    const available=this.ornaments.filter(o=>o.room===this.room&&o.asset==='sofa').sort((a,b)=>a.id.localeCompare(b.id));
+    const assignments=new Map<number,{item:Ornament;side:number;offset:number}>(),occupied=new Set<string>();
     const loungeMembers=this.current.filter(({member})=>memberZone(member,Date.now())==='lounge').sort((a,b)=>a.slot-b.slot||a.member.id.localeCompare(b.member.id));
-    const waiting:typeof loungeMembers=[];
     for(const entry of loungeMembers) {
-      const index=entry.slot%DESKS_PER_ROOM;
-      const sofa=Math.floor(index/2)%3*2+(index>=6?1:0),base=`lounge-sofa-${sofa}`;
-      const item=available.find(candidate=>candidate.id===base||candidate.id===`${base}-area-${this.room}`);
-      if(!item) {if(entry.member.status==='paused') waiting.push(entry);continue;}
-      const used=occupied.get(item.id)||new Set<number>();
-      const preferred=index%2,side=used.has(preferred)?(preferred?0:1):preferred;
-      used.add(side);occupied.set(item.id,used);assignments.set(entry.slot,{item,side});
-    }
-    for(const entry of waiting) {
       const expected=zonePosition(entry.slot,'lounge',this.deskLayout);
-      const item=[...available].sort((a,b)=>(occupied.get(a.id)?.size||0)-(occupied.get(b.id)?.size||0)
-        ||Math.hypot(a.x-expected.x,a.z-expected.z)-Math.hypot(b.x-expected.x,b.z-expected.z)
-        ||a.id.localeCompare(b.id)).find(candidate=>(occupied.get(candidate.id)?.size||0)<2);
-      if(!item) continue;
-      const used=occupied.get(item.id)||new Set<number>(),side=used.has(0)?1:0;
-      used.add(side);occupied.set(item.id,used);assignments.set(entry.slot,{item,side});
+      const seats=available.flatMap(item=>[-1,1].map(side=>{
+        const angle=item.rotation,dx=side*.32*(item.scale?.[0]||1),dz=.28*(item.scale?.[2]||1);
+        return {item,side,offset:dx,x:item.x+dx*Math.cos(angle)+dz*Math.sin(angle),z:item.z-dx*Math.sin(angle)+dz*Math.cos(angle)};
+      })).filter(seat=>!occupied.has(`${seat.item.id}:${seat.side}`))
+        .sort((a,b)=>Math.hypot(a.x-expected.x,a.z-expected.z)-Math.hypot(b.x-expected.x,b.z-expected.z)
+          ||a.item.id.localeCompare(b.item.id)||a.side-b.side);
+      const seat=seats[0];if(!seat) continue;
+      occupied.add(`${seat.item.id}:${seat.side}`);assignments.set(entry.slot,seat);
     }
-    const placement=assignments.get(slot);
-    if(!placement) return undefined;
-    const shared=[...assignments.values()].filter(seat=>seat.item.id===placement.item.id).length>1;
-    return {...placement,offset:shared?(placement.side?.32:-.32):0};
+    return assignments.get(slot);
+  }
+
+  private chairSeat(slot:number,zone:'garden'|'meeting') {
+    const prefix=zone==='meeting'?'meeting-chair-':'garden-chair-';
+    const inZone=(item:Ornament)=>zone==='meeting'?item.x>6&&item.x<12&&item.z<-7.5:item.x>=12;
+    const available=this.ornaments.filter(item=>item.room===this.room&&item.asset==='wood_chair'
+      &&(item.id.startsWith(prefix)||inZone(item))).sort((a,b)=>a.id.localeCompare(b.id));
+    const assignments=new Map<number,Ornament>(),used=new Set<string>();
+    const members=this.current.filter(({member})=>memberZone(member,Date.now())===zone).sort((a,b)=>a.slot-b.slot||a.member.id.localeCompare(b.member.id));
+    for(const entry of members) {
+      const expected=zonePosition(entry.slot,zone,this.deskLayout);
+      const item=available.filter(candidate=>!used.has(candidate.id)).sort((a,b)=>{
+        return Math.hypot(a.x-expected.x,a.z-expected.z)-Math.hypot(b.x-expected.x,b.z-expected.z)||a.id.localeCompare(b.id);
+      })[0];
+      if(item){used.add(item.id);assignments.set(entry.slot,item);}
+    }
+    return assignments.get(slot);
   }
 
   private seatItem(slot:number,zone:OfficeZone) {
     const i=slot%DESKS_PER_ROOM;
-    const meetingSeat=this.current.find(o=>o.slot===slot)?.member.activity?.seat??i%6;
     if(zone==='lounge') return this.loungeSeat(slot)?.item;
-    const prefix=zone==='meeting'?`meeting-chair-${meetingSeat}`:zone==='garden'?`garden-chair-${i}`:zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
+    if(zone==='meeting'||zone==='garden') return this.chairSeat(slot,zone);
+    const prefix=zone==='pantry'?`pantry-counter-${Math.floor(i/4)}`:'';
     return this.ornaments.find(o=>o.room===this.room&&(o.id===prefix||o.id===`${prefix}-area-${this.room}`));
   }
   private activeZone(member:OfficeMember,slot:number):OfficeZone {
@@ -585,13 +591,15 @@ export class OfficeScene {
       const destination=zonePosition(slot,zone,this.deskLayout);
       return zone==='desk'?{...destination,y:.14}:destination;
     }
-    const i=slot%DESKS_PER_ROOM,loungeOffset=zone==='lounge'?this.loungeSeat(slot)?.offset:0;
+    const i=slot%DESKS_PER_ROOM,lounge=this.loungeSeat(slot),loungeOffset=zone==='lounge'?lounge?.offset:0;
     // The sofa GLB's cushion is forward of its backrest after the asset's
     // Z-up conversion. Place the hips on the front half of the cushion so
     // the avatar's long back hair and torso clear the raised sofa back.
-    const dx=zone==='lounge'?(loungeOffset||0):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.28:0;
+    const dx=zone==='lounge'?(loungeOffset||0):zone==='pantry'?((i%4)-1.5)*.4:0,dz=zone==='pantry'?-1:zone==='lounge'?.28*(item.scale?.[2]||1):0;
     const c=Math.cos(item.rotation),s=Math.sin(item.rotation);
-    const seatLift=zone==='lounge'?.14:zone==='garden'||zone==='meeting'?.14:0;
+    const seatBase=item.asset==='sofa'?.67:item.asset==='office_swivel_chair'?.56:item.asset==='wood_chair'?.51:0;
+    const seatTop=seatBase*(item.scale?.[1]||1);
+    const seatLift=zone==='lounge'||zone==='garden'||zone==='meeting'?seatTop-.419:0;
     return {x:item.x+dx*c+dz*s,z:item.z-dx*s+dz*c,rotation:item.rotation,y:(item.y||0)+seatLift};
   }
   private routeTo(slot:number,from:[number,number],zone:OfficeZone,fromSlot=slot):[number,number][]|null {
