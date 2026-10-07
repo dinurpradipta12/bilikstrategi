@@ -221,8 +221,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
 
   const viewerId = demo ? (selected || 'demo-1') : data.viewerId;
   const viewer=data.members.find(member=>member.id===viewerId);
-  const viewerCheckedIn=Boolean(viewer&&viewer.status==='working'&&!viewer.presenceIdle);
-  const checkedInCount=data.members.filter(member=>member.status==='working'&&!member.presenceIdle).length;
+  const viewerCheckedIn=Boolean(viewer&&viewer.status!=='offline'&&!viewer.presenceIdle);
+  const checkedInCount=data.members.filter(member=>member.status!=='offline'&&!member.presenceIdle).length;
   const applySpace = (next: OfficeSpace) => {
     if (demo) localStorage.setItem('office-demo-space-v3', JSON.stringify(next));
     setData(previous => ({ ...previous, space: next, seats: new Map(Object.entries(next.claims)) }));
@@ -342,7 +342,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
         {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,draft?.desks||space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?deskLabel(menuSlot):menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
       </OfficeCanvas>
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
-      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Istirahat & belum check-in: di luar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
+      <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Jeda: lounge · Checkout: keluar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
     <div className="office-game-dock" aria-label="Aksi kantor">
       <button type="button" disabled={Boolean(draft)} aria-pressed={panel === 'team'} onClick={() => { setPanel(panel === 'team' ? null : 'team'); }}><Users size={18} /><span>Tim</span></button>

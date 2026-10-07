@@ -622,8 +622,8 @@ export class OfficeScene {
     }
     for (const { member, slot } of members) {
       let occupant = this.occupants.get(member.id);
-      if(member.status==='paused' || member.presenceIdle) { if(occupant) this.removeOccupant(member.id,occupant); continue; }
-      if(member.status!=='working') {
+      if(member.presenceIdle) { if(occupant) this.removeOccupant(member.id,occupant); continue; }
+      if(member.status==='offline') {
         if(occupant) { occupant.member=member; occupant.label.setAttribute('aria-label',`${member.name}, keluar kantor`); if(occupant.zone!=='exit') this.changeZone(occupant,'exit'); }
         continue;
       }
@@ -652,7 +652,7 @@ export class OfficeScene {
         else this.changeZone(occupant,zone);
       }
       occupant.member = member; occupant.slot = slot; occupant.name.textContent = member.name;
-      occupant.label.setAttribute('aria-label', `${member.name}, sudah check-in`);
+      occupant.label.setAttribute('aria-label', member.status === 'paused' ? `${member.name}, sedang istirahat di lounge` : `${member.name}, sudah check-in`);
       const zone = this.activeZone(member,slot); if (zone !== occupant.zone || (zone==='meeting'&&previous.find(p=>p.member.id===member.id)?.member.activity?.seat!==member.activity?.seat)) this.changeZone(occupant, zone);
     }
   }

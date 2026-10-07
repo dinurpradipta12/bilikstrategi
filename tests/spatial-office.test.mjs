@@ -81,7 +81,7 @@ test('pantry follows accumulated work across reload, pause and resume', async ()
   assert.equal(memberZone(member, now - 1), 'desk');
   assert.equal(memberZone(JSON.parse(JSON.stringify(member)), now), 'pantry');
   assert.equal(memberZone(member, now + 60000), 'desk');
-  assert.equal(memberZone({ ...member, status: 'paused' }, now), 'exit');
+  assert.equal(memberZone({ ...member, status: 'paused' }, now), 'lounge');
   assert.equal(memberZone({ ...member, status: 'offline' }, now), 'exit');
   assert.equal(workedSeconds({ ...member, status: 'paused' }, now + 900000), 840);
 });
