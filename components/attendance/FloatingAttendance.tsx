@@ -171,7 +171,15 @@ function checkoutRecord(session: ActiveAttendance, viewer: Viewer, totalSeconds:
   };
 }
 
-export default function FloatingAttendance({ hideTrigger = false }: { hideTrigger?: boolean }) {
+type FloatingAttendancePlacement = 'viewport' | 'office-stage';
+
+export default function FloatingAttendance({
+  hideTrigger = false,
+  placement = 'viewport',
+}: {
+  hideTrigger?: boolean;
+  placement?: FloatingAttendancePlacement;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const actionInFlightRef = useRef(false);
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -188,6 +196,7 @@ export default function FloatingAttendance({ hideTrigger = false }: { hideTrigge
 
   const totalSeconds = elapsedSeconds(session, now);
   const timerLabel = formatTimer(totalSeconds);
+  const insideOfficeStage = placement === 'office-stage';
 
   const currentDate = useMemo(() => new Intl.DateTimeFormat('id-ID', {
     weekday: 'long',
@@ -448,14 +457,19 @@ export default function FloatingAttendance({ hideTrigger = false }: { hideTrigge
     <div
       ref={rootRef}
       data-floating-attendance
-      className="fixed right-5 z-[100] bottom-[calc(6.25rem+env(safe-area-inset-bottom))] md:bottom-6 md:right-6"
+      data-floating-attendance-placement={placement}
+      className={insideOfficeStage
+        ? 'absolute right-4 top-4 z-[100] max-sm:right-2.5 max-sm:top-2.5'
+        : 'fixed right-5 z-[100] bottom-[calc(6.25rem+env(safe-area-inset-bottom))] md:bottom-6 md:right-6'}
     >
       {panelOpen && (
         <section
           role="dialog"
           aria-label="Presensi live"
           data-floating-attendance-panel
-          className="absolute bottom-[calc(100%+0.75rem)] right-0 flex max-h-[min(36rem,calc(100svh-11.5rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-[0_24px_70px_rgba(36,50,74,0.24)] dark:border-[#3A4350] dark:bg-[#20242C] dark:shadow-[0_24px_70px_rgba(0,0,0,0.45)]"
+          className={`${insideOfficeStage
+            ? 'absolute right-0 top-[calc(100%+0.75rem)] max-sm:fixed max-sm:right-2.5 max-sm:top-[4.75rem]'
+            : 'absolute bottom-[calc(100%+0.75rem)] right-0'} flex max-h-[min(36rem,calc(100svh-11.5rem))] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-3xl border border-[#E1E5EB] bg-white shadow-[0_24px_70px_rgba(36,50,74,0.24)] dark:border-[#3A4350] dark:bg-[#20242C] dark:shadow-[0_24px_70px_rgba(0,0,0,0.45)]`}
         >
           <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#E8E8EC] bg-[#F8F9FB] px-4 py-4 dark:border-[#343C48] dark:bg-[#252B34]">
             <div className="flex min-w-0 items-center gap-3">

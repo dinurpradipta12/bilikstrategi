@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import { normalizeAttendanceSchedule, type AttendanceSchedule } from '@/lib/attendance/schedule';
+import FloatingAttendance from '@/components/attendance/FloatingAttendance';
 import AvatarEditor from './AvatarEditor';
 import OfficeEditor from './OfficeEditor';
 import OfficeUtilities from './OfficeUtilities';
@@ -95,7 +96,7 @@ function memberProjectSummaries(member: OfficeMember, now: number) {
   return projects;
 }
 
-export default function OfficeDashboard({ demo = false, immersive = false, workCenterPreview = false, onStatistics }: { demo?: boolean; immersive?: boolean; workCenterPreview?: boolean; onStatistics?: () => void }) {
+export default function OfficeDashboard({ demo = false, immersive = false, workCenterPreview = false, embeddedAttendance = false, onStatistics }: { demo?: boolean; immersive?: boolean; workCenterPreview?: boolean; embeddedAttendance?: boolean; onStatistics?: () => void }) {
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [now, setNow] = useState(0);
   const [schedule, setSchedule] = useState<AttendanceSchedule>();
@@ -587,6 +588,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       <span className="office-stats-caption">Avatar hadir setelah check-in; checkout melalui pintu depan.</span>
     </div>
     <div className="office-stage">
+      {embeddedAttendance && <FloatingAttendance placement="office-stage" />}
       <div className="office-stage-bar">
         <div className="office-room-name"><span className="office-room-icon"><Box size={17} /></span><div><strong>Meja komunal</strong><span>Area {currentRoom + 1} dari {rooms} · {members.length} anggota</span></div></div>
         <div className="office-stage-actions">

@@ -1046,7 +1046,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-work-center .office-game-brand span{font-size:7px;color:#667965;white-space:nowrap}
 .office-work-center .office-game-actions>button,.office-work-center .office-game-actions>select,.office-work-center .office-back-dashboard{min-height:38px;padding:9px 11px;border-radius:9px;background:#fff}
 .office-work-center .office-clock{padding:6px 10px;border-radius:9px;background:#fff}
-.office-work-center>.office-stage{grid-column:1;grid-row:2;height:auto;min-width:0;min-height:0;border:1px solid #d9e1d9;border-radius:18px;background:#fff;box-shadow:0 10px 30px #20352e12;overflow:hidden}
+.office-work-center>.office-stage{position:relative;isolation:isolate;grid-column:1;grid-row:2;height:auto;min-width:0;min-height:0;border:1px solid #d9e1d9;border-radius:18px;background:#fff;box-shadow:0 10px 30px #20352e12;overflow:hidden}
 .office-work-center .office-viewport{height:100%;min-height:0}
 .office-work-center .office-view-controls{top:14px;left:14px}
 .office-work-center .office-camera-controls{right:14px;bottom:14px;max-width:calc(100% - 28px);padding:3px;border-radius:14px;overflow-x:auto;overflow-y:hidden;background:#fffffff2;box-shadow:0 8px 24px #263d3920;scrollbar-width:none}

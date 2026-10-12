@@ -238,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (pathname === '/dashboard') return <div data-office-shell data-app-shell className="min-h-dvh bg-[#e8ece1] text-[#263d39]">
-    <main>{children}</main><AppPresenceTracker /><FloatingAttendance /><FloatingSidebar />
+    <main>{children}</main><AppPresenceTracker /><FloatingSidebar />
   </div>;
 
   return (
