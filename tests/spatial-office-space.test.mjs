@@ -342,6 +342,25 @@ test('layout draft removes multiple desks atomically, keeps edits and never revi
   assert.equal(base.claims['1'],0);
 });
 
+test('ceiling light positions are saved per area and constrained to their own room',()=>{
+  const base=space.normalizeSpace(null,members);
+  assert.equal(Object.keys(base.lightPositions).length,0);
+  assert.equal(space.roomLightPosition(base.lightPositions,0,'manager').x,-3);assert.equal(space.roomLightPosition(base.lightPositions,0,'manager').z,-9);
+  const positions=space.moveRoomLight(base.lightPositions,0,'manager',{x:-4.25,z:-8.5},1);
+  const next=space.applyLayout(base,{layoutRevision:0,desks:base.desks,ornaments:base.ornaments,lightPositions:positions},members.length);
+  assert.equal(next.lightPositions['0:manager'].x,-4.25);assert.equal(next.lightPositions['0:manager'].z,-8.5);
+  assert.equal(JSON.stringify(space.normalizeSpace(JSON.parse(JSON.stringify(next)),members).lightPositions),JSON.stringify(next.lightPositions));
+  assert.throws(()=>space.moveRoomLight(positions,0,'manager',{x:4,z:-8.5},1),/dalam ruangannya/);
+  assert.throws(()=>space.parseRoomLightPositions({'1:workspace':{x:0,z:0}},1),/dalam ruangannya/);
+  assert.throws(()=>space.applyLayout(base,{layoutRevision:0,desks:base.desks,ornaments:base.ornaments,lightPositions:{'0:meeting':{x:0,z:0}}},members.length),/dalam ruangannya/);
+});
+
+test('normalization drops invalid saved ceiling coordinates without affecting valid lights',()=>{
+  const base=space.normalizeSpace(null,members);
+  const normalized=space.normalizeSpace({...base,lightPositions:{'0:workspace':{x:1.5,z:-2},'0:manager':{x:9,z:9},bad:{x:0,z:0}}},members);
+  assert.equal(JSON.stringify(normalized.lightPositions),JSON.stringify({'0:workspace':{x:1.5,z:-2}}));
+});
+
 test('normalization releases meeting reservations when the member pauses or becomes idle',()=>{
   const base=space.normalizeSpace(null,members);
   const next=space.setActivity(space.setActivity(base,'1','meeting',1000),'2','meeting',1000);

@@ -256,8 +256,14 @@ test('meeting sits beside Project Lead with a glazed exterior and continuous wor
   for(const node of engine.scene.children.filter(o=>o.userData.architecture)) {blocker.setFromObject(node);assert.ok(!blocker.containsPoint(new THREE.Vector3(6,1,-6.75)),'corridor must cross X=6 without a wall');assert.ok(!blocker.containsPoint(new THREE.Vector3(4.5,1,-6)),'workspace must open into the corridor');}
   assert.ok(engine.scene.children.some(o=>o.userData.architecture==='wall'&&o.position.x===9&&o.position.z===-5),'lounge wall leaves a 2.5m corridor');
   assert.equal(engine.roomLights.size,7);
-  engine.setLights({'0:meeting':'off','0:manager':'on'});
+  engine.setLights({'0:meeting':'off','0:manager':'on'},{'0:meeting':{x:8.25,z:-9.5}});
   assert.equal(engine.roomLights.get('meeting').light.intensity,0);assert.ok(engine.roomLights.get('manager').light.intensity>0);
+  assert.equal(engine.roomLights.get('meeting').fixture.position.x,8.25);assert.equal(engine.roomLights.get('meeting').fixture.position.z,-9.5);
+  const items=spaceModel.normalizeSpace(null,[]).ornaments;
+  engine.setOrnaments(items,0,true,'light:meeting');
+  assert.equal(engine.roomLights.get('meeting').handle.visible,true);assert.equal(engine.outline.visible,true);
+  engine.setOrnaments(items,0,false,'');
+  assert.equal(engine.roomLights.get('meeting').handle.visible,false);assert.equal(engine.outline.visible,false);
 });
 test('lounge and garden seats follow moved furniture; missing assigned sofas use the next available seat',()=>{
   const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;

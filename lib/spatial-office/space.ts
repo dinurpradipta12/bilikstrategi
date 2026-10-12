@@ -84,13 +84,41 @@ export const ROOM_LIGHTS = {
   workspace:{label:'Workspace',x:0,z:0}, manager:{label:'Manager',x:-3,z:-9}, lead:{label:'Project Lead',x:3,z:-10.5},
   lounge:{label:'Lounge',x:9,z:-3}, pantry:{label:'Pantry',x:9,z:3.8}, meeting:{label:'Meeting room',x:10.7,z:-8.7}, corridor:{label:'Lorong meeting',x:7.5,z:-6.25},
 } as const;
+export type RoomLightKey=keyof typeof ROOM_LIGHTS;
+export type RoomLightPosition={x:number;z:number};
+export const ROOM_LIGHT_BOUNDS:Record<RoomLightKey,readonly [number,number,number,number]>={
+  workspace:[-5.4,5.4,-5.4,5.4],manager:[-5.4,-.6,-11.5,-6.4],lead:[.6,5.4,-12.9,-7.9],
+  lounge:[6.4,11.6,-5.7,1.1],pantry:[6.4,11.6,1.9,5.6],meeting:[6.4,11.6,-13.1,-7.9],corridor:[6.3,8.7,-7.15,-5.85],
+};
+const lightLayoutKey=(room:number,key:RoomLightKey)=>`${room}:${key}`;
+export function roomLightPosition(positions:Record<string,RoomLightPosition>={},room:number,key:RoomLightKey):RoomLightPosition {
+  return positions[lightLayoutKey(room,key)]||ROOM_LIGHTS[key];
+}
+function validRoomLightPosition(value:unknown,key:RoomLightKey) {
+  if(!value||typeof value!=='object') return false;
+  const {x,z}=value as Partial<RoomLightPosition>,[xmin,xmax,zmin,zmax]=ROOM_LIGHT_BOUNDS[key];
+  return Number.isFinite(x)&&Number.isFinite(z)&&x!>=xmin&&x!<=xmax&&z!>=zmin&&z!<=zmax;
+}
+export function parseRoomLightPositions(value:unknown,rooms:number):Record<string,RoomLightPosition> {
+  if(!value||typeof value!=='object'||Array.isArray(value)) throw new Error('Posisi lampu tidak valid.');
+  const result:Record<string,RoomLightPosition>={};
+  for(const [id,position] of Object.entries(value)) {
+    const [area,name,...rest]=id.split(':'),room=Number(area),key=name as RoomLightKey;
+    if(rest.length||!/^\d+$/.test(area)||room<0||room>=rooms||!Object.hasOwn(ROOM_LIGHTS,key)||!validRoomLightPosition(position,key)) throw new Error('Posisi lampu harus berada di dalam ruangannya.');
+    const {x,z}=position as RoomLightPosition;result[lightLayoutKey(room,key)]={x,z};
+  }
+  return result;
+}
+export function moveRoomLight(positions:Record<string,RoomLightPosition>,room:number,key:RoomLightKey,position:RoomLightPosition,rooms:number) {
+  return parseRoomLightPositions({...positions,[lightLayoutKey(room,key)]:position},rooms);
+}
 export type LightMode='auto'|'on'|'off';
 export type StickyNote={id:string;boardId:string;authorId:string;text:string;color:string;revision:number};
 export type OfficeChat={text:string;sentAt:number};
 export type OfficeMusicPlayback={url:string;playing:boolean;startedAt:number;updatedAt:number;updatedBy:string};
 export type SharedOfficeAction={type:'light';key:string;mode:LightMode}|{type:'note';boardId:string;id:string;text:string;color:string;expectedRevision:number;remove?:boolean}|{type:'music';url:string;title:string}|{type:'music-playback';playing:boolean}|{type:'sign';text:string}|{type:'chat';text:string};
 export function lightEnabled(mode:LightMode|undefined,night:boolean) { return mode==='on'||(mode!=='off'&&night); }
-export type OfficeSpace = { lights:Record<string,LightMode>; notes:StickyNote[]; music:OfficeMusic|null; musicPlayback:OfficeMusicPlayback|null; signText:string; chats:Record<string,OfficeChat>; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
+export type OfficeSpace = { lights:Record<string,LightMode>; lightPositions:Record<string,RoomLightPosition>; notes:StickyNote[]; music:OfficeMusic|null; musicPlayback:OfficeMusicPlayback|null; signText:string; chats:Record<string,OfficeChat>; furnishedRooms:number[]; version: number; revision: number; layoutRevision: number; claims: Record<string, number>; ornaments: Ornament[]; desks: DeskLayout[]; activities: Record<string, NonNullable<OfficeMember["activity"]>> };
 export const OBJECT_COLORS = ['original', '#52684e', '#394c68', '#cfaa77', '#b68c92', '#efe7d5', '#59545a'] as const;
 export function validObjectColor(color: unknown) { return color === undefined || color === 'original' || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)); }
 const privateOffice = (name: string, x: number): Ornament[] => [
@@ -256,10 +284,14 @@ export function normalizeSpace(value: unknown, members: Array<Pick<OfficeMember,
     const memberCount=Object.values(claims).filter(slot=>Math.floor(slot/DESKS_PER_ROOM)===area).length;
     ornaments.push(...meetingFurniture(area,memberCount));
   }
+  const lightPositions:Record<string,RoomLightPosition>={};
+  if(raw.lightPositions&&typeof raw.lightPositions==='object'&&!Array.isArray(raw.lightPositions)) for(const [id,position] of Object.entries(raw.lightPositions)) {
+    try {Object.assign(lightPositions,parseRoomLightPositions({[id]:position},areas));} catch { /* Ignore invalid legacy/corrupt coordinates and use the room default. */ }
+  }
   const chats=Object.fromEntries(sorted.flatMap(member=>{const chat=raw.chats?.[member.id];return chat&&typeof chat.text==='string'&&chat.text.trim()&&chat.text.length<=150&&Number.isFinite(chat.sentAt)?[[member.id,{text:chat.text.trim(),sentAt:chat.sentAt}]]:[];}));
   const music=normalizeOfficeMusic(raw.music),playback=music&&raw.musicPlayback&&raw.musicPlayback.url===music.url&&typeof raw.musicPlayback.playing==='boolean'&&Number.isFinite(raw.musicPlayback.startedAt)&&Number.isFinite(raw.musicPlayback.updatedAt)?{url:music.url,playing:raw.musicPlayback.playing,startedAt:raw.musicPlayback.startedAt,updatedAt:raw.musicPlayback.updatedAt,updatedBy:typeof raw.musicPlayback.updatedBy==='string'?raw.musicPlayback.updatedBy.slice(0,128):''}:null;
   const signText=typeof raw.signText==='string'&&raw.signText.trim().length<=48?raw.signText.trim():'';
-  return { version:8, lights:raw.lights||{},notes:Array.isArray(raw.notes)?raw.notes:[],music,musicPlayback:playback,signText,chats,furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
+  return { version:8, lights:raw.lights||{},lightPositions,notes:Array.isArray(raw.notes)?raw.notes:[],music,musicPlayback:playback,signText,chats,furnishedRooms, revision: Number.isSafeInteger(raw.revision) && raw.revision! >= 0 ? raw.revision! : 0, layoutRevision: Number.isSafeInteger(raw.layoutRevision) && raw.layoutRevision! >= 0 ? raw.layoutRevision! : 0, claims, desks: Array.isArray(raw.desks) ? raw.desks : [], activities: Object.fromEntries(sorted.flatMap(m => { if(('status' in m&&m.status!=='working')||('presenceIdle' in m&&m.presenceIdle)) return []; const a = raw.activities?.[m.id]; return a && ['desk', 'garden', 'pantry', 'lounge', 'meeting'].includes(a.zone) && Number.isFinite(a.until) ? [[m.id, a]] : []; })), ornaments:ornaments.filter(item=>!isExecutiveKit(item.id)) };
 }
 export function claimDesk(space: OfficeSpace, userId: string, slot: unknown, count: number): OfficeSpace {
   if (!Object.hasOwn(space.claims, userId)) throw new Error('Anda bukan anggota kantor ini.');
@@ -289,14 +321,14 @@ export function removeDesk(space: OfficeSpace, slot: unknown, count: number) {
   return {...space,claims,revision:space.revision+1,layoutRevision:space.layoutRevision+1,desks:[...space.desks.filter(d=>d.slot!==slot),{slot,x:p.x,z:p.z,rotation:p.rotation,color:p.color,removed:true}]};
 }
 // Apply the final draft atomically; never relocate an owner to another removed desk.
-export function applyLayout(space:OfficeSpace, action:{layoutRevision:number;desks?:unknown;ornaments:unknown}, count:number):OfficeSpace {
+export function applyLayout(space:OfficeSpace, action:{layoutRevision:number;desks?:unknown;ornaments:unknown;lightPositions?:unknown}, count:number):OfficeSpace {
   if(action.layoutRevision!==space.layoutRevision) throw new Error('Denah telah diubah admin lain. Muat denah terbaru sebelum menyimpan.');
   const capacity=spaceCapacity(space,count),desks=parseDesks(action.desks??space.desks,capacity/DESKS_PER_ROOM);
   const desksUnchanged=Array.from({length:capacity},(_,slot)=>{
     const before=deskPosition(slot,space.desks),after=deskPosition(slot,desks);
     return before.x===after.x&&before.z===after.z&&before.rotation===after.rotation&&(before.color||'')===(after.color||'')&&Boolean(before.removed)===Boolean(after.removed);
   }).every(Boolean);
-  const ornaments=parseOrnaments(action.ornaments,capacity/DESKS_PER_ROOM,desks,desksUnchanged?space.ornaments:undefined),claims={...space.claims};
+  const rooms=capacity/DESKS_PER_ROOM,ornaments=parseOrnaments(action.ornaments,rooms,desks,desksUnchanged?space.ornaments:undefined),lightPositions=parseRoomLightPositions(action.lightPositions??space.lightPositions,rooms),claims={...space.claims};
   const displaced=Object.keys(claims).filter(id=>deskPosition(claims[id],desks).removed);
   const occupied=new Set(Object.entries(claims).filter(([id])=>!displaced.includes(id)).map(([,slot])=>slot));
   for(const id of displaced) {
@@ -304,7 +336,7 @@ export function applyLayout(space:OfficeSpace, action:{layoutRevision:number;des
     if(free===undefined) throw new Error('Semua meja terisi. Pulihkan atau sediakan meja kosong sebelum menghapus meja milik anggota.');
     claims[id]=free;occupied.add(free);
   }
-  return {...space,desks,ornaments,claims,revision:space.revision+1,layoutRevision:space.layoutRevision+1};
+  return {...space,desks,ornaments,lightPositions,claims,revision:space.revision+1,layoutRevision:space.layoutRevision+1};
 }
 function segmentDistance(x: number, z: number, a: [number, number], b: [number, number]) {
   const dx = b[0] - a[0], dz = b[1] - a[1];

@@ -4,14 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AttendanceSchedule } from '@/lib/attendance/schedule';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
 import type { DeskLayout } from '@/lib/spatial-office/model';
-import { Building2, LocateFixed, Hand, Orbit, Minus, Plus, RotateCcw, MapPin, Lightbulb, StickyNote, Radio, MessageCircle } from 'lucide-react';
-import type { Ornament, LightMode } from '@/lib/spatial-office/space';
+import { Building2, LocateFixed, Hand, Orbit, Minus, Plus, RotateCcw, MapPin, Lightbulb, StickyNote, Radio, MessageCircle, PencilRuler } from 'lucide-react';
+import type { Ornament, LightMode, RoomLightPosition } from '@/lib/spatial-office/space';
 import type { OfficeMember } from '@/lib/spatial-office/model';
 import { OfficeScene, type ObjectMenuTarget, type OfficeBubbleEvent } from '@/lib/spatial-office/scene';
 
 type Props = {
   members: { member: OfficeMember; slot: number }[];
-  lights: Record<string,LightMode>; schedule?: AttendanceSchedule; desks: DeskLayout[];
+  lights: Record<string,LightMode>; lightPositions:Record<string,RoomLightPosition>; schedule?: AttendanceSchedule; desks: DeskLayout[];
   room: number; ornaments: Ornament[]; editing: boolean; selectedOrnament: string;
   onSelectDesk: (slot: number) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number, y?: number) => void;
   onObjectMenu: (target: ObjectMenuTarget) => void; children?: ReactNode;
@@ -27,9 +27,12 @@ type Props = {
     onRadio?: () => void;
     bubblesVisible?: boolean;
     onBubbles?: () => void;
+    onEdit?: () => void;
+    editing?: boolean;
+    editDisabled?: boolean;
   };
 };
-export default function OfficeCanvas({ members, motion, selected, onSelect, onBubble, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights, signText, workCenterPreview = false, showBubbles = true, officeTools }: Props) {
+export default function OfficeCanvas({ members, motion, selected, onSelect, onBubble, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights, lightPositions, signText, workCenterPreview = false, showBubbles = true, officeTools }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -67,7 +70,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, onBu
   useEffect(() => { scene.current?.setMotion(motion); }, [motion, attempt]);
   useEffect(() => { scene.current?.select(selected); }, [selected, attempt]);
   useEffect(() => { scene.current?.setOrnaments(ornaments, room, editing, selectedOrnament); }, [ornaments, room, editing, selectedOrnament, attempt]);
-  useEffect(() => { scene.current?.setLights(lights); }, [lights, attempt]);
+  useEffect(() => { scene.current?.setLights(lights,lightPositions); }, [lights,lightPositions,attempt]);
   useEffect(() => { scene.current?.setDeskLayout(desks); }, [desks, attempt]);
   useEffect(() => { scene.current?.setEnvironment(schedule); scene.current?.setBrand({ ...OFFICE_BRAND, name: signText }); }, [schedule, signText, attempt]);
   useEffect(() => { scene.current?.setPan(pan); }, [pan, attempt]);
@@ -95,6 +98,7 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, onBu
         {officeTools.onWhiteboard&&<button type="button" data-office-tool="true" title="Papan ide" aria-label="Buka papan ide" onClick={officeTools.onWhiteboard}><StickyNote size={17}/></button>}
         {officeTools.onRadio&&<button type="button" data-office-tool="true" title="Radio tim" aria-label="Buka radio tim" onClick={officeTools.onRadio}><Radio size={17}/></button>}
         {officeTools.onBubbles&&<button type="button" data-office-tool="true" title={officeTools.bubblesVisible?'Sembunyikan bubble percakapan':'Tampilkan bubble percakapan'} aria-label={officeTools.bubblesVisible?'Sembunyikan bubble percakapan':'Tampilkan bubble percakapan'} aria-pressed={officeTools.bubblesVisible} onClick={officeTools.onBubbles}><MessageCircle size={17}/></button>}
+        {officeTools.onEdit&&<button type="button" data-office-tool="true" title={officeTools.editing?'Tutup mode edit':'Edit ruangan'} aria-label={officeTools.editing?'Tutup mode edit ruangan':'Masuk mode edit ruangan'} aria-pressed={officeTools.editing} disabled={officeTools.editDisabled} onClick={officeTools.onEdit}><PencilRuler size={17}/></button>}
       </>}
     </div>
     <div className="office-camera-hint">{pan ? 'Seret untuk geser pandangan' : 'Seret untuk orbit · Klik kanan + seret untuk geser'} · Dua jari: geser & zoom</div>

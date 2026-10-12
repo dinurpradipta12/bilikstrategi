@@ -18,7 +18,7 @@ import OfficeMusicPlayer from './OfficeMusicPlayer';
 import OfficeSignEditor from './OfficeSignEditor';
 import OfficeWeather from './OfficeWeather';
 import type { ObjectMenuTarget, OfficeBubbleEvent } from '@/lib/spatial-office/scene';
-import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
+import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, moveRoomLight, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament, type RoomLightKey, type RoomLightPosition } from '@/lib/spatial-office/space';
 import { normalizeProjectLookupName, rememberWorkCenterProject, workCenterProjectHref } from '@/lib/projects/work-center-snapshot';
 import './office.css';
 
@@ -127,7 +127,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const [selectedDesk, setSelectedDesk] = useState<number | null>(null);
   const [objectMenu,setObjectMenu]=useState<(ObjectMenuTarget & {room:number}) | null>(null);
   const closeObjectMenu=useCallback(()=>setObjectMenu(null),[setObjectMenu]);
-  const [draft, setDraft] = useState<{ ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number } | null>(null);
+  const [draft, setDraft] = useState<{ ornaments: Ornament[]; desks: DeskLayout[]; lightPositions:Record<string,RoomLightPosition>; layoutRevision: number } | null>(null);
   const [selectedOrnament, setSelectedOrnament] = useState('');
   const [spaceError, setSpaceError] = useState('');
   const [spaceSaving, setSpaceSaving] = useState(false);
@@ -518,7 +518,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     if (demo) localStorage.setItem('office-demo-space-v3', JSON.stringify(next));
     setData(previous => ({ ...previous, space: next, seats: new Map(Object.entries(next.claims)) }));
   };
-  const saveSpace = async (action: SharedOfficeAction | { type: 'claim'; slot: number } | {type:'assign'; slot:number; memberId:string} | {type:'remove-desk';slot:number} | { type: 'activity'; zone: 'auto' | OfficeActivityZone } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; layoutRevision: number }) => {
+  const saveSpace = async (action: SharedOfficeAction | { type: 'claim'; slot: number } | {type:'assign'; slot:number; memberId:string} | {type:'remove-desk';slot:number} | { type: 'activity'; zone: 'auto' | OfficeActivityZone } | { type: 'layout'; ornaments: Ornament[]; desks: DeskLayout[]; lightPositions:Record<string,RoomLightPosition>; layoutRevision: number }) => {
     setSpaceSaving(true); setSpaceError('');
     try {
       let next: OfficeSpace;
@@ -576,7 +576,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const selectDesk = (slot: number) => { setObjectMenu({id:`desk:${slot}`,x:45,y:45,room:currentRoom}); setSpaceError(''); };
   const openLayout = () => {
     if (!canEdit || !sharedReady) return;
-    setObjectLibrary(false); setObjectMenu(null); setMusicOpen(false); setDraft({ ornaments: structuredClone(space.ornaments), desks: structuredClone(space.desks), layoutRevision: space.layoutRevision }); setSelectedOrnament(''); setPanel(null); setEditing(null); setSpaceError('');
+    setObjectLibrary(false); setObjectMenu(null); setMusicOpen(false); setDraft({ ornaments: structuredClone(space.ornaments), desks: structuredClone(space.desks), lightPositions:structuredClone(space.lightPositions), layoutRevision: space.layoutRevision }); setSelectedOrnament(''); setPanel(null); setEditing(null); setSpaceError('');
   };
   const deskOwner = selectedDesk === null ? undefined : data.members.find(member => space.claims[member.id] === selectedDesk);
   const shownOrnaments = draft && canEdit ? draft.ornaments : space.ornaments;
@@ -584,18 +584,16 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const menuItem=shownOrnaments.find(item=>item.id===objectMenu?.id);
   const menuOwner=menuSlot===null?undefined:data.members.find(member=>space.claims[member.id]===menuSlot);
   const editMenuObject=()=>{
-    if(!objectMenu||!canEdit) return;
-    if(!draft) openLayout();
+    if(!objectMenu||!canEdit||!draft) {setSpaceError('Masuk ke mode Edit ruangan sebelum mengubah komponen.');return;}
     setSelectedOrnament(objectMenu.id); closeObjectMenu();
   };
   const deleteMenuObject=async()=>{
     if(!objectMenu||!canEdit) return;
+    if(!draft) {setSpaceError('Masuk ke mode Edit ruangan sebelum menghapus komponen.');return;}
     if(menuSlot!==null&&draft) { const p=deskPosition(menuSlot,draft.desks);setDraft({...draft,desks:[...draft.desks.filter(d=>d.slot!==menuSlot),{...p,slot:menuSlot,removed:true}]});setSelectedOrnament('');closeObjectMenu();return; }
-    if(menuSlot!==null) { if(await saveSpace({type:'remove-desk',slot:menuSlot})) closeObjectMenu(); return; }
     const id=objectMenu.id, prefix=id==='manager-desk'?'manager':id==='lead-desk'?'lead':'';
     const ornaments=shownOrnaments.filter(item=>item.id!==id&&!(prefix&&['chair','laptop','keyboard','lamp','pen'].some(part=>item.id===`${prefix}-${part}`)));
-    if(draft) { setDraft({...draft,ornaments}); setSelectedOrnament(''); closeObjectMenu(); }
-    else if(await saveSpace({type:'layout',ornaments,desks:space.desks,layoutRevision:space.layoutRevision})) closeObjectMenu();
+    setDraft({...draft,ornaments}); setSelectedOrnament(''); closeObjectMenu();
   };
 
   return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
@@ -638,10 +636,11 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas workCenterPreview={workCenterPreview} showBubbles={!workCenterPreview||showSceneBubbles} onBubble={rememberChatBubble} officeTools={workCenterPreview?{onActivity:()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');},onLights:()=>{setUtility({boardId:null});setSpaceError('');},onWhiteboard:currentWhiteboard?()=>{setUtility({boardId:currentWhiteboard.id});setSpaceError('');}:undefined,onRadio:currentRadio?()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}:undefined,bubblesVisible:showSceneBubbles,onBubbles:()=>setShowSceneBubbles(value=>!value)}:undefined} signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={workCenterPreview ? workCenterMember?.id || selected : selected} onSelect={id=>{if(draft)return;selectMember(id);if(!workCenterPreview&&(demo||id===data.viewerId)){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
+      <OfficeCanvas workCenterPreview={workCenterPreview} showBubbles={!workCenterPreview||showSceneBubbles} onBubble={rememberChatBubble} officeTools={workCenterPreview?{onActivity:()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');},onLights:()=>{setUtility({boardId:null});setSpaceError('');},onWhiteboard:currentWhiteboard?()=>{setUtility({boardId:currentWhiteboard.id});setSpaceError('');}:undefined,onRadio:currentRadio?()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}:undefined,bubblesVisible:showSceneBubbles,onBubbles:()=>setShowSceneBubbles(value=>!value),onEdit:canEdit?()=>{if(draft){setDraft(null);setSelectedOrnament('');setSpaceError('');}else openLayout();}:undefined,editing:Boolean(draft),editDisabled:!sharedReady||spaceSaving}:undefined} signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} lightPositions={draft&&canEdit?draft.lightPositions:space.lightPositions} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={workCenterPreview ? workCenterMember?.id || selected : selected} onSelect={id=>{if(draft)return;selectMember(id);if(!workCenterPreview&&(demo||id===data.viewerId)){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
+          else if(id.startsWith('light:')) setDraft({...draft,lightPositions:moveRoomLight(draft.lightPositions,currentRoom,id.slice(6) as RoomLightKey,{x,z},rooms)});
           else {
             const legacyItems=JSON.stringify(draft.desks)===JSON.stringify(space.desks)?space.ornaments:undefined;
             setDraft({...draft,ornaments:moveOrnament(draft.ornaments,id,{x,z,...(y===undefined?{}:{y})},rooms,draft.desks,false,legacyItems)});
@@ -740,7 +739,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       {spaceError && <p role="alert">{spaceError}</p>}
       {rooms > 1 && <div className="office-editor-rotate"><button type="button" disabled={!currentRoom} onClick={() => setRoom(currentRoom - 1)}>← Area sebelumnya</button><button type="button" disabled={currentRoom === rooms - 1} onClick={() => setRoom(currentRoom + 1)}>Area berikutnya →</button></div>}
     </aside>}
-    {draft && canEdit && <OfficeEditor library={objectLibrary} onLibraryChange={setObjectLibrary} desks={draft.desks} baselineDesks={space.desks} onDesksChange={desks => { if (!spaceSaving) { setDraft({ ...draft, desks }); setSpaceError(''); } }} items={draft.ornaments} baselineItems={space.ornaments} claims={space.claims} room={currentRoom} rooms={rooms} selected={selectedOrnament} onSelect={setSelectedOrnament} onChange={ornaments => { if (!spaceSaving) { setDraft({ ...draft, ornaments }); setSpaceError(''); } }} onSave={() => void saveSpace({ type: 'layout', ...draft })} onCancel={() => { setDraft(null); setSpaceError(''); }} onReload={openLayout} conflict={draft.layoutRevision !== space.layoutRevision} saving={spaceSaving} error={spaceError} />}
+    {draft && canEdit && <OfficeEditor library={objectLibrary} onLibraryChange={setObjectLibrary} desks={draft.desks} baselineDesks={space.desks} onDesksChange={desks => { if (!spaceSaving) { setDraft({ ...draft, desks }); setSpaceError(''); } }} items={draft.ornaments} baselineItems={space.ornaments} lightPositions={draft.lightPositions} onLightPositionsChange={lightPositions=>{if(!spaceSaving){setDraft({...draft,lightPositions});setSpaceError('');}}} claims={space.claims} room={currentRoom} rooms={rooms} selected={selectedOrnament} onSelect={setSelectedOrnament} onChange={ornaments => { if (!spaceSaving) { setDraft({ ...draft, ornaments }); setSpaceError(''); } }} onSave={() => void saveSpace({ type: 'layout', ...draft })} onCancel={() => { setDraft(null); setSpaceError(''); }} onReload={openLayout} conflict={draft.layoutRevision !== space.layoutRevision} saving={spaceSaving} error={spaceError} />}
     <div className="office-bottom-grid">
       {immersive && <button type="button" className="office-close-drawer" onClick={() => { setPanel(null); setEditing(null); }} aria-label="Tutup panel tim">×</button>}
       <section className="office-team-panel">

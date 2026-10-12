@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { applyAvatarAppearance } from './avatar-visual';
-import { DESK_SURFACE_Y, ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
+import { DESK_SURFACE_Y, ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, roomLightPosition, type LightMode, type RoomLightKey, type RoomLightPosition, ornamentError, type Ornament } from './space';
 import { AVATAR_ASSETS, AVATAR_MODELS, AVATAR_CHAT_TTL_MS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
 
 export const AMBIENT_BUBBLE_PERIOD_SECONDS = 16;
@@ -40,8 +40,9 @@ export class OfficeScene {
   private schedule?: AttendanceSchedule;
   private skyMinute = -1;
   private lights: Record<string,LightMode> = {};
+  private lightPositions: Record<string,RoomLightPosition> = {};
   private blockedActivities = new Map<string,OfficeZone>();
-  private roomLights = new Map<string,{light:THREE.PointLight;material:THREE.MeshStandardMaterial}>();
+  private roomLights = new Map<RoomLightKey,{light:THREE.PointLight;material:THREE.MeshStandardMaterial;fixture:THREE.Group;handle:THREE.Mesh}>();
   private ambient = new THREE.HemisphereLight('#fff5e4', '#a3aaa3', 1.5);
   private sun = new THREE.DirectionalLight('#fff4df', 2);
   private textures = new Set<THREE.Texture>();
@@ -397,11 +398,14 @@ export class OfficeScene {
       for (const x of [-2.86,2.86]) rim(x,3.28,.025,.78);
       for (const y of [2.89,3.67]) rim(0,y,5.7,.025);
     }
-    for(const [key,room] of Object.entries(ROOM_LIGHTS)) {
-      const light=new THREE.PointLight('#ffe4b0',0,key==='workspace'?13:8,2); light.position.set(room.x,2.65,room.z);this.scene.add(light);
+    for(const [key,room] of Object.entries(ROOM_LIGHTS) as [RoomLightKey,(typeof ROOM_LIGHTS)[RoomLightKey]][]) {
+      const fixtureGroup=new THREE.Group();fixtureGroup.position.set(room.x,0,room.z);fixtureGroup.name=`lamp-${key}`;fixtureGroup.userData.ornamentId=`light:${key}`;
+      const light=new THREE.PointLight('#ffe4b0',0,key==='workspace'?13:8,2); light.position.set(0,2.65,0);fixtureGroup.add(light);
       const material=new THREE.MeshStandardMaterial({color:'#eee4c9',emissive:'#ffe4b0',emissiveIntensity:0});
-      const fixture=new THREE.Mesh(new THREE.CylinderGeometry(.3,.46,.12,24),material);fixture.position.set(room.x,2.78,room.z);fixture.name=`lamp-${key}`;this.scene.add(fixture);this.track(fixture);
-      this.roomLights.set(key,{light,material});
+      const fixture=new THREE.Mesh(new THREE.CylinderGeometry(.3,.46,.12,24),material);fixture.position.set(0,2.78,0);fixtureGroup.add(fixture);this.track(fixture);
+      const handleMaterial=new THREE.MeshBasicMaterial({color:'#d49745',transparent:true,opacity:.78,depthTest:false});
+      const handle=new THREE.Mesh(new THREE.TorusGeometry(.54,.045,8,32),handleMaterial);handle.position.set(0,2.72,0);handle.rotation.x=Math.PI/2;handle.visible=false;handle.renderOrder=8;fixtureGroup.add(handle);this.track(handle);
+      this.scene.add(fixtureGroup);this.roomLights.set(key,{light,material,fixture:fixtureGroup,handle});
     }
     this.updateLights();
     // Light clouds and stars vary with the workspace's local clock.
@@ -422,12 +426,17 @@ export class OfficeScene {
     }
   }
 
-  setLights(lights:Record<string,LightMode>) { this.lights=lights; this.updateLights(); }
+  setLights(lights:Record<string,LightMode>,positions:Record<string,RoomLightPosition>={}) { this.lights=lights; this.lightPositions=positions; this.updateLights(); }
   private updateLights() {
     const night=officeTime(Date.now(),this.schedule).phase==='Malam';
-    for(const [key,{light,material}] of this.roomLights) {
+    for(const [key,{light,material,fixture,handle}] of this.roomLights) {
+      const position=roomLightPosition(this.lightPositions,this.room,key);fixture.position.set(position.x,0,position.z);handle.visible=this.editMode;
       const enabled=lightEnabled(this.lights[`${this.room}:${key}`],night);
       light.intensity=enabled?(key==='workspace'?24:15):0;material.emissiveIntensity=enabled?2:0;
+    }
+    if(this.outline&&this.selectedOrnament.startsWith('light:')) {
+      const key=this.selectedOrnament.slice(6) as RoomLightKey,fixture=this.roomLights.get(key)?.fixture;
+      if(fixture) this.outline.setFromObject(fixture);
     }
   }
   setEnvironment(schedule?: AttendanceSchedule) { this.schedule = schedule; this.skyMinute = -1; }
@@ -476,7 +485,7 @@ export class OfficeScene {
   }
   setOrnaments(items: Ornament[], room: number, editing: boolean, selected: string) {
     const changed=JSON.stringify(this.ornaments)!==JSON.stringify(items);
-    this.ornaments = items; this.room = room; this.updateLights(); this.setDeskLayout(this.deskLayout); this.editMode = editing; this.selectedOrnament = selected;
+    this.ornaments = items; this.room = room; this.editMode = editing; this.selectedOrnament = selected; this.updateLights(); this.setDeskLayout(this.deskLayout);
     if (!editing && this.dragging) { this.dragging = null; this.controls.enabled = true; }
     if (!this.loaded) return;
     this.updateWindowOpenings(items);
@@ -492,11 +501,11 @@ export class OfficeScene {
     if(editing&&addedSelection) this.focusObject(selected);
     if(changed) this.blockedActivities.clear();
     if(changed) for(const occupant of this.occupants.values()) if(occupant.zone!=='desk'&&occupant.zone!=='exit') this.changeZone(occupant,this.activeZone(occupant.member,occupant.slot));
-    const object = editing ? (selected.startsWith('desk:') ? this.desks.get(Number(selected.slice(5)) % DESKS_PER_ROOM) : this.decorations.get(selected)) : undefined;
+    const object = editing ? (selected.startsWith('desk:') ? this.desks.get(Number(selected.slice(5)) % DESKS_PER_ROOM) : selected.startsWith('light:') ? this.roomLights.get(selected.slice(6) as RoomLightKey)?.fixture : this.decorations.get(selected)) : undefined;
     if (object) {
       if (!this.outline) { this.outline = new THREE.BoxHelper(object, '#d49745'); this.scene.add(this.outline); }
       this.outline.visible = true; this.outline.setFromObject(object);
-      this.outline.material.color.set((!selected.startsWith('desk:') && ornamentError(items.find(item => item.id === selected)!, this.deskLayout)) ? '#db6c60' : '#d49745');
+      this.outline.material.color.set((!selected.startsWith('desk:')&&!selected.startsWith('light:')&&ornamentError(items.find(item => item.id === selected)!, this.deskLayout)) ? '#db6c60' : '#d49745');
     } else if (this.outline) this.outline.visible = false;
   }
   private updateWindowOpenings(items: Ornament[]) {
@@ -607,7 +616,8 @@ export class OfficeScene {
   private pointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     const point = this.floorPoint(event); if (!point) return;
-    const hit = this.raycaster.intersectObjects([...this.decorations.values(), ...this.desks.values()].filter(group=>group.visible), true)[0];
+    const selectable=[...this.decorations.values(),...this.desks.values(),...(this.editMode?[...this.roomLights.values()].map(item=>item.fixture):[])].filter(group=>group.visible);
+    const hit = this.raycaster.intersectObjects(selectable, true)[0];
     if (!hit) return;
     let object: THREE.Object3D | null = hit.object;
     while (object && !object.userData.ornamentId) object = object.parent;
@@ -624,7 +634,7 @@ export class OfficeScene {
     if(this.objectClick) return;
     const floor = this.floorPoint(event); if (!floor) return;
     let point=floor,y=0;
-    if(!this.dragging.id.startsWith('desk:')) {
+    if(!this.dragging.id.startsWith('desk:')&&!this.dragging.id.startsWith('light:')) {
       const surfaceHit=this.raycaster.intersectObjects([...this.desks.values()].filter(group=>group.visible),true).find(hit=>{
         let current:THREE.Object3D|null=hit.object;
         while(current){if(current.userData.tableSurface)return true;current=current.parent;}
@@ -894,7 +904,7 @@ export class OfficeScene {
     this.controls.update();
   }
   focusObject(id:string) {
-    const object=id.startsWith('desk:')?this.desks.get(Number(id.slice(5))%DESKS_PER_ROOM):this.decorations.get(id);
+    const object=id.startsWith('desk:')?this.desks.get(Number(id.slice(5))%DESKS_PER_ROOM):id.startsWith('light:')?this.roomLights.get(id.slice(6) as RoomLightKey)?.fixture:this.decorations.get(id);
     if(!object) return;
     const {x,z}=object.position;this.controls.target.set(x,.8,z);this.camera.position.set(x+5,8,z+10);this.controls.update();
   }

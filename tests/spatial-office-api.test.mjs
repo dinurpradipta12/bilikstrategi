@@ -92,6 +92,14 @@ test('database admin/owner role can edit; stale layout revisions and invalid pos
     assert.equal(f.spaceWrites.length, 1);
   }
 });
+test('layout API persists valid ceiling light coordinates and rejects cross-room positions',async()=>{
+  const admin=fixture({role:'admin'});
+  const saved=await admin.PATCH(admin.request({action:{type:'layout',layoutRevision:0,ornaments:[],lightPositions:{'0:workspace':{x:2,z:-1}}}}));
+  assert.equal(saved.status,200);assert.equal(admin.spaceWrites[0].lightPositions['0:workspace'].x,2);assert.equal(admin.spaceWrites[0].lightPositions['0:workspace'].z,-1);
+  const invalid=fixture({role:'admin'});
+  assert.equal((await invalid.PATCH(invalid.request({action:{type:'layout',layoutRevision:0,ornaments:[],lightPositions:{'0:manager':{x:4,z:-9}}}}))).status,409);
+  assert.equal(invalid.spaceWrites.length,0);
+});
 test('office mutations reject unauthorized sessions, outside origins and missing storage', async () => {
   for (const [options, input, status] of [[{}, { token: 'fake' }, 401], [{ inactive: true }, {}, 403], [{ outsider: true }, {}, 403], [{ storage: false }, {}, 503], [{}, { origin: 'https://attacker.example' }, 403]]) {
     const f = fixture(options); assert.equal((await f.PATCH(f.request(input))).status, status); assert.equal(f.spaceWrites.length, 0);
