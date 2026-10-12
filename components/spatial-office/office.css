@@ -1239,8 +1239,8 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-account-popover>nav small{margin-top:2px;color:#8a9588;font-size:7px}
 .office-account-popover button:focus-visible,.office-account-popover a:focus-visible{outline:2px solid #54725a;outline-offset:2px}
 
-.office-holiday-admin{position:absolute;right:24px;bottom:112px;z-index:78;color:#2e4537}
-.office-holiday-admin-compact{display:flex;align-items:center;gap:9px;padding:7px 8px 7px 11px;border:1px solid #d5dfd1;border-radius:14px;background:#fffffff2;box-shadow:0 12px 32px #20352e24;backdrop-filter:blur(12px)}
+.office-holiday-admin{position:relative;z-index:6;display:flex;flex:none;justify-content:flex-end;padding:10px 12px;border-top:1px solid #e1e7df;background:#fafcf9;color:#2e4537}
+.office-holiday-admin-compact{display:flex;align-items:center;gap:9px;padding:7px 8px 7px 11px;border:1px solid #d5dfd1;border-radius:13px;background:#f5f8f3;box-shadow:0 4px 14px #20352e10}
 .office-holiday-admin-compact>div{display:flex;min-width:116px;align-items:center;gap:7px}
 .office-holiday-admin-compact>div>svg{color:#58795f}
 .office-holiday-admin-compact>div span,.office-holiday-admin-compact strong,.office-holiday-admin-compact small{display:block}
@@ -1255,14 +1255,14 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-switch input:focus-visible+span{outline:2px solid #54725a;outline-offset:2px}
 .office-holiday-switch em{min-width:24px;color:#657663;font-size:7px;font-style:normal;font-weight:750}
 .office-holiday-schedule-button{display:grid;width:31px;height:31px;place-items:center;border:1px solid #d5dfd1;border-radius:9px;background:#f3f7f0;color:#55705a}
-.office-holiday-admin-panel{position:absolute;right:0;bottom:50px;width:min(370px,calc(100vw - 28px));overflow:hidden;border:1px solid #d5dfd1;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 24px 70px #1f342d3b}
+.office-holiday-admin-panel{position:absolute;right:12px;bottom:calc(100% + 8px);display:flex;width:min(364px,calc(100vw - 40px));max-height:min(520px,calc(100dvh - 190px));overflow:hidden;flex-direction:column;border:1px solid #d5dfd1;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 24px 70px #1f342d3b}
 .office-holiday-admin-panel>header{display:grid;grid-template-columns:38px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #e2e8df;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}
 .office-holiday-admin-panel>header>span{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:#fff0ed;color:#bd5b50}
 .office-holiday-admin-panel>header strong,.office-holiday-admin-panel>header small{display:block}
 .office-holiday-admin-panel>header strong{font-size:12px}
 .office-holiday-admin-panel>header small{margin-top:3px;color:#7b8979;font-size:8px}
 .office-holiday-admin-panel>header button{display:grid;width:30px;height:30px;place-items:center;border:1px solid #d4ddd0;border-radius:9px;background:#fff;color:#60725f}
-.office-holiday-admin-body{display:grid;gap:10px;padding:13px 14px}
+.office-holiday-admin-body{display:grid;min-height:0;gap:10px;overflow:auto;padding:13px 14px}
 .office-holiday-admin-note{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:10px;background:#eef4eb;color:#58705b}
 .office-holiday-admin-note svg{flex:none;margin-top:1px}
 .office-holiday-admin-note p{margin:0;font-size:8px;line-height:1.5}
@@ -1302,10 +1302,14 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-lock>section>div small{display:block;margin-bottom:3px;color:#879487;font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
 .office-holiday-lock footer{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;color:#899488;font-size:8px;line-height:1.45}
 
+@media(max-width:900px){
+ .office-work-center-panel>.office-holiday-admin{grid-column:1;grid-row:2;align-self:end}
+ .office-holiday-admin-panel{right:auto;left:12px;width:min(364px,calc(100vw - 44px))}
+}
 @media(max-width:620px){
- .office-holiday-admin{right:14px;bottom:92px}
+ .office-work-center-panel>.office-holiday-admin{grid-column:auto;grid-row:auto;align-self:auto;padding:8px 10px}
  .office-holiday-admin-compact>div{display:none}
- .office-holiday-admin-panel{right:-2px;width:min(350px,calc(100vw - 20px))}
+ .office-holiday-admin-panel{right:10px;left:auto;width:min(350px,calc(100vw - 36px));max-height:calc(100dvh - 174px)}
  .office-holiday-date-grid{grid-template-columns:1fr}
  .office-holiday-lock{inset:8px}
  .office-holiday-lock>section{padding:20px}
