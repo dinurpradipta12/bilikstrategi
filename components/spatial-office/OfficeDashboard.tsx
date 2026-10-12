@@ -558,7 +558,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
     {immersive && <header className="office-game-hud">
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER PREVIEW · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
+      <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER${demo ? ' PREVIEW' : ''} · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
       <div className="office-game-actions">
         <div className="office-clock" title={`Zona waktu ${clock.timezone}${schedule?.configured ? '' : ' · jadwal standar Sen–Jum 08:30–17:30'}`}>
           {clock.phase === 'Malam' ? <Moon size={14} /> : <Sun size={14} />}<div><time>{now ? clock.clock : '—:—:—'}</time><small>{clock.phase} · {clock.timezone.split('/').at(-1)}</small></div>
@@ -612,7 +612,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     </div>
     {workCenterPreview && <aside className="office-work-center-panel" aria-label="Pusat operasional tim">
       <header className="office-work-center-header">
-        <div><div className="office-work-center-kicker"><span /> WORK CENTER <small>PREVIEW</small></div><p>{active} online · {paused} istirahat · {projectRollups.length} project</p></div>
+        <div><div className="office-work-center-kicker"><span /> WORK CENTER {demo && <small>PREVIEW</small>}</div><p>{active} online · {paused} istirahat · {projectRollups.length} project</p></div>
         <button className="office-work-center-presence-trigger" type="button" aria-label="Buka presensi live" title="Presensi live" onClick={()=>window.dispatchEvent(new Event('bilik-open-floating-attendance'))}><Clock3 size={16}/><i data-active={Boolean(viewerMember&&viewerMember.status!=='offline')}/></button>
       </header>
       <div className="office-work-center-tabs" role="tablist" aria-label="Pusat operasional tim">

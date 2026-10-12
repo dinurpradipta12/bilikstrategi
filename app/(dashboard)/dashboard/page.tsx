@@ -8,5 +8,5 @@ const StatisticsDashboard = dynamic(() => import('@/components/dashboard/Statist
 export default function DashboardPage() {
   const [statistics, setStatistics] = useState(false);
   if (statistics) return <div className="p-4 md:p-8 max-w-[1800px] mx-auto"><StatisticsDashboard onOffice={() => setStatistics(false)} /></div>;
-  return <OfficeDashboard immersive onStatistics={() => setStatistics(true)} />;
+  return <OfficeDashboard immersive workCenterPreview onStatistics={() => setStatistics(true)} />;
 }
