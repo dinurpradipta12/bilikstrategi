@@ -357,6 +357,27 @@ test('manager gets the centered meeting seat before the rest of the team',()=>{
   assert.deepEqual([manager.x,manager.z],[center.x,center.z]);
   assert.notDeepEqual([engine.destination(0,'meeting').x,engine.destination(0,'meeting').z],[center.x,center.z]);
 });
+test('member focus follows the avatar and restores the exact previous camera',()=>{
+  const engine=office();animation(engine);
+  Object.assign(engine,{
+    focusedMemberId:'',focusReturning:false,focusReturnCamera:null,
+    focusTarget:new THREE.Vector3(),focusPosition:new THREE.Vector3(),
+    focusFraming:new THREE.Vector3(1,1.05,-.8),focusOffset:new THREE.Vector3(4.2,3.2,5.2),
+  });
+  engine.controls={target:new THREE.Vector3(2.3,.4,-1.8),update(){},enabled:true,minDistance:9};
+  engine.camera.position.set(16.1,15.8,19.7);
+  const originalPosition=engine.camera.position.clone(),originalTarget=engine.controls.target.clone();
+  engine.setMembers([{member:alice,slot:0}]);engine.focusMember('1');
+  for(let frame=0;frame<100;frame++) engine.updateFocusedCamera(.05);
+  const avatar=engine.occupants.get('1').rig.root.position;
+  assert.ok(engine.controls.target.distanceTo(avatar.clone().add(engine.focusFraming))<.01);
+  assert.equal(engine.controls.enabled,false);assert.equal(engine.controls.minDistance,5);
+  engine.focusMember(null);
+  for(let frame=0;frame<120;frame++) engine.updateFocusedCamera(.05);
+  assert.ok(engine.camera.position.distanceTo(originalPosition)<1e-8);
+  assert.ok(engine.controls.target.distanceTo(originalTarget)<1e-8);
+  assert.equal(engine.controls.enabled,true);assert.equal(engine.controls.minDistance,9);
+});
 test('front camera sits at eye level and looks horizontally toward the office',()=>{
   const engine=office();engine.camera=new THREE.PerspectiveCamera();engine.controls={target:new THREE.Vector3(),update(){}};
   engine.frontView();

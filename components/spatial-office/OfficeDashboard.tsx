@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type SyntheticEvent } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Settings, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2, CalendarOff, LockKeyhole } from 'lucide-react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Settings, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2, CalendarOff, LockKeyhole, ScanSearch } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -88,6 +88,10 @@ function memberStatusMeta(status: OfficeMember['status']) {
   return { label: 'Offline', Icon: X };
 }
 
+function memberHasVisibleAvatar(member?: OfficeMember) {
+  return Boolean(member && member.status !== 'offline' && (!member.presenceIdle || member.status === 'paused'));
+}
+
 function compactDate(value?: string) {
   if (!value) return 'Baru saja';
   const date = new Date(value);
@@ -165,6 +169,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const [workCenterFeed,setWorkCenterFeed]=useState<WorkCenterFeed>({notifications:[],unreadCount:0,approvals:[],loading:true});
   const [memberProfilePopover,setMemberProfilePopover]=useState<{id:string;left:number;bottom:number}|null>(null);
   const [accountPopover,setAccountPopover]=useState<{left:number;bottom:number}|null>(null);
+  const [focusedMemberId,setFocusedMemberId]=useState('');
   const [demoCounter, setDemoCounter] = useState(7);
   const [holidayMessagePreview, setHolidayMessagePreview] = useState<string | null>(null);
 
@@ -205,6 +210,22 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       window.removeEventListener('resize',closeFromViewport);
     };
   },[accountPopover]);
+
+  useEffect(()=>{
+    if(!focusedMemberId) return;
+    const member=data.members.find(candidate=>candidate.id===focusedMemberId);
+    if(memberHasVisibleAvatar(member)) return;
+    let cancelled=false;
+    queueMicrotask(()=>{if(!cancelled)setFocusedMemberId('');});
+    return()=>{cancelled=true;};
+  },[data.members,focusedMemberId]);
+
+  useEffect(()=>{
+    if(!focusedMemberId) return;
+    const closeFromKeyboard=(event:KeyboardEvent)=>{if(event.key==='Escape')setFocusedMemberId('');};
+    document.addEventListener('keydown',closeFromKeyboard);
+    return()=>document.removeEventListener('keydown',closeFromKeyboard);
+  },[focusedMemberId]);
 
   useEffect(()=>{
     if(!notice) return;
@@ -443,6 +464,9 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const unreadNotifications=workCenterFeed.notifications.filter(notification=>!notification.is_read);
   const floatingProfileMember = memberProfilePopover ? data.members.find(member => member.id === memberProfilePopover.id) : undefined;
   const floatingProfileProjects = floatingProfileMember ? memberProjectSummaries(floatingProfileMember, now) : [];
+  const focusedMember = focusedMemberId ? data.members.find(member => member.id === focusedMemberId) : undefined;
+  const focusedMemberProjects = focusedMember ? memberProjectSummaries(focusedMember, now) : [];
+  const focusedMemberTask = focusedMember?.tasks?.find(task=>task.status.toLowerCase()==='in_progress') || focusedMember?.tasks?.[0];
   const currentWhiteboard = space.ornaments.find(ornament => ornament.room === currentRoom && ornament.asset === 'whiteboard');
   const currentRadio = space.ornaments.find(ornament => ornament.room === currentRoom && ornament.asset === 'team_radio');
   const selectMember = (id: string) => {
@@ -454,6 +478,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   };
   const toggleMemberProfile = (member: OfficeMember, target: HTMLButtonElement) => {
     setAccountPopover(null);
+    if(focusedMemberId) setFocusedMemberId('');
     selectMember(member.id);
     if(memberProfilePopover?.id===member.id){setMemberProfilePopover(null);return;}
     const rect=target.getBoundingClientRect();
@@ -464,8 +489,17 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       bottom:Math.max(12,window.innerHeight-rect.top+10),
     });
   };
+  const startMemberFocus = (member: OfficeMember) => {
+    if(draft||!memberHasVisibleAvatar(member)) return;
+    selectMember(member.id);
+    setMemberProfilePopover(null);
+    setAccountPopover(null);
+    setShowSceneBubbles(false);
+    setFocusedMemberId(member.id);
+  };
   const toggleAccountPopover = (target: HTMLButtonElement) => {
     if(accountPopover){setAccountPopover(null);return;}
+    setFocusedMemberId('');
     setMemberProfilePopover(null);
     const rect=target.getBoundingClientRect();
     const width=Math.min(270,window.innerWidth-24);
@@ -630,7 +664,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     : holidayMessagePreview || '';
 
   return <section
-    className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''} ${holidayLocked ? 'office-holiday-locked' : ''}`}
+    className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''} ${focusedMember ? 'office-focus-active' : ''} ${holidayLocked ? 'office-holiday-locked' : ''}`}
     aria-label="Kantor 3D"
     data-holiday-locked={holidayLocked || undefined}
     onClickCapture={blockHolidayInteraction}
@@ -678,7 +712,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas workCenterPreview={workCenterPreview} showBubbles={!workCenterPreview||showSceneBubbles} onBubble={rememberChatBubble} officeTools={workCenterPreview?{onActivity:()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');},onLights:()=>{setUtility({boardId:null});setSpaceError('');},onWhiteboard:currentWhiteboard?()=>{setUtility({boardId:currentWhiteboard.id});setSpaceError('');}:undefined,onRadio:currentRadio?()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}:undefined,bubblesVisible:showSceneBubbles,onBubbles:()=>setShowSceneBubbles(value=>!value),onEdit:canEdit?()=>{if(draft){setDraft(null);setSelectedOrnament('');setSpaceError('');}else openLayout();}:undefined,editing:Boolean(draft),editDisabled:!sharedReady||spaceSaving}:undefined} signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} lightPositions={draft&&canEdit?draft.lightPositions:space.lightPositions} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={workCenterPreview ? workCenterMember?.id || selected : selected} onSelect={id=>{if(draft)return;selectMember(id);if(!workCenterPreview&&(demo||id===data.viewerId)){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
+      <OfficeCanvas workCenterPreview={workCenterPreview} focusedMemberId={focusedMember?.id} showBubbles={!workCenterPreview||showSceneBubbles} onBubble={rememberChatBubble} officeTools={workCenterPreview?{onActivity:()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');},onLights:()=>{setUtility({boardId:null});setSpaceError('');},onWhiteboard:currentWhiteboard?()=>{setUtility({boardId:currentWhiteboard.id});setSpaceError('');}:undefined,onRadio:currentRadio?()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}:undefined,bubblesVisible:showSceneBubbles,onBubbles:()=>setShowSceneBubbles(value=>!value),onEdit:canEdit?()=>{if(draft){setDraft(null);setSelectedOrnament('');setSpaceError('');}else openLayout();}:undefined,editing:Boolean(draft),editDisabled:!sharedReady||spaceSaving}:undefined} signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} lightPositions={draft&&canEdit?draft.lightPositions:space.lightPositions} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={workCenterPreview ? workCenterMember?.id || selected : selected} onSelect={id=>{if(draft)return;selectMember(id);if(!workCenterPreview&&(demo||id===data.viewerId)){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
@@ -744,6 +778,31 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
         <label htmlFor="work-center-chat">Tulis pesan untuk ruang 3D</label><input id="work-center-chat" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Tulis pesan…':'Check-in untuk mengirim pesan'}/><small>{chatText.length}/150</small><button type="submit" disabled={!chatText.trim()||!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} aria-label="Kirim pesan avatar"><Send size={14}/></button>
       </form>
     </div>}
+    {workCenterPreview&&focusedMember&&<aside className="office-member-focus-panel" aria-live="polite" aria-labelledby="office-member-focus-title">
+      <header>
+        <span className="office-member-focus-avatar" aria-hidden="true" data-photo={Boolean(focusedMember.profilePicture)} style={focusedMember.profilePicture?{backgroundImage:`url(${JSON.stringify(focusedMember.profilePicture)})`}:undefined}>{focusedMember.profilePicture?'':focusedMember.name.slice(0,2).toUpperCase()}</span>
+        <div><p>MODE FOKUS</p><h3 id="office-member-focus-title">{focusedMember.name}</h3><span>{memberJobTitle(focusedMember)}</span></div>
+        <button type="button" onClick={()=>setFocusedMemberId('')} aria-label={`Tutup mode fokus ${focusedMember.name}`} title="Kembali ke tampilan sebelumnya"><X size={16}/></button>
+      </header>
+      <div className="office-member-focus-body">
+        <div className="office-member-focus-status"><span><i className={`status-${focusedMember.status}`}/>{statusLabel(focusedMember)}</span><strong>{formatWorkDuration(workedSeconds(focusedMember,now))}</strong></div>
+        <section className="office-member-focus-progress">
+          <span><ScanSearch size={13}/> Sedang dikerjakan</span>
+          <strong>{focusedMemberTask?.name||focusedMember.project||'Belum ada task aktif'}</strong>
+          <small>{focusedMemberTask?.status.replaceAll('_',' ')||'status kerja'}{focusedMember.project?` · ${focusedMember.project}`:''}</small>
+        </section>
+        <section className="office-member-focus-section">
+          <h4><Target size={13}/> KPI utama</h4>
+          {focusedMember.profile?.kpis.length?<div className="office-member-focus-kpis">{focusedMember.profile.kpis.slice(0,2).map(kpi=><article key={kpi.id}><div><strong>{kpi.title}</strong><span>{kpi.progress===undefined?'Belum diperbarui':`${Math.round(kpi.progress)}%`}</span></div><i><span style={{width:`${Math.max(0,Math.min(100,kpi.progress||0))}%`}}/></i></article>)}</div>:<p>Belum ada KPI yang terhubung.</p>}
+        </section>
+        <section className="office-member-focus-section">
+          <h4><BriefcaseBusiness size={13}/> Jobdesk</h4>
+          <p>{focusedMember.profile?.jobSummary||focusedMember.profile?.jobDescriptions[0]||`Menangani pekerjaan ${focusedMember.project||'tim'} sesuai peran ${memberJobTitle(focusedMember)}.`}</p>
+        </section>
+        {focusedMemberProjects[0]&&<div className="office-member-focus-project"><span>Project aktif</span><strong>{focusedMemberProjects[0].name}</strong><small>{formatWorkDuration(focusedMemberProjects[0].trackedSeconds)} tercatat</small></div>}
+      </div>
+      <footer><span><i/> Kamera mengikuti avatar</span><small>Esc untuk kembali</small></footer>
+    </aside>}
     {holidayOverlayVisible && <div className="office-holiday-lock" data-preview={holidayPreviewOnly || undefined} role="dialog" aria-modal={holidayLocked} aria-labelledby="office-holiday-lock-title">
       <section>
         {holidayPreviewOnly && <button type="button" className="office-holiday-lock-close" onClick={() => setHolidayMessagePreview(null)} aria-label="Tutup pratinjau pesan libur"><X size={16} /></button>}
@@ -875,7 +934,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
           {floatingProfileProjects.length?<div className="office-member-profile-projects">{floatingProfileProjects.slice(0,5).map(project=><article key={project.name}><div><strong>{project.name}</strong><span>{project.taskCount?`${project.completedTasks}/${project.taskCount} task selesai`:'Project presensi aktif'}</span></div><b>{formatWorkDuration(project.trackedSeconds)}</b></article>)}</div>:<p className="is-empty">Belum ada project atau waktu kerja yang tercatat.</p>}
         </section>
       </div>
-      <footer><Link href="/performance">Performance <ArrowUpRight size={11}/></Link><Link href="/tasks">Tasks <ArrowUpRight size={11}/></Link><Link href="/projects">Projects <ArrowUpRight size={11}/></Link></footer>
+      <footer><button type="button" className="office-member-focus-trigger" disabled={Boolean(draft)||!memberHasVisibleAvatar(floatingProfileMember)} title={draft?'Tutup mode edit sebelum fokus':memberHasVisibleAvatar(floatingProfileMember)?`Fokus ke avatar ${floatingProfileMember.name}`:'Avatar belum berada di kantor'} onClick={()=>startMemberFocus(floatingProfileMember)}><ScanSearch size={12}/>{draft?'Selesaikan edit':memberHasVisibleAvatar(floatingProfileMember)?'Fokus avatar':'Avatar offline'}</button><Link href="/performance">Performance <ArrowUpRight size={11}/></Link><Link href="/tasks">Tasks <ArrowUpRight size={11}/></Link><Link href="/projects">Projects <ArrowUpRight size={11}/></Link></footer>
     </aside>}
     {workCenterPreview && accountPopover && <aside
       id="office-account-menu"
@@ -902,7 +961,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     </aside>}
     {workCenterPreview && <nav className="office-agent-strip" aria-label="Pilih anggota tim">
       <div className="office-account-control"><button type="button" className="office-account-trigger" aria-label={`Buka menu akun ${accountMember?.name||''}`.trim()} aria-haspopup="dialog" aria-expanded={Boolean(accountPopover)} aria-controls="office-account-menu" onClick={event=>toggleAccountPopover(event.currentTarget)}><span className="office-account-trigger-avatar" aria-hidden="true" data-photo={Boolean(accountMember?.profilePicture)} style={accountMember?.profilePicture?{backgroundImage:`url(${JSON.stringify(accountMember.profilePicture)})`}:undefined}>{accountMember?.profilePicture?'':(accountMember?.name||'AK').slice(0,2).toUpperCase()}</span><ChevronDown size={13}/></button></div>
-      <div className="office-agent-strip-list">{data.members.map(member=>{const {label,Icon}=memberStatusMeta(member.status);return <button key={member.id} type="button" className="office-agent-card" aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-status" data-status={member.status} title={label} aria-label={label}><Icon size={12}/></span><span className="office-agent-avatar" aria-hidden="true" data-photo={Boolean(member.profilePicture)} style={member.profilePicture?{backgroundImage:`url(${JSON.stringify(member.profilePicture)})`}:undefined}>{member.profilePicture?'':member.name.slice(0,2).toUpperCase()}</span><span className="office-agent-copy"><strong>{member.name}</strong><small>{memberJobTitle(member)}</small></span></button>})}</div>
+      <div className="office-agent-strip-list">{data.members.map(member=>{const {label,Icon}=memberStatusMeta(member.status);return <button key={member.id} type="button" className="office-agent-card" data-focused={focusedMemberId===member.id||undefined} aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-status" data-status={member.status} title={label} aria-label={label}><Icon size={12}/></span><span className="office-agent-avatar" aria-hidden="true" data-photo={Boolean(member.profilePicture)} style={member.profilePicture?{backgroundImage:`url(${JSON.stringify(member.profilePicture)})`}:undefined}>{member.profilePicture?'':member.name.slice(0,2).toUpperCase()}</span><span className="office-agent-copy"><strong>{member.name}</strong><small>{memberJobTitle(member)}</small></span></button>})}</div>
     </nav>}
     <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {realtimeConnected ? 'Realtime + cadangan 10 detik' : 'Sinkron tiap 10 detik'}</span>}</footer>
   </section>;

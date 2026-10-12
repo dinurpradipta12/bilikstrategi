@@ -20,6 +20,7 @@ type Props = {
   signText: string;
   workCenterPreview?: boolean;
   showBubbles?: boolean;
+  focusedMemberId?: string;
   officeTools?: {
     onActivity: () => void;
     onLights: () => void;
@@ -32,7 +33,7 @@ type Props = {
     editDisabled?: boolean;
   };
 };
-export default function OfficeCanvas({ members, motion, selected, onSelect, onBubble, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights, lightPositions, signText, workCenterPreview = false, showBubbles = true, officeTools }: Props) {
+export default function OfficeCanvas({ members, motion, selected, onSelect, onBubble, room, ornaments, editing, selectedOrnament, onSelectDesk, onSelectOrnament, onMoveOrnament, onObjectMenu, children, desks, schedule, lights, lightPositions, signText, workCenterPreview = false, showBubbles = true, focusedMemberId = '', officeTools }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeScene | null>(null);
@@ -69,12 +70,13 @@ export default function OfficeCanvas({ members, motion, selected, onSelect, onBu
   useEffect(() => { scene.current?.setMembers(members); }, [members, attempt]);
   useEffect(() => { scene.current?.setMotion(motion); }, [motion, attempt]);
   useEffect(() => { scene.current?.select(selected); }, [selected, attempt]);
+  useEffect(() => { scene.current?.focusMember(focusedMemberId || null); }, [focusedMemberId, room, attempt]);
   useEffect(() => { scene.current?.setOrnaments(ornaments, room, editing, selectedOrnament); }, [ornaments, room, editing, selectedOrnament, attempt]);
   useEffect(() => { scene.current?.setLights(lights,lightPositions); }, [lights,lightPositions,attempt]);
   useEffect(() => { scene.current?.setDeskLayout(desks); }, [desks, attempt]);
   useEffect(() => { scene.current?.setEnvironment(schedule); scene.current?.setBrand({ ...OFFICE_BRAND, name: signText }); }, [schedule, signText, attempt]);
   useEffect(() => { scene.current?.setPan(pan); }, [pan, attempt]);
-  return <div className={`office-viewport ${editing ? 'is-editing' : ''} ${showBubbles ? '' : 'are-bubbles-hidden'}`}>
+  return <div className={`office-viewport ${editing ? 'is-editing' : ''} ${showBubbles ? '' : 'are-bubbles-hidden'} ${focusedMemberId ? 'is-focus-mode' : ''}`} data-focus-mode={Boolean(focusedMemberId) || undefined}>
     <div className="office-webgl" ref={host} />
     <div className="office-labels" ref={labels} />
     {children}

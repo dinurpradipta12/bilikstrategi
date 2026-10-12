@@ -76,6 +76,13 @@ export class OfficeScene {
   private moving = true;
   private selected = '';
   private project = new THREE.Vector3();
+  private focusedMemberId = '';
+  private focusReturning = false;
+  private focusReturnCamera: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
+  private focusTarget = new THREE.Vector3();
+  private focusPosition = new THREE.Vector3();
+  private focusFraming = new THREE.Vector3(1, 1.05, -.8);
+  private focusOffset = new THREE.Vector3(4.2, 3.2, 5.2);
   private visible = true;
   private observer: IntersectionObserver;
   private contextLost = (event: Event) => { event.preventDefault(); this.options.onError('Tampilan 3D terhenti. Muat ulang tampilan atau gunakan daftar tim.'); };
@@ -893,6 +900,28 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
+  focusMember(id: string | null) {
+    const next = id || '';
+    if (next) {
+      if (!this.focusedMemberId && !this.focusReturning) {
+        this.focusReturnCamera = { position: this.camera.position.clone(), target: this.controls.target.clone() };
+      }
+      this.focusedMemberId = next;
+      this.focusReturning = false;
+      this.controls.enabled = false;
+      this.controls.minDistance = 5;
+      return;
+    }
+    if (!this.focusedMemberId && !this.focusReturning) return;
+    this.focusedMemberId = '';
+    if (this.focusReturnCamera) {
+      this.focusReturning = true;
+      this.controls.enabled = false;
+    } else {
+      this.controls.enabled = true;
+      this.controls.minDistance = 9;
+    }
+  }
   resetCamera() {
     if (this.options.environmentStyle === 'work-center') {
       this.camera.position.set(16.1, 15.8, 19.7);
@@ -914,6 +943,30 @@ export class OfficeScene {
     const offset = this.camera.position.clone().sub(this.controls.target);
     offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction > 0 ? 0.84 : 1.19), 9, 85));
     this.camera.position.copy(this.controls.target).add(offset); this.controls.update();
+  }
+
+  private updateFocusedCamera(dt: number) {
+    const easing = 1 - Math.exp(-dt * 5);
+    if (this.focusedMemberId) {
+      const occupant = this.occupants.get(this.focusedMemberId);
+      if (!occupant) return;
+      // Aim slightly to the avatar's right so the person remains visible beside the detail panel.
+      this.focusTarget.copy(occupant.rig.root.position).add(this.focusFraming);
+      this.focusPosition.copy(this.focusTarget).add(this.focusOffset);
+      this.controls.target.lerp(this.focusTarget, easing);
+      this.camera.position.lerp(this.focusPosition, easing);
+      return;
+    }
+    if (!this.focusReturning || !this.focusReturnCamera) return;
+    this.controls.target.lerp(this.focusReturnCamera.target, easing);
+    this.camera.position.lerp(this.focusReturnCamera.position, easing);
+    if (this.controls.target.distanceTo(this.focusReturnCamera.target) > .025 || this.camera.position.distanceTo(this.focusReturnCamera.position) > .04) return;
+    this.controls.target.copy(this.focusReturnCamera.target);
+    this.camera.position.copy(this.focusReturnCamera.position);
+    this.focusReturnCamera = null;
+    this.focusReturning = false;
+    this.controls.enabled = true;
+    this.controls.minDistance = 9;
   }
 
   private placeLabel(element: HTMLElement, position: THREE.Vector3) {
@@ -1033,6 +1086,7 @@ export class OfficeScene {
     }
     if (this.signTexture) this.signTexture.offset.x = this.moving ? (this.time * .035) % 1 : this.signTexture.offset.x;
     if (this.moving) this.clouds.position.x = Math.sin(this.time * .012) * 3;
+    this.updateFocusedCamera(dt);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
