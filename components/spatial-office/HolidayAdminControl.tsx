@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CalendarOff,
   Check,
+  Eye,
   Loader2,
   Save,
   ShieldCheck,
@@ -55,7 +56,7 @@ function inputDateToIso(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-export default function HolidayAdminControl() {
+export default function HolidayAdminControl({ onPreview }: { onPreview?: (message: string | null) => void }) {
   const { access, refresh } = useHolidayAccess();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<HolidayDraft>(() => draftFromControl(access?.control));
@@ -105,7 +106,11 @@ export default function HolidayAdminControl() {
     const next = { ...draft, manualActive: active };
     setDraft(next);
     const saved = await save(next, active ? 'Workspace dikunci untuk anggota.' : 'Workspace dibuka kembali untuk anggota.');
-    if (!saved) setDraft(previous);
+    if (!saved) {
+      setDraft(previous);
+      return;
+    }
+    onPreview?.(active ? (next.message.trim() || DEFAULT_HOLIDAY_CONTROL.message) : null);
   };
 
   const saveSchedule = async () => {
@@ -117,7 +122,7 @@ export default function HolidayAdminControl() {
     if (saved) setOpen(false);
   };
 
-  const active = access.isHoliday && (access.mode === 'manual' || access.mode === 'scheduled');
+  const active = access.isHoliday;
 
   return (
     <div className="office-holiday-admin" data-open={open}>
@@ -204,6 +209,13 @@ export default function HolidayAdminControl() {
           </div>
 
           <footer>
+            <button
+              type="button"
+              className="is-preview"
+              onClick={() => onPreview?.(draft.message.trim() || DEFAULT_HOLIDAY_CONTROL.message)}
+            >
+              <Eye size={14} /> Pratinjau pesan
+            </button>
             <button type="button" onClick={() => setOpen(false)} disabled={saving}>Batal</button>
             <button type="button" className="is-primary" onClick={() => void saveSchedule()} disabled={saving || !access.storageReady}>
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Simpan jadwal
