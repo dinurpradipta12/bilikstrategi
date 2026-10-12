@@ -359,22 +359,19 @@ export class OfficeScene {
       label.addEventListener('click', () => this.editMode ? this.options.onSelectOrnament(`desk:${this.room * DESKS_PER_ROOM + slot}`) : this.options.onSelectDesk(this.room * DESKS_PER_ROOM + slot));
       this.labels.appendChild(label); this.deskLabels.set(slot, label);
     }
-    // The preview uses a larger white campus so the office never floats inside
-    // an empty sky. The existing dashboard keeps the original compact plot.
-    if (this.options.environmentStyle === 'work-center') {
-      this.box(1, -.36, -4, 118, .5, 94, '#f7f9f7');
-      this.box(0, -.20, -26, 72, .12, 16, '#edf1ee');
-      this.box(-25, -.13, -19, 18, .10, 28, '#dfeadb');
-      this.box(25, -.13, -19, 18, .10, 28, '#e3ecdf');
-      this.box(0, -.12, -17.5, 2.2, .06, 12, '#d8dfdb');
-      for (let x = -30; x <= 30; x += 4) this.box(x, -.125, -26, .08, .03, 4.8, '#ffffff');
-      for (const [x, z, scale] of [[-31,-12,1.1],[-25,-13,.9],[-19,-13,1.05],[19,-13,1],[25,-13,.92],[31,-12,1.12],[-30,-25,.85],[-21,-26,.95],[21,-26,.95],[30,-25,.85]] as const) this.landscapeTree(x,z,scale);
-    }
+    const compactPlot=this.options.environmentStyle==='work-center';
+    if(compactPlot) {
+      // A compact raised plot keeps the office visually grounded without the
+      // oversized flat campus that previously surrounded it.
+      this.box(2,-.68,0,42,1.1,36,'#96a889');
+      this.box(2,-.18,0,42,.2,36,'#c4d3b1');
+      for(const [x,z,scale] of [[-8.6,-11.8,.76],[-8.7,-6.8,.66],[19.8,-11.5,.74],[20.8,-6.3,.68]] as const) this.landscapeTree(x,z,scale);
+    } else this.box(1,-.18,1,48,.2,36,'#c4d3b1');
     // Street, sidewalk and a planted pocket garden outside the glazed office.
-    this.box(1, -0.18, 1, 48, 0.2, 36, '#c4d3b1');
-    this.box(0, -0.055, 7, 44, 0.12, 2, '#dedbd0');
-    this.box(0, -0.09, 10.5, 44, 0.08, 5, '#727d7c');
-    for (let x = -20; x < 22; x += 3) this.box(x, -0.042, 10.5, 1.5, 0.01, 0.09, '#efe7c6');
+    const streetCenter=compactPlot?2:0,streetWidth=compactPlot?40:44;
+    this.box(streetCenter,-.055,7,streetWidth,.12,2,'#dedbd0');
+    this.box(streetCenter,-.09,10.5,streetWidth,.08,5,'#727d7c');
+    for(let x=compactPlot?-16:-20;x<(compactPlot?21:22);x+=3) this.box(x,-.042,10.5,1.5,.01,.09,'#efe7c6');
     for (let z = 8.6; z < 12.5; z += 0.65) this.box(-4.5, -0.035, z, 2, 0.015, 0.32, '#fff9e8');
     this.box(15.5, -0.04, 0, 6.4, 0.12, 12, '#9fb881');
     this.box(15.5, 0.03, 1.9, 6.4, 0.08, 1.1, '#dfd8c4');
