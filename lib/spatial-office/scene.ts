@@ -254,16 +254,6 @@ export class OfficeScene {
     return mesh;
   }
 
-  private landscapeTree(x: number, z: number, scale = 1) {
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.17 * scale, .23 * scale, 1.55 * scale, 8), new THREE.MeshStandardMaterial({ color: '#9b765d', roughness: .88 }));
-    trunk.position.set(x, .72 * scale, z); this.scene.add(trunk); this.track(trunk);
-    const crownMaterial = new THREE.MeshStandardMaterial({ color: '#9fbd91', roughness: .9 });
-    for (const [dx, dy, dz, size] of [[0, 1.72, 0, .83], [-.46, 1.55, .08, .58], [.44, 1.58, -.06, .62]] as const) {
-      const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(size * scale, 1), crownMaterial.clone());
-      crown.position.set(x + dx * scale, dy * scale, z + dz * scale); this.scene.add(crown); this.track(crown);
-    }
-  }
-
   private wall(x: number, z: number, length: number, rotate = false, door = false, glazed = false, name = '') {
     const frame = glazed ? '#567267' : '#a39a87';
     const localBox = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) =>
@@ -363,20 +353,19 @@ export class OfficeScene {
     if(compactPlot) {
       // A compact raised plot keeps the office visually grounded without the
       // oversized flat campus that previously surrounded it.
-      this.box(2,-.68,0,42,1.1,36,'#96a889');
-      this.box(2,-.18,0,42,.2,36,'#c4d3b1');
-      for(const [x,z,scale] of [[-8.6,-11.8,.76],[-8.7,-6.8,.66],[19.8,-11.5,.74],[20.8,-6.3,.68]] as const) this.landscapeTree(x,z,scale);
+      this.box(5,-.68,0,32,1.1,32,'#96a889');
+      this.box(5,-.18,0,32,.2,32,'#c4d3b1');
     } else this.box(1,-.18,1,48,.2,36,'#c4d3b1');
     // Street, sidewalk and a planted pocket garden outside the glazed office.
-    const streetCenter=compactPlot?2:0,streetWidth=compactPlot?40:44;
+    const streetCenter=compactPlot?5:0,streetWidth=compactPlot?30:44;
     this.box(streetCenter,-.055,7,streetWidth,.12,2,'#dedbd0');
     this.box(streetCenter,-.09,10.5,streetWidth,.08,5,'#727d7c');
-    for(let x=compactPlot?-16:-20;x<(compactPlot?21:22);x+=3) this.box(x,-.042,10.5,1.5,.01,.09,'#efe7c6');
+    for(let x=compactPlot?-8:-20;x<(compactPlot?20:22);x+=3) this.box(x,-.042,10.5,1.5,.01,.09,'#efe7c6');
     for (let z = 8.6; z < 12.5; z += 0.65) this.box(-4.5, -0.035, z, 2, 0.015, 0.32, '#fff9e8');
     this.box(15.5, -0.04, 0, 6.4, 0.12, 12, '#9fb881');
     this.box(15.5, 0.03, 1.9, 6.4, 0.08, 1.1, '#dfd8c4');
     this.box(15.5, 0.03, 4.7, 1.1, 0.08, 5.7, '#dfd8c4');
-    for (const x of [-8, 20]) { this.box(x, 1.5, 7.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 7.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
+    for (const x of compactPlot ? [-8, 18.5] : [-8, 20]) { this.box(x, 1.5, 7.3, 0.12, 3, 0.12, '#4f6660'); this.box(x, 3, 7.3, 0.6, 0.12, 0.6, '#f2e8ba'); }
     // Manager stays behind workspace. Project Lead moves back to free a
     // continuous corridor from the workspace to the meeting entrance.
     for(const x of [-4.5,-1.5]) {
