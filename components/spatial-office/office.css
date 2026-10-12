@@ -1194,19 +1194,50 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-work-center-chat small{color:#8b968a;font-size:8px;font-variant-numeric:tabular-nums}
 
 .office-agent-strip{grid-column:1/-1;grid-row:3;z-index:20;display:grid;grid-template-columns:94px minmax(0,1fr);min-width:0;min-height:0;overflow:hidden;border:1px solid #dce3dc;border-radius:16px;background:#fff;box-shadow:0 8px 24px #20352e0d}
-.office-agent-strip-label{display:flex;flex-direction:column;justify-content:center;padding:0 16px;border-right:1px solid #d8ded3}
-.office-agent-strip-label span{color:#879184;font-size:8px;font-weight:750;letter-spacing:.16em}
-.office-agent-strip-label strong{margin-top:5px;color:#466449;font-size:10px}
+.office-account-control{display:grid;place-items:center;border-right:1px solid #d8ded3}
+.office-account-trigger{display:flex;align-items:center;gap:5px;padding:5px;border:1px solid transparent;border-radius:999px;background:transparent;color:#657663}
+.office-account-trigger:hover,.office-account-trigger[aria-expanded=true]{border-color:#cbd7c7;background:#eef4ea;color:#3f6047}
+.office-account-trigger:focus-visible,.office-agent-card:focus-visible{outline:2px solid #54725a;outline-offset:2px}
+.office-account-trigger-avatar{display:grid;width:42px;height:42px;place-items:center;border:1px solid #c5d3c0;border-radius:50%;background:linear-gradient(145deg,#dfe8d8,#cddbc6) center/cover no-repeat;color:#4f674d;font-size:10px;font-weight:800;letter-spacing:.03em}
+.office-account-trigger-avatar[data-photo=true]{color:transparent}
 .office-agent-strip-list{display:flex;min-width:0;align-items:center;gap:7px;overflow-x:auto;padding:10px 12px;scrollbar-width:thin}
-.office-agent-strip-list button{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:9px;flex:0 0 176px;min-width:0;height:62px;padding:8px;border:1px solid #e3e7e2;border-radius:12px;background:#fff;color:#31473a;text-align:left}
+.office-agent-strip-list button{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr);align-items:center;gap:9px;flex:0 0 176px;min-width:0;height:62px;padding:8px 28px 8px 8px;border:1px solid #e3e7e2;border-radius:12px;background:#fff;color:#31473a;text-align:left}
 .office-agent-strip-list button:hover,.office-agent-strip-list button[aria-pressed=true]{border-color:#93aa8b;background:#edf3e8;box-shadow:inset 0 0 0 1px #b7c8ae}
 .office-agent-avatar{width:36px;height:36px;border-radius:10px;font-size:9px}
 .office-agent-avatar[data-photo=true]{background-position:center;background-size:cover;background-repeat:no-repeat;color:transparent}
-.office-agent-avatar i{width:9px;height:9px;border-color:#fff}
+.office-agent-status{position:absolute;top:7px;right:7px;display:grid;width:19px;height:19px;place-items:center;border:1px solid currentColor;border-radius:50%;background:#fff}
+.office-agent-status[data-status=working]{background:#e9f5eb;color:#4f925d}
+.office-agent-status[data-status=paused]{background:#fff6df;color:#c68c26}
+.office-agent-status[data-status=offline]{background:#fff0ef;color:#cf5d58}
 .office-agent-copy{min-width:0}
 .office-agent-copy strong,.office-agent-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .office-agent-copy strong{font-size:10px}
 .office-agent-copy small{margin-top:4px;color:#879184;font-size:8px}
+
+.office-account-popover{position:fixed;z-index:72;width:min(270px,calc(100vw - 24px));overflow:hidden;border:1px solid #d6ded3;border-radius:17px;background:#fff;color:#2e4537;box-shadow:0 22px 64px #1f342d38,0 4px 15px #23382f16;animation:office-profile-enter .16s ease-out}
+.office-account-popover>header{display:grid;grid-template-columns:42px minmax(0,1fr) 29px;align-items:center;gap:10px;padding:13px;border-bottom:1px solid #e5eae3;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}
+.office-account-avatar{display:grid;width:42px;height:42px;place-items:center;border:1px solid #c5d3c0;border-radius:50%;background:linear-gradient(145deg,#dfe8d8,#cddbc6) center/cover no-repeat;color:#4f674d;font-size:10px;font-weight:800;letter-spacing:.03em}
+.office-account-avatar[data-photo=true]{color:transparent}
+.office-account-popover>header>div{min-width:0}
+.office-account-popover>header strong,.office-account-popover>header span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.office-account-popover>header strong{font-size:12px}
+.office-account-popover>header span{margin-top:4px;color:#768574;font-size:8px}
+.office-account-popover>header button{display:grid;width:29px;height:29px;place-items:center;border:1px solid #d4ddd0;border-radius:9px;background:#fff;color:#60725f}
+.office-account-status{display:flex;align-items:center;gap:7px;margin:10px 12px 4px;padding:8px 10px;border-radius:9px;font-size:9px;font-weight:750}
+.office-account-status[data-status=working]{background:#eaf5eb;color:#4d8558}
+.office-account-status[data-status=paused]{background:#fff5df;color:#ae7720}
+.office-account-status[data-status=offline]{background:#fff0ef;color:#bc514d}
+.office-account-popover>nav{display:grid;gap:2px;padding:7px}
+.office-account-popover>nav>a{display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:8px;padding:8px;border-radius:10px;color:#48604d;text-decoration:none}
+.office-account-popover>nav>a>svg{justify-self:center}
+.office-account-popover>nav>a:hover{background:#f2f6ef}
+.office-account-popover>nav>a:last-child{color:#bd514d}
+.office-account-popover>nav>a:last-child:hover{background:#fff1ef}
+.office-account-popover>nav span{min-width:0}
+.office-account-popover>nav strong,.office-account-popover>nav small{display:block}
+.office-account-popover>nav strong{font-size:9px}
+.office-account-popover>nav small{margin-top:2px;color:#8a9588;font-size:7px}
+.office-account-popover button:focus-visible,.office-account-popover a:focus-visible{outline:2px solid #54725a;outline-offset:2px}
 
 .office-member-profile-popover{position:fixed;z-index:70;display:flex;width:min(410px,calc(100vw - 24px));max-height:min(610px,calc(100dvh - 118px));flex-direction:column;overflow:hidden;border:1px solid #d7dfd4;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 22px 70px #1f342d38,0 4px 15px #23382f16;animation:office-profile-enter .16s ease-out}
 @keyframes office-profile-enter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
@@ -1278,7 +1309,6 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
  .office-work-center-body{grid-column:2;grid-row:2;padding:10px 14px}
  .office-work-center-chat-stack{grid-column:1;grid-row:2;width:min(370px,calc(100% - 20px));margin:0 0 10px 10px}
  .office-agent-strip{grid-column:1;grid-row:4;grid-template-columns:74px minmax(0,1fr)}
- .office-agent-strip-label{padding:0 10px}
  .office-agent-strip-list button{flex-basis:154px;height:56px}
  .office-work-center .office-camera-controls{right:10px;bottom:10px}
  .office-work-center .office-camera-hint{display:none}
@@ -1309,9 +1339,9 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
  .office-work-center-chat-history article{display:none;max-width:330px}
  .office-work-center-chat{width:330px}
  .office-agent-strip{grid-template-columns:58px minmax(0,1fr)}
- .office-agent-strip-label{padding:0 7px}
- .office-agent-strip-label strong{font-size:8px}
  .office-agent-strip-list{padding:8px}
- .office-agent-strip-list button{grid-template-columns:32px minmax(0,1fr);flex-basis:135px;height:52px;padding:7px}
+ .office-agent-strip-list button{grid-template-columns:32px minmax(0,1fr);flex-basis:145px;height:52px;padding:7px 26px 7px 7px}
  .office-agent-avatar{width:32px;height:32px}
+ .office-account-trigger{gap:2px;padding:3px}
+ .office-account-trigger-avatar{width:34px;height:34px}
 }

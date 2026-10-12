@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2 } from 'lucide-react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Settings, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -76,6 +76,16 @@ function roleLabel(value?: string) {
   return value.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
+function memberJobTitle(member?: OfficeMember) {
+  return member?.profile?.roleTitle?.trim() || (member?.role ? roleLabel(member.role) : 'Anggota tim');
+}
+
+function memberStatusMeta(status: OfficeMember['status']) {
+  if (status === 'working') return { label: 'On working', Icon: CheckCircle2 };
+  if (status === 'paused') return { label: 'Idle', Icon: Clock3 };
+  return { label: 'Offline', Icon: X };
+}
+
 function compactDate(value?: string) {
   if (!value) return 'Baru saja';
   const date = new Date(value);
@@ -139,6 +149,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const [workCenterTab,setWorkCenterTab]=useState<WorkCenterTab>('today');
   const [workCenterFeed,setWorkCenterFeed]=useState<WorkCenterFeed>({notifications:[],unreadCount:0,approvals:[],loading:true});
   const [memberProfilePopover,setMemberProfilePopover]=useState<{id:string;left:number;bottom:number}|null>(null);
+  const [accountPopover,setAccountPopover]=useState<{left:number;bottom:number}|null>(null);
   const [demoCounter, setDemoCounter] = useState(7);
 
   useEffect(()=>{
@@ -159,6 +170,25 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       window.removeEventListener('resize',closeFromViewport);
     };
   },[memberProfilePopover]);
+
+  useEffect(()=>{
+    if(!accountPopover) return;
+    const closeFromOutside=(event:PointerEvent)=>{
+      const target=event.target as Element | null;
+      if(target?.closest('.office-account-popover,.office-account-trigger')) return;
+      setAccountPopover(null);
+    };
+    const closeFromKeyboard=(event:KeyboardEvent)=>{if(event.key==='Escape')setAccountPopover(null);};
+    const closeFromViewport=()=>setAccountPopover(null);
+    document.addEventListener('pointerdown',closeFromOutside);
+    document.addEventListener('keydown',closeFromKeyboard);
+    window.addEventListener('resize',closeFromViewport);
+    return ()=>{
+      document.removeEventListener('pointerdown',closeFromOutside);
+      document.removeEventListener('keydown',closeFromKeyboard);
+      window.removeEventListener('resize',closeFromViewport);
+    };
+  },[accountPopover]);
 
   useEffect(()=>{
     if(!notice) return;
@@ -328,7 +358,8 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const paused = data.members.filter(member => member.status === 'paused').length;
   const selectedMember = data.members.find(member => member.id === selected);
   const workCenterMember = selectedMember ?? data.members.find(member => member.status === 'working') ?? data.members[0];
-  const viewerMember = data.members.find(member => member.id === data.viewerId) ?? data.members.find(member => member.status !== 'offline');
+  const accountMember = data.members.find(member => member.id === data.viewerId);
+  const viewerMember = accountMember ?? data.members.find(member => member.status !== 'offline');
   const rememberChatBubble=useCallback((event:OfficeBubbleEvent)=>{
     if(!workCenterPreview) return;
     const member=data.members.find(candidate=>candidate.id===event.memberId);
@@ -406,12 +437,23 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     if (slot !== undefined) setRoom(Math.floor(slot / DESKS_PER_ROOM));
   };
   const toggleMemberProfile = (member: OfficeMember, target: HTMLButtonElement) => {
+    setAccountPopover(null);
     selectMember(member.id);
     if(memberProfilePopover?.id===member.id){setMemberProfilePopover(null);return;}
     const rect=target.getBoundingClientRect();
     const width=Math.min(410,window.innerWidth-24);
     setMemberProfilePopover({
       id:member.id,
+      left:Math.max(12,Math.min(rect.left,window.innerWidth-width-12)),
+      bottom:Math.max(12,window.innerHeight-rect.top+10),
+    });
+  };
+  const toggleAccountPopover = (target: HTMLButtonElement) => {
+    if(accountPopover){setAccountPopover(null);return;}
+    setMemberProfilePopover(null);
+    const rect=target.getBoundingClientRect();
+    const width=Math.min(270,window.innerWidth-24);
+    setAccountPopover({
       left:Math.max(12,Math.min(rect.left,window.innerWidth-width-12)),
       bottom:Math.max(12,window.innerHeight-rect.top+10),
     });
@@ -777,9 +819,32 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       </div>
       <footer><Link href="/performance">Performance <ArrowUpRight size={11}/></Link><Link href="/tasks">Tasks <ArrowUpRight size={11}/></Link><Link href="/projects">Projects <ArrowUpRight size={11}/></Link></footer>
     </aside>}
+    {workCenterPreview && accountPopover && <aside
+      id="office-account-menu"
+      className="office-account-popover"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="office-account-menu-title"
+      style={{left:accountPopover.left,bottom:accountPopover.bottom}}
+    >
+      <header>
+        <span className="office-account-avatar" aria-hidden="true" data-photo={Boolean(accountMember?.profilePicture)} style={accountMember?.profilePicture?{backgroundImage:`url(${JSON.stringify(accountMember.profilePicture)})`}:undefined}>{accountMember?.profilePicture?'':(accountMember?.name||'AK').slice(0,2).toUpperCase()}</span>
+        <div><strong id="office-account-menu-title">{accountMember?.name||'Akun saya'}</strong><span>{memberJobTitle(accountMember)}</span></div>
+        <button type="button" onClick={()=>setAccountPopover(null)} aria-label="Tutup menu akun"><X size={15}/></button>
+      </header>
+      <div className="office-account-status" data-status={accountMember?.status||'offline'}>{accountMember&&(()=>{const {Icon}=memberStatusMeta(accountMember.status);return <Icon size={13}/>})()}<span>{accountMember?memberStatusMeta(accountMember.status).label:'Status belum tersedia'}</span></div>
+      <nav aria-label="Menu akun">
+        <Link href="/settings" onClick={()=>setAccountPopover(null)}><Settings size={15}/><span><strong>Pengaturan akun</strong><small>Profil, preferensi, dan workspace</small></span></Link>
+        <Link href="/performance" onClick={()=>setAccountPopover(null)}><Target size={15}/><span><strong>Profil kinerja</strong><small>Jobdesk, KPI, dan perkembangan</small></span></Link>
+        <Link href="/attendance" onClick={()=>setAccountPopover(null)}><Clock3 size={15}/><span><strong>Presensi saya</strong><small>Riwayat waktu kerja</small></span></Link>
+        {/* Logout must stay a normal navigation so Next.js never prefetches this state-changing endpoint. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+        <a href="/api/auth/logout"><LogOut size={15}/><span><strong>Keluar</strong><small>Logout dari akun ini</small></span></a>
+      </nav>
+    </aside>}
     {workCenterPreview && <nav className="office-agent-strip" aria-label="Pilih anggota tim">
-      <div className="office-agent-strip-label"><span>TEAM</span><strong>{active} online</strong></div>
-      <div className="office-agent-strip-list">{data.members.map(member=><button key={member.id} type="button" className="office-agent-card" aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-avatar" aria-hidden="true" data-photo={Boolean(member.profilePicture)} style={member.profilePicture?{backgroundImage:`url(${JSON.stringify(member.profilePicture)})`}:undefined}>{member.profilePicture?'':member.name.slice(0,2).toUpperCase()}<i className={`status-${member.status}`}/></span><span className="office-agent-copy"><strong>{member.name}</strong><small>{member.project||statusLabel(member)}</small></span></button>)}</div>
+      <div className="office-account-control"><button type="button" className="office-account-trigger" aria-label={`Buka menu akun ${accountMember?.name||''}`.trim()} aria-haspopup="dialog" aria-expanded={Boolean(accountPopover)} aria-controls="office-account-menu" onClick={event=>toggleAccountPopover(event.currentTarget)}><span className="office-account-trigger-avatar" aria-hidden="true" data-photo={Boolean(accountMember?.profilePicture)} style={accountMember?.profilePicture?{backgroundImage:`url(${JSON.stringify(accountMember.profilePicture)})`}:undefined}>{accountMember?.profilePicture?'':(accountMember?.name||'AK').slice(0,2).toUpperCase()}</span><ChevronDown size={13}/></button></div>
+      <div className="office-agent-strip-list">{data.members.map(member=>{const {label,Icon}=memberStatusMeta(member.status);return <button key={member.id} type="button" className="office-agent-card" aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-status" data-status={member.status} title={label} aria-label={label}><Icon size={12}/></span><span className="office-agent-avatar" aria-hidden="true" data-photo={Boolean(member.profilePicture)} style={member.profilePicture?{backgroundImage:`url(${JSON.stringify(member.profilePicture)})`}:undefined}>{member.profilePicture?'':member.name.slice(0,2).toUpperCase()}</span><span className="office-agent-copy"><strong>{member.name}</strong><small>{memberJobTitle(member)}</small></span></button>})}</div>
     </nav>}
     <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {realtimeConnected ? 'Realtime + cadangan 10 detik' : 'Sinkron tiap 10 detik'}</span>}</footer>
   </section>;
