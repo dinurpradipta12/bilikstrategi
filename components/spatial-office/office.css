@@ -1243,6 +1243,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 @keyframes office-profile-enter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 .office-member-profile-popover>header{display:grid;grid-template-columns:44px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid #e6eae4;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}
 .office-member-profile-avatar{position:relative;display:grid;width:44px;height:44px;place-items:center;border:1px solid #c8d6c3;border-radius:13px;background:linear-gradient(145deg,#dfe9da,#cbdac5);color:#506b52;font-size:10px;font-weight:800;letter-spacing:.04em}
+.office-member-profile-avatar[data-photo=true]{background-position:center;background-size:cover;background-repeat:no-repeat;color:transparent}
 .office-member-profile-avatar>i{position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border:2px solid #fff;border-radius:50%;background:#aeb7aa}
 .office-member-profile-avatar>.status-working,.office-member-profile-status .status-working{background:#5d9a69}
 .office-member-profile-avatar>.status-paused,.office-member-profile-status .status-paused{background:#d2a055}

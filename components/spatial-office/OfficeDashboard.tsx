@@ -780,7 +780,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       style={{left:memberProfilePopover.left,bottom:memberProfilePopover.bottom}}
     >
       <header>
-        <span className="office-member-profile-avatar">{floatingProfileMember.name.slice(0,2).toUpperCase()}<i className={`status-${floatingProfileMember.status}`}/></span>
+        <span className="office-member-profile-avatar" aria-hidden="true" data-photo={Boolean(floatingProfileMember.profilePicture)} style={floatingProfileMember.profilePicture?{backgroundImage:`url(${JSON.stringify(floatingProfileMember.profilePicture)})`}:undefined}>{floatingProfileMember.profilePicture?'':floatingProfileMember.name.slice(0,2).toUpperCase()}<i className={`status-${floatingProfileMember.status}`}/></span>
         <div><strong id={`office-member-profile-title-${floatingProfileMember.id}`}>{floatingProfileMember.name}</strong><span>{roleLabel(floatingProfileMember.profile?.roleTitle||floatingProfileMember.role)}{floatingProfileMember.profile?.division?` · ${floatingProfileMember.profile.division}`:''}</span></div>
         <button type="button" onClick={()=>setMemberProfilePopover(null)} aria-label={`Tutup profil ${floatingProfileMember.name}`}><X size={15}/></button>
       </header>
