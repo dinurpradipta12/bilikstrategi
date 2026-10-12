@@ -1,14 +1,45 @@
 import type { AttendanceSchedule } from '../attendance/schedule';
+import type { PerformanceItem, PerformanceProfile } from '../performance/types';
+
+export type OfficeKpiSummary = {
+  id: string;
+  title: string;
+  cadence: string;
+  targetValue: number;
+  unit: string;
+  progress?: number;
+  status?: string;
+};
+export type OfficeProjectSummary = {
+  name: string;
+  trackedSeconds: number;
+  timeSource: 'attendance' | 'tasks' | 'session';
+  taskCount: number;
+  completedTasks: number;
+};
+export type OfficeMemberProfile = {
+  roleTitle: string;
+  division: string;
+  jobSummary: string;
+  jobDescriptions: string[];
+  kpis: OfficeKpiSummary[];
+  latestScore?: number;
+  performanceRestricted?: boolean;
+  projects: OfficeProjectSummary[];
+};
 
 export type OfficeMember = {
   id: string;
   name: string;
+  profilePicture?: string;
+  role?: string;
   status: 'working' | 'paused' | 'offline';
   project: string;
   presenceIdle?: boolean;
   startedAt?: number;
   accumulatedSeconds?: number;
   tasks?: OfficeTask[];
+  profile?: OfficeMemberProfile;
   avatar?: AvatarStyle;
   activity?: { zone: OfficeActivityZone; until: number; seat?: number };
   chat?: { text: string; sentAt: number };
@@ -74,6 +105,20 @@ export function reconcileSeats(previous: ReadonlyMap<string, number>, members: O
 }
 export const DESKS_PER_ROOM = 12;
 export const WORKSPACE_DESKS = 10;
+export function meetingSeatPosition(seat: number, count = DESKS_PER_ROOM) {
+  const seats = Math.max(1, Math.min(DESKS_PER_ROOM, Math.floor(count)));
+  if (seat === 0) return { x: 9, z: -11.7, rotation: 0 };
+  const teamIndex = Math.max(0, Math.min(seats - 2, seat - 1));
+  const south = teamIndex % 2 === 0;
+  const rowIndex = Math.floor(teamIndex / 2);
+  if (south) {
+    const rowCount = Math.ceil((seats - 1) / 2);
+    return { x: 9 + (rowIndex - (rowCount - 1) / 2) * .82, z: -9.8, rotation: Math.PI };
+  }
+  const step = Math.floor(rowIndex / 2) + 1;
+  const offset = (rowIndex % 2 === 0 ? -1 : 1) * step * .82;
+  return { x: 9 + offset, z: -11.7, rotation: 0 };
+}
 export function deskLabel(slot: number) {
   const i=slot%DESKS_PER_ROOM;
   return i===10?'Meja Manager':i===11?'Meja Project Lead':`Meja ${Math.floor(slot/DESKS_PER_ROOM)*10+i+1}`;
@@ -178,7 +223,7 @@ export function zonePosition(slot: number, zone: OfficeZone, layout: DeskLayout[
   const i = slot % DESKS_PER_ROOM;
   if (zone === 'desk') { const d = deskPosition(slot, layout); return { x: d.seatX, z: d.seatZ, rotation: d.rotation }; }
   if (zone === 'exit') return { x:4.5,z:8,rotation:0 };
-  if (zone === 'meeting') {const a=(i%6)*Math.PI/3+Math.PI/6;return {x:9+Math.sin(a)*1.9,z:-10.75+Math.cos(a)*1.9,rotation:(a+Math.PI)%(Math.PI*2)};}
+  if (zone === 'meeting') return meetingSeatPosition(i);
   if (zone === 'garden') return { x: 13.25 + Math.floor(i / 2) * .95, z: i % 2 ? -2.4 : 0, rotation: i % 2 ? 0 : Math.PI };
   if (zone === 'pantry') return { x: 6.8 + Math.floor(i / 2) * .92, z: i % 2 ? 4.5 : 3.1, rotation: i % 2 ? Math.PI : 0 };
   const sofa = Math.floor(i / 2);
@@ -294,23 +339,195 @@ export function travelPath(slot: number, from: Point, target: OfficeZone, fromSl
 }
 export const KEYBOARD_TOP = 0.78 + 0.063;
 export const AVATAR_SCALE = 0.53;
+export const AVATAR_CHAT_TTL_MS = 15_000;
+export const AMBIENT_BUBBLE_TEXT_ROTATION_MS = 9_000;
 export function typingHand(index: number, bodyLift: number, tap = 0): [number, number, number] {
   return [(index ? 1 : -1) * 0.24 + tap, -0.51 / AVATAR_SCALE, (KEYBOARD_TOP + 0.15 * AVATAR_SCALE) / AVATAR_SCALE - bodyLift];
 }
 
 export function bubbleLabel(member: OfficeMember, zone: OfficeZone = 'desk', now = Date.now()) {
   if (member.status === 'offline' || member.presenceIdle || zone === 'exit') return '';
-  if (member.chat && now >= member.chat.sentAt && now - member.chat.sentAt < 15_000) return member.chat.text.slice(0, 150);
+  if (member.chat && now >= member.chat.sentAt && now - member.chat.sentAt < AVATAR_CHAT_TTL_MS) return member.chat.text.slice(0, 150);
   if (member.status !== 'working') return '';
-  const lines = zone === 'meeting' ? [member.project?`Kita bahas progres ${member.project}, yuk.`:'Kita mulai dari progres masing-masing, ya.', 'Ada kendala yang perlu kita selesaikan bersama?', 'Aku catat keputusan meeting hari ini.', 'Setelah ini kita bagi langkah selanjutnya, ya.'] : zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.']
-    : zone === 'garden' ? ['Enak juga duduk di taman.', 'Cari udara segar sebentar, yuk.', 'Ada ide baru yang mau dibahas?', 'Teduh sekali di sini.']
-    : zone === 'lounge' ? ['Istirahat sebentar, yuk.', 'Bagaimana kabar kalian hari ini?', 'Nanti kita lanjut ngobrol setelah rehat.', 'Ada rekomendasi makan siang?']
-    : [...(member.tasks || []).flatMap(task => [`Aku lanjut ${task.name}, ya.`, `Ada masukan untuk ${task.name}?`]), ...(member.project ? [`Yuk, bahas ide untuk ${member.project}.`, `Aku fokus ke ${member.project} dulu, ya.`] : []), 'Sebentar, aku catat idenya dulu.', 'Kalau ada yang perlu dibahas, kabari ya.', 'Kita cek detailnya bersama nanti, ya.'];
-  return lines[(Math.floor(now / 11000) + memberHash(member.id)) % lines.length].slice(0, 150);
+  const lines = zone === 'meeting' ? [member.project?`Kita bahas progres ${member.project}, yuk.`:'Kita mulai dari progres masing-masing, ya.', 'Ada kendala yang perlu kita selesaikan bersama?', 'Aku catat keputusan meeting hari ini.', 'Setelah ini kita bagi langkah selanjutnya, ya.', 'Siap, aku cek catatan meeting-nya.', 'Bagian mana yang perlu kita prioritaskan?', 'Boleh, setelah ini aku kirim rangkumannya.'] : zone === 'pantry' ? ['Ada yang mau kopi juga?', 'Kopi dulu, yuk. Setelah ini lanjut lagi.', 'Mau teh atau kopi hari ini?', 'Aroma kopinya enak, ya.', 'Setelah ini aku lanjut fokus lagi.', 'Sambil rehat, ada update dari tim?']
+    : zone === 'garden' ? ['Enak juga duduk di taman.', 'Cari udara segar sebentar, yuk.', 'Ada ide baru yang mau dibahas?', 'Teduh sekali di sini.', 'Aku lagi susun ide berikutnya.', 'Nanti kita cocokkan catatannya, ya.']
+    : zone === 'lounge' ? ['Istirahat sebentar, yuk.', 'Bagaimana kabar kalian hari ini?', 'Nanti kita lanjut ngobrol setelah rehat.', 'Ada rekomendasi makan siang?', 'Aku rehat sebentar sebelum lanjut.', 'Ada yang perlu aku cek setelah ini?']
+    : [...(member.tasks || []).flatMap(task => [`Aku lanjut ${task.name}, ya.`, `Ada masukan untuk ${task.name}?`, `Siap, aku cek ${task.name} sekarang.`, `Boleh minta review untuk ${task.name} nanti?`, `Aku sedang rapikan detail ${task.name}.`]), ...(member.project ? [`Yuk, bahas ide untuk ${member.project}.`, `Aku fokus ke ${member.project} dulu, ya.`, `Ada update untuk ${member.project}?`, `Aku cek timeline ${member.project} dulu.`, `Nanti kita sinkronkan progres ${member.project}, ya.`] : []), 'Sebentar, aku catat idenya dulu.', 'Kalau ada yang perlu dibahas, kabari ya.', 'Kita cek detailnya bersama nanti, ya.', 'Siap, aku cek catatan terakhir dulu.', 'Setelah ini aku kirim update singkat.', 'Ada yang perlu aku review dulu?'];
+  return lines[(Math.floor(now / AMBIENT_BUBBLE_TEXT_ROTATION_MS) + memberHash(member.id)) % lines.length].slice(0, 150);
 }
-export type TaskRow = { task_name?: string; status?: string; assignee_ids?: unknown[]; raw_data?: { assignee_emails?: string[]; task_name?: string; name?: string } };
+export type TaskRow = {
+  task_name?: string;
+  status?: string;
+  assignee_ids?: unknown[];
+  raw_data?: {
+    assignee_emails?: string[];
+    task_name?: string;
+    name?: string;
+    project_name?: string;
+    time_tracked_hours?: unknown;
+    time_spent?: unknown;
+    list?: { name?: string };
+    folder?: { name?: string };
+  };
+};
+export type AttendanceLogRow = {
+  user_name?: unknown;
+  user_email?: unknown;
+  project_name?: unknown;
+  duration_hours?: unknown;
+  regular_hours?: unknown;
+  overtime_hours?: unknown;
+};
+export type PerformanceProfileRow = Partial<PerformanceProfile> & { user_email?: string };
+export type PerformanceItemRow = Partial<PerformanceItem> & { id?: string; item_type?: string; title?: string };
+export type PerformanceUpdateRow = { item_id?: unknown; user_email?: unknown; progress?: unknown; status?: unknown; activity_date?: unknown; updated_at?: unknown };
+export type PerformanceReviewRow = { user_email?: unknown; overall_score?: unknown; period_end?: unknown; updated_at?: unknown };
+
+function taskAssignedTo(member: RosterMember, task: TaskRow) {
+  return task.assignee_ids?.length
+    ? task.assignee_ids.some(id => String(id) === member.id)
+    : task.raw_data?.assignee_emails?.some(email => normalized(email) === normalized(member.email));
+}
+
+function finite(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function completed(status: unknown) {
+  return /complete|closed|done|selesai/i.test(String(status || ''));
+}
+
+function profileItemApplies(item: PerformanceItem, profile: PerformanceProfile) {
+  if (!item.active) return false;
+  const scope = normalized(item.scope_value).replace(/^(?:role|jabatan|position|division|divisi|team|tim|user|email)\s*:\s*/i, '');
+  if (item.scope_type === 'team' || ['*', 'all', 'semua tim', 'semua team', 'semua user', 'semua pengguna'].includes(scope)) return true;
+  const variants = (value: unknown) => normalized(value).split(/[\/|,;\n]+/).map(part => part.trim()).filter(Boolean);
+  const target = item.scope_type === 'division' ? profile.division : item.scope_type === 'role' ? profile.role_title : profile.user_email;
+  return variants(scope).some(left => variants(target).includes(left));
+}
+
+export function buildMemberProfile(
+  officeMember: OfficeMember,
+  rosterMember: RosterMember,
+  roster: RosterMember[],
+  tasks: TaskRow[],
+  attendance: AttendanceLogRow[],
+  performance: {
+    profiles?: PerformanceProfileRow[];
+    items?: PerformanceItemRow[];
+    updates?: PerformanceUpdateRow[];
+    reviews?: PerformanceReviewRow[];
+  } = {},
+  includePerformanceProgress = false,
+): OfficeMemberProfile {
+  const email = normalized(rosterMember.email);
+  const profile = performance.profiles?.find(candidate => normalized(candidate.user_email) === email);
+  const safeProfile: PerformanceProfile = {
+    workspace_id: String(profile?.workspace_id || ''),
+    user_email: rosterMember.email,
+    display_name: String(profile?.display_name || officeMember.name),
+    avatar_url: typeof profile?.avatar_url === 'string' ? profile.avatar_url : null,
+    division: String(profile?.division || ''),
+    role_title: String(profile?.role_title || officeMember.role || ''),
+    job_summary: String(profile?.job_summary || ''),
+    manager_email: typeof profile?.manager_email === 'string' ? profile.manager_email : null,
+    can_manage: profile?.can_manage === true,
+    active: profile?.active !== false,
+  };
+  const applicableItems = profile
+    ? (performance.items || []).filter(item => profileItemApplies(item as PerformanceItem, safeProfile))
+    : [];
+  const jobDescriptions = applicableItems
+    .filter(item => item.item_type === 'job_description')
+    .map(item => String(item.title || '').trim())
+    .filter(Boolean);
+
+  const updates = (performance.updates || []).filter(update => normalized(update.user_email) === email);
+  const latestUpdate = (itemId: string) => updates
+    .filter(update => String(update.item_id || '') === itemId)
+    .sort((left, right) => Date.parse(String(right.updated_at || right.activity_date || '')) - Date.parse(String(left.updated_at || left.activity_date || '')))[0];
+  const kpis = applicableItems
+    .filter(item => ['objective', 'key_result', 'initiative'].includes(String(item.item_type)))
+    .map((item): OfficeKpiSummary => {
+      const update = includePerformanceProgress ? latestUpdate(String(item.id || '')) : undefined;
+      return {
+        id: String(item.id || item.title || ''),
+        title: String(item.title || 'KPI').trim().slice(0, 160),
+        cadence: String(item.cadence || ''),
+        targetValue: Math.max(0, finite(item.target_value)),
+        unit: String(item.unit || 'percent'),
+        ...(update ? {
+          progress: Math.max(0, Math.min(100, finite(update.progress))),
+          status: String(update.status || ''),
+        } : {}),
+      };
+    });
+
+  const nameOwners = new Map<string, Set<string>>();
+  for (const candidate of roster) for (const name of [candidate.name, ...(candidate.aliases || [])]) {
+    const key = normalized(name);
+    if (key) nameOwners.set(key, new Set([...(nameOwners.get(key) || []), candidate.id]));
+  }
+  const matchesAttendance = (row: AttendanceLogRow) => {
+    const rowEmail = normalized(row.user_email);
+    if (rowEmail) return rowEmail === email;
+    const rowName = normalized(row.user_name);
+    return Boolean(rowName && nameOwners.get(rowName)?.size === 1 && nameOwners.get(rowName)?.has(rosterMember.id));
+  };
+
+  const projects = new Map<string, { name: string; attendanceSeconds: number; taskSeconds: number; taskCount: number; completedTasks: number }>();
+  const projectRecord = (name: unknown) => {
+    const label = String(name || '').trim().slice(0, 160);
+    if (!label) return null;
+    const key = normalized(label);
+    const existing = projects.get(key) || { name: label, attendanceSeconds: 0, taskSeconds: 0, taskCount: 0, completedTasks: 0 };
+    projects.set(key, existing);
+    return existing;
+  };
+  for (const task of tasks.filter(task => taskAssignedTo(rosterMember, task))) {
+    const record = projectRecord(task.raw_data?.project_name || task.raw_data?.list?.name || task.raw_data?.folder?.name);
+    if (!record) continue;
+    record.taskCount += 1;
+    if (completed(task.status)) record.completedTasks += 1;
+    const taskHours = finite(task.raw_data?.time_tracked_hours);
+    const taskMilliseconds = finite(task.raw_data?.time_spent);
+    record.taskSeconds += Math.max(0, taskHours > 0 ? taskHours * 3600 : taskMilliseconds / 1000);
+  }
+  for (const log of attendance.filter(matchesAttendance)) {
+    const record = projectRecord(log.project_name);
+    if (!record) continue;
+    const duration = finite(log.duration_hours);
+    const hours = duration > 0 ? duration : finite(log.regular_hours) + finite(log.overtime_hours);
+    record.attendanceSeconds += Math.max(0, hours * 3600);
+  }
+  projectRecord(officeMember.project);
+  const projectSummaries = [...projects.values()].map((project): OfficeProjectSummary => ({
+    name: project.name,
+    trackedSeconds: Math.round(project.attendanceSeconds > 0 ? project.attendanceSeconds : project.taskSeconds),
+    timeSource: project.attendanceSeconds > 0 ? 'attendance' : project.taskSeconds > 0 ? 'tasks' : 'session',
+    taskCount: project.taskCount,
+    completedTasks: project.completedTasks,
+  })).sort((left, right) => right.trackedSeconds - left.trackedSeconds || right.taskCount - left.taskCount || left.name.localeCompare(right.name));
+
+  const latestReview = includePerformanceProgress
+    ? (performance.reviews || []).filter(review => normalized(review.user_email) === email)
+      .sort((left, right) => Date.parse(String(right.updated_at || right.period_end || '')) - Date.parse(String(left.updated_at || left.period_end || '')))[0]
+    : undefined;
+
+  return {
+    roleTitle: String(safeProfile.role_title || officeMember.role || '').trim(),
+    division: String(safeProfile.division || '').trim(),
+    jobSummary: String(safeProfile.job_summary || '').trim(),
+    jobDescriptions,
+    kpis,
+    ...(latestReview ? { latestScore: Math.max(0, Math.min(100, finite(latestReview.overall_score))) } : {}),
+    performanceRestricted: Boolean(profile && !includePerformanceProgress),
+    projects: projectSummaries,
+  };
+}
+
 export function memberTasks(member: RosterMember, tasks: TaskRow[]): OfficeTask[] {
-  return tasks.filter(task => !/complete|closed|done|selesai/i.test(task.status || '') &&
-    (task.assignee_ids?.length ? task.assignee_ids.some(id => String(id) === member.id) : task.raw_data?.assignee_emails?.some(email => normalized(email) === normalized(member.email))))
+  return tasks.filter(task => !completed(task.status) && taskAssignedTo(member, task))
     .slice(0, 8).map(task => ({ name: String(task.task_name || task.raw_data?.task_name || task.raw_data?.name || 'Tugas').slice(0, 100), status: String(task.status || 'to_do').slice(0, 40) }));
 }

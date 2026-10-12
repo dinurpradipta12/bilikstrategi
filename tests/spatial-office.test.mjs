@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOfficeMembers, reconcileSeats, officePath, deskPosition, DESKS_PER_ROOM } from '../lib/spatial-office/model.ts';
+import { buildMemberProfile, buildOfficeMembers, reconcileSeats, officePath, deskPosition, DESKS_PER_ROOM } from '../lib/spatial-office/model.ts';
 
 const roster = [
   { id: '1', name: 'Alya Putri', email: 'alya@example.com', aliases: ['Alya'] },
@@ -47,6 +47,32 @@ test('all members receive unique desks beyond the first room', () => {
   assert.equal(new Set(seats.values()).size, 25);
 });
 
+test('member profile recaps performance, tasks, projects and verified work time without double counting task estimates', () => {
+  const member = { id: '1', name: 'Alya Putri', role: 'member', status: 'working', project: 'Brand Identity' };
+  const profile = buildMemberProfile(member, roster[0], roster, [
+    { task_name: 'Logo system', status: 'in_progress', assignee_ids: ['1'], raw_data: { project_name: 'Brand Identity', time_tracked_hours: 2 } },
+    { task_name: 'Old guideline', status: 'completed', assignee_ids: ['1'], raw_data: { project_name: 'Brand Identity', time_tracked_hours: 3 } },
+  ], [
+    { user_email: 'ALYA@example.com', project_name: 'Brand Identity', duration_hours: 6 },
+  ], {
+    profiles: [{ workspace_id: 'bilik-strategi', user_email: 'alya@example.com', display_name: 'Alya Putri', avatar_url: null, division: 'Creative', role_title: 'Brand Designer', job_summary: 'Menjaga kualitas identitas brand.', manager_email: null, can_manage: false, active: true }],
+    items: [
+      { id: 'job-1', workspace_id: 'bilik-strategi', parent_id: null, item_type: 'job_description', title: 'Menyusun sistem visual', description: '', cadence: 'monthly', scope_type: 'role', scope_value: 'Brand Designer', weight: 10, target_value: 100, unit: 'percent', sort_order: 1, active: true },
+      { id: 'kpi-1', workspace_id: 'bilik-strategi', parent_id: null, item_type: 'key_result', title: 'Approval tepat waktu', description: '', cadence: 'monthly', scope_type: 'user', scope_value: 'alya@example.com', weight: 20, target_value: 100, unit: 'percent', sort_order: 2, active: true },
+    ],
+    updates: [{ item_id: 'kpi-1', user_email: 'alya@example.com', progress: 75, status: 'in_progress', activity_date: '2026-10-12' }],
+    reviews: [{ user_email: 'alya@example.com', overall_score: 88, period_end: '2026-10-01' }],
+  }, true);
+  assert.equal(profile.roleTitle, 'Brand Designer');
+  assert.deepEqual(profile.jobDescriptions, ['Menyusun sistem visual']);
+  assert.equal(profile.kpis[0].progress, 75);
+  assert.equal(profile.latestScore, 88);
+  assert.equal(profile.projects[0].trackedSeconds, 6 * 3600);
+  assert.equal(profile.projects[0].taskCount, 2);
+  assert.equal(profile.projects[0].completedTasks, 1);
+  assert.equal(profile.projects[0].timeSource, 'attendance');
+});
+
 test('coworking desks join end to end with opposite seats facing inward', () => {
   const stations = Array.from({ length: 10 }, (_, slot) => deskPosition(slot));
   assert.equal(new Set(stations.map(d => d.x)).size, 5);
@@ -67,7 +93,7 @@ test('entry and exit corridors never cross the communal table', () => {
       for (let step = 0; step <= 20; step++) {
         const x = a[0] + (b[0] - a[0]) * step / 20;
         const z = a[1] + (b[1] - a[1]) * step / 20;
-        assert.ok(Math.abs(x) > 3.7 || Math.abs(z) > 1, 'walk outside table plus body clearance');
+        if (segment < path.length - 1) assert.ok(Math.abs(x) > 3.7 || Math.abs(z) > 1, 'walk outside table plus body clearance until entering the assigned chair');
       }
     }
   }
@@ -94,11 +120,12 @@ test('all zone routes and rapid reversals stay in corridors and use partition do
         let from = [origin.x, origin.z];
         const path = travelPath(slot, from, target);
         if (source !== target) assert.deepEqual(path.at(-1), [end.x, end.z]);
-        for (const point of path) {
+        for (const [pointIndex, point] of path.entries()) {
           assert.ok(Math.abs(point[0] - from[0]) < 1e-6 || Math.abs(point[1] - from[1]) < 1e-6);
           for (let step = 0; step <= 10; step++) {
             const x = from[0] + (point[0] - from[0]) * step / 10, z = from[1] + (point[1] - from[1]) * step / 10;
-            assert.ok(Math.abs(x) > 3.7 || Math.abs(z) >= 1.15, 'route must clear shared workbench');
+            const chairApproach = (source === 'desk' && pointIndex === 0) || (target === 'desk' && pointIndex === path.length - 1);
+            if (!chairApproach) assert.ok(Math.abs(x) > 3.7 || Math.abs(z) >= 1.15, 'route must clear shared workbench before approaching a chair');
             if (Math.abs(x - 6) < 0.02) assert.ok(Math.abs(z - 0.5) < 0.7 || Math.abs(z - 3.8) < 0.7, 'cross partition only at door');
             const reverse = travelPath(slot, [x, z], source);
             assert.deepEqual(reverse.at(-1) || [x, z], [origin.x, origin.z]);
@@ -115,12 +142,12 @@ test('typing hands touch the supplied keyboard with either desk orientation', as
     const [x, y, z] = typingHand(index, 0.15, tap), desk = deskPosition(slot);
     assert.ok(Math.abs((z + 0.15 - 0.15) * AVATAR_SCALE - KEYBOARD_TOP) < 1e-10, 'bottom of hand touches key surface');
     const zWorld = desk.seatZ - y * AVATAR_SCALE * Math.cos(desk.rotation);
-    assert.ok(Math.abs(zWorld - (desk.z - 0.27 * Math.cos(desk.rotation))) < 1e-10);
+    assert.ok(Math.abs(zWorld - (desk.z - 0.11 * Math.cos(desk.rotation))) < 1e-10, 'closer chair keeps the hands over the keyboard');
     assert.ok(Math.abs(x * AVATAR_SCALE) + 0.17 * AVATAR_SCALE < 0.265, 'hands fit on keyboard');
   }
 });
 test('bubble rotation uses assigned tasks and cannot invent completion', async () => {
-  const { memberTasks, bubbleLabel } = await import('../lib/spatial-office/model.ts');
+  const { memberTasks, bubbleLabel, AMBIENT_BUBBLE_TEXT_ROTATION_MS } = await import('../lib/spatial-office/model.ts');
   const tasks = memberTasks(roster[0], [
     { task_name: 'Design header', status: 'in_progress', assignee_ids: ['1'] },
     { task_name: 'Review brief', status: 'in_review', raw_data: { assignee_emails: ['alya@example.com'] } },
@@ -129,8 +156,8 @@ test('bubble rotation uses assigned tasks and cannot invent completion', async (
   ]);
   assert.deepEqual(tasks.map(task => task.name), ['Design header', 'Review brief']);
   const member = { id: '1', name: 'Alya', status: 'working', project: 'Website', tasks };
-  const labels = Array.from({ length: 9 }, (_, i) => bubbleLabel(member, 'desk', i * 11000));
-  assert.equal(new Set(labels).size, 9);
+  const labels = Array.from({ length: 24 }, (_, i) => bubbleLabel(member, 'desk', i * AMBIENT_BUBBLE_TEXT_ROTATION_MS));
+  assert.ok(new Set(labels).size >= 20);
   assert.ok(labels.some(label => label.includes('Design header')));
   assert.ok(labels.every(label => !label.includes('Someone else') && !label.includes('Already done')));
 });

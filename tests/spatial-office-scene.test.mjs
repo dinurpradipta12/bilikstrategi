@@ -37,7 +37,8 @@ for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.O
 function office() {
   const engine = Object.create(OfficeScene.prototype);
   Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], wallPanels: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
-  engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,[]).ornaments,0,false,''); return engine;
+  const meetingRoster=Array.from({length:6},(_,i)=>({id:`fixture-${i}`}));
+  engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,meetingRoster).ornaments,0,false,''); return engine;
 }
 const alice = { id: '1', name: 'Alya', status: 'working', project: 'Design' };
 test('first snapshot seats existing workers immediately; snapshots retain the same rig', () => {
@@ -154,6 +155,23 @@ test('initial paused members rest in the lounge while offline and idle members s
   assert.ok(person.route.some(p=>p.x===4.5&&p.z===6));
   const route=person.route; engine.setMembers([{member:{...alice},slot:0}]); assert.equal(person.route,route);
 });
+test('visible ambient bubbles are reported once per appearance for the persistent feed',()=>{
+  const engine=office(),events=[];animation(engine);engine.options.onBubble=event=>events.push(event);
+  engine.setMembers([{member:alice,slot:0}]);const person=engine.occupants.get('1');engine.select('1');
+  engine.animateFrame(50);engine.animateFrame(100);
+  assert.equal(events.length,1);assert.equal(events[0].memberId,'1');assert.equal(events[0].source,'ambient');assert.ok(events[0].text);
+  engine.select('');engine.time=9-person.offset;engine.animateFrame(150);assert.equal(person.bubble.hidden,true);
+  engine.time=16-person.offset;engine.animateFrame(200);assert.equal(person.bubble.hidden,false);assert.equal(events.length,2);
+});
+test('ambient work conversations overlap in a staggered rhythm',()=>{
+  const engine=office();animation(engine);
+  engine.setMembers([0,1,2,3].map(slot=>({member:{...alice,id:String(slot+1),name:`Member ${slot+1}`},slot})));
+  engine.time=0;
+  engine.animateFrame(50);
+  const visible=[...engine.occupants.values()].filter(person=>!person.bubble.hidden);
+  assert.ok(visible.length>=2&&visible.length<=3);
+  assert.ok(visible.every(person=>person.bubble.textContent));
+});
 test('a paused manager walks out of the private office and reaches a lounge sofa',()=>{
   const engine=office();engine.setMembers([{member:alice,slot:10}]);const person=engine.occupants.get('1');
   engine.setMembers([{member:{...alice,status:'paused'},slot:10}]);
@@ -169,7 +187,7 @@ test('checkout walks through front glass then disappears; fresh snapshot does no
   for(let f=1;f<800;f++) engine.animateFrame(f*50);
   assert.equal(engine.occupants.size,0);
   engine.setMembers([{member:{...alice,status:'offline'},slot:10}]); assert.equal(engine.occupants.size,0);
-  assert.ok(engine.scene.getObjectByName('meeting-round-table'));
+  assert.ok(engine.decorations.get('meeting-table-long'));
   assert.ok(!engine.roomLabels.some(l=>l.element.textContent?.includes('TIDUR')));
 });
 test('checkout followed by quick check-in reverses the current route without teleporting',()=>{
@@ -230,8 +248,8 @@ test('doors visibly clear the whole opening, stay open during passage and close 
 
 test('meeting sits beside Project Lead with a glazed exterior and continuous workspace corridor; every room has a controllable light',()=>{
   const engine=office();
-  assert.equal(engine.decorations.get('meeting-round-table').position.x,9);
-  assert.equal(engine.decorations.get('meeting-round-table').position.z,-10.75);
+  assert.equal(engine.decorations.get('meeting-table-long').position.x,9);
+  assert.equal(engine.decorations.get('meeting-table-long').position.z,-10.75);
   assert.ok(!engine.doors.some(d=>d.center.x===9&&d.center.z>=-6&&d.center.z<=-5));assert.ok(engine.doors.some(d=>d.center.x===9&&d.center.z===-7.5));
   assert.ok(engine.scene.children.some(o=>o.userData.architecture==='glass'&&o.position.z===-13.5));
   const blocker=new THREE.Box3();
@@ -241,17 +259,17 @@ test('meeting sits beside Project Lead with a glazed exterior and continuous wor
   engine.setLights({'0:meeting':'off','0:manager':'on'});
   assert.equal(engine.roomLights.get('meeting').light.intensity,0);assert.ok(engine.roomLights.get('manager').light.intensity>0);
 });
-test('lounge and garden seats follow moved furniture; missing seats return avatars to their desks',()=>{
+test('lounge and garden seats follow moved furniture; missing assigned sofas use the next available seat',()=>{
   const engine=office(),items=spaceModel.normalizeSpace(null,[]).ornaments;
   const moved=items.map(o=>o.id==='lounge-sofa-0'?{...o,x:7.2,z:-4.3,rotation:Math.PI/2}:o);
   engine.setOrnaments(moved,0,false,'');
   const m={...alice,activity:{zone:'lounge',until:Date.now()+300000}};
   engine.setMembers([{member:m,slot:0}]);const p=engine.occupants.get('1');
   const destination=engine.destination(0,'lounge');
-  assert.equal(engine.loungeSeat(0).offset,0);
+  assert.equal(Math.abs(engine.loungeSeat(0).offset),.32*(engine.loungeSeat(0).item.scale?.[0]||1));
   assert.ok(Math.abs(p.rig.root.position.x-destination.x)<1e-8);assert.equal(p.rig.root.rotation.y,Math.PI/2);
   const route=engine.routeTo(0,[5,.5],'lounge');assert.ok(route?.length);assert.ok(Math.abs(route.at(-1)[0]-destination.x)<1e-8);
-  engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'desk');
+  engine.setOrnaments(moved.filter(o=>o.id!=='lounge-sofa-0'),0,false,'');assert.equal(p.zone,'lounge');assert.ok(engine.seatItem(0,'lounge'));assert.notEqual(engine.seatItem(0,'lounge').id,'lounge-sofa-0');
 });
 
 test('paused attendance always leaves the desk and uses another lounge sofa when its assigned sofa was removed',()=>{
@@ -273,7 +291,7 @@ test('paused avatars use separate sofa seats and sit at the cushion height',()=>
   engine.setMembers([{member:{...alice,id:'10',status:'paused'},slot:10},{member:{...alice,id:'11',status:'paused'},slot:11}]);
   const first=engine.occupants.get('10'),second=engine.occupants.get('11'),a=engine.destination(10,'lounge'),b=engine.destination(11,'lounge');
   assert.notDeepEqual([a.x,a.z],[b.x,b.z]);assert.ok(engine.seatItem(10,'lounge'));assert.ok(engine.seatItem(11,'lounge'));
-  assert.equal(engine.loungeSeat(10).offset,0);assert.equal(engine.loungeSeat(11).offset,0);
+  assert.equal(Math.abs(engine.loungeSeat(10).offset),.32*(engine.loungeSeat(10).item.scale?.[0]||1));assert.equal(Math.abs(engine.loungeSeat(11).offset),.32*(engine.loungeSeat(11).item.scale?.[0]||1));
   engine.animateFrame(50);
   assert.ok(Math.abs(first.rig.root.position.y-(.67-.419))<1e-8);assert.ok(Math.abs(second.rig.root.position.y-(.67-.419))<1e-8);
   const hips=new THREE.Vector3();first.rig.model.getObjectByName('Hips').getWorldPosition(hips);
@@ -289,7 +307,8 @@ test('paused avatars use separate sofa seats and sit at the cushion height',()=>
 
   const shared=office();shared.setMembers([{member:{...alice,id:'0',status:'paused'},slot:0},{member:{...alice,id:'1',status:'paused'},slot:1}]);
   assert.equal(shared.loungeSeat(0).item.id,shared.loungeSeat(1).item.id);
-  assert.deepEqual(new Set([shared.loungeSeat(0).offset,shared.loungeSeat(1).offset]),new Set([-.32,.32]));
+  const sharedScale=shared.loungeSeat(0).item.scale?.[0]||1;
+  assert.deepEqual(new Set([shared.loungeSeat(0).offset,shared.loungeSeat(1).offset]),new Set([-.32*sharedScale,.32*sharedScale]));
 });
 
 
@@ -306,20 +325,31 @@ test('corridor glazing has no old mullion and no suspended beam across its works
 
 test('every meeting seat routes through the workspace corridor and the meeting door in both directions',()=>{
   const engine=office();
+  const attendees=Array.from({length:6},(_,seat)=>({member:{...alice,id:`meeting-${seat}`,activity:{zone:'meeting',seat,until:Date.now()+900000}},slot:seat}));
+  engine.setMembers(attendees);
   for(let seat=0;seat<6;seat++) {
-    const member={...alice,activity:{zone:'meeting',seat,until:Date.now()+900000}};
-    engine.setMembers([{member,slot:0}]);
-    const destination=engine.destination(0,'meeting');
-    const enter=engine.routeTo(0,[5,.5],'meeting');
+    const destination=engine.destination(seat,'meeting');
+    const enter=engine.routeTo(seat,[5,.5],'meeting');
     assert.ok(enter?.length,`seat ${seat} reachable`);
     assert.ok(enter.some(([x,z])=>x===9&&z===-7.5),`seat ${seat} uses door`);
     assert.deepEqual(Array.from(enter.at(-1)),[destination.x,destination.z]);
-    const exit=engine.routeTo(0,[destination.x,destination.z],'exit');
+    const exit=engine.routeTo(seat,[destination.x,destination.z],'exit');
     assert.ok(exit?.some(([x,z])=>x===9&&z===-7.5));
     assert.ok(exit?.some(([x,z])=>x===4.5&&z===6));
-    const table=spaceModel.ornamentFootprint(engine.ornaments.find(o=>o.id==='meeting-round-table'));
-    for(const [x,z] of [...enter,...exit]) assert.ok(!(x>table.xmin&&x<table.xmax&&z>table.zmin&&z<table.zmax),'route must not pass through round table');
+    const table=spaceModel.ornamentFootprint(engine.ornaments.find(o=>o.id==='meeting-table-long'));
+    for(const [x,z] of [...enter,...exit]) assert.ok(!(x>table.xmin&&x<table.xmax&&z>table.zmin&&z<table.zmax),'route must not pass through meeting table');
   }
+});
+test('manager gets the centered meeting seat before the rest of the team',()=>{
+  const engine=office(),until=Date.now()+900000;
+  engine.setMembers([
+    {member:{...alice,id:'team-a',activity:{zone:'meeting',seat:0,until}},slot:0},
+    {member:{...alice,id:'manager',role:'manager',activity:{zone:'meeting',seat:2,until}},slot:2},
+    {member:{...alice,id:'team-b',activity:{zone:'meeting',seat:1,until}},slot:1},
+  ]);
+  const manager=engine.destination(2,'meeting'),center=engine.ornaments.find(o=>o.id==='meeting-chair-0');
+  assert.deepEqual([manager.x,manager.z],[center.x,center.z]);
+  assert.notDeepEqual([engine.destination(0,'meeting').x,engine.destination(0,'meeting').z],[center.x,center.z]);
 });
 test('front camera sits at eye level and looks horizontally toward the office',()=>{
   const engine=office();engine.camera=new THREE.PerspectiveCamera();engine.controls={target:new THREE.Vector3(),update(){}};

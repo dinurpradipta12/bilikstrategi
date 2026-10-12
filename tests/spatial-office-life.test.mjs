@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { officeTime, memberZone, bubbleLabel, zonePosition, deskPosition, travelPath } from '../lib/spatial-office/model.ts';
+import { AVATAR_CHAT_TTL_MS, officeTime, memberZone, bubbleLabel, zonePosition, deskPosition, travelPath } from '../lib/spatial-office/model.ts';
 import { spaceModel } from './spatial-office-module-loader.mjs';
 const member = { id: 'a', name: 'Alya', status: 'paused', project: 'Website' };
 const at = s => Date.parse(s);
@@ -39,15 +39,15 @@ test('member chat overrides automatic bubbles briefly, including during a pause'
   const now=100_000,chat={text:'Ada yang bisa bantu review?',sentAt:now-1_000};
   assert.equal(bubbleLabel({...member,chat},'lounge',now),chat.text);
   assert.equal(bubbleLabel({...member,status:'working',chat},'desk',now),chat.text);
-  assert.equal(bubbleLabel({...member,chat},'lounge',now+15_000),'');
+  assert.equal(bubbleLabel({...member,chat},'lounge',now+AVATAR_CHAT_TTL_MS),'');
   assert.equal(bubbleLabel({...member,status:'offline',chat},'exit',now),'');
 });
 test('movable desks reject blocked layouts; seat, keyboard and route follow saved orientation', () => {
   const layout = spaceModel.parseDesks([{ slot:0, x:-4.6, z:-2.2, rotation:0 }], 1);
   const d = deskPosition(0, layout), p = zonePosition(0, 'desk', layout);
-  assert.equal(p.x, -4.6); assert.ok(Math.abs(p.z+2.98)<1e-9);
+  assert.equal(p.x, -4.6); assert.ok(Math.abs(p.z+2.82)<1e-9);
   const route = travelPath(0, [5,.5], 'desk', 0, layout); assert.deepEqual(route.at(-1), [p.x,p.z]);
-  assert.ok(Math.abs(p.z+.51-(d.z-.27))<1e-9, 'hand stays on keyboard after desk move');
+  assert.ok(Math.abs(p.z+.35-(d.z-.27))<1e-9, 'hand stays on keyboard after desk move');
   assert.throws(() => spaceModel.parseDesks([{ slot:0, x:0, z:0, rotation:0 }],1), /bertabrakan/);
   assert.throws(() => spaceModel.parseDesks([{ slot:0, x:5, z:0, rotation:0 }],1), /lorong/);
   assert.throws(() => spaceModel.parseDesks([{ slot:0, x:NaN, z:0, rotation:0 }],1));

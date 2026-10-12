@@ -5,7 +5,19 @@ import { getAuthorizedTeams } from '@/lib/clickup/teams';
 import type { ClickUpUser } from '@/lib/clickup/types';
 import { supabaseRest } from '@/lib/supabase/rest-client';
 import { supabaseAdminFetch, isSupabaseAdminConfigured } from '@/lib/supabase/admin-rest-client';
-import { buildOfficeMembers, memberTasks, parseAvatar, type TaskRow, type SessionRow } from '@/lib/spatial-office/model';
+import {
+  buildMemberProfile,
+  buildOfficeMembers,
+  memberTasks,
+  parseAvatar,
+  type AttendanceLogRow,
+  type PerformanceItemRow,
+  type PerformanceProfileRow,
+  type PerformanceReviewRow,
+  type PerformanceUpdateRow,
+  type TaskRow,
+  type SessionRow,
+} from '@/lib/spatial-office/model';
 
 import { readOfficeSpace, mutateOfficeSpace } from '@/lib/spatial-office/space-store';
 import { applySharedAction, applyLayout, claimDesk, assignDesk, removeDesk, setActivity } from '@/lib/spatial-office/space';
@@ -14,6 +26,18 @@ export const runtime = 'edge';
 const identityCache = new Map<string, { user: ClickUpUser; expires: number }>();
 let rosterCache: { members: ClickUpUser[]; teamId: string; expires: number } | undefined;
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store' } });
+
+async function optionalAdminRows<T>(path: string): Promise<T[]> {
+  if (!isSupabaseAdminConfigured()) return [];
+  try {
+    const response = await supabaseAdminFetch(path);
+    if (!response.ok) return [];
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows as T[] : [];
+  } catch {
+    return [];
+  }
+}
 
 async function verifiedUser(token: string) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
@@ -63,10 +87,11 @@ export async function GET(req: NextRequest) {
     if (!roster.some(member => String(member.id) === String(user.id))) return json({ error: 'Anda bukan anggota tim ini.' }, 403);
     // Reuse the existing attendance connection and its RLS permissions. A new
     // service-role credential is not required just to render this read-only view.
-    const [roleResult, sessionResult, taskResult, avatarResult, presenceResult] = await Promise.all([
+    const [roleResult, sessionResult, taskResult, attendanceResult, avatarResult, presenceResult] = await Promise.all([
       supabaseRest.from('app_user_roles').select('email,display_name,status,role,is_superuser'),
       supabaseRest.from('active_sessions').select('*'),
       supabaseRest.from('task_cache').select('task_name,status,assignee_ids,raw_data'),
+      supabaseRest.from('attendance_logs').select('user_name,user_email,project_name,duration_hours,regular_hours,overtime_hours'),
       isSupabaseAdminConfigured() ? supabaseAdminFetch(`app_settings?select=key,value&key=like.${encodeURIComponent(`spatial-avatar:${teamId}:*`)}`).catch(() => null) : Promise.resolve(null),
       isSupabaseAdminConfigured() ? supabaseAdminFetch(`attendance_presence_state?select=user_email,session_check_in_timestamp,last_seen_at,last_activity_at,last_foreground_at&workspace_id=eq.${encodeURIComponent(teamId)}`).catch(() => null) : Promise.resolve(null),
     ]);
@@ -76,6 +101,8 @@ export async function GET(req: NextRequest) {
     if (!Array.isArray(roles) || !Array.isArray(sessions)) throw new Error('Invalid snapshot');
     const roleByEmail = new Map(roles.map(role => [role.email.trim().toLowerCase(), role]));
     if (roleByEmail.get(user.email.trim().toLowerCase())?.status === 'inactive') return json({ error: 'Akun ini tidak aktif.' }, 403);
+    const ownRole = roleByEmail.get(user.email.trim().toLowerCase());
+    const canEditOffice = ownRole?.is_superuser === true || ['admin', 'owner'].includes(String(ownRole?.role || '').trim().toLowerCase());
     const activeIds = new Set(roster.filter(member => roleByEmail.get(member.email?.trim().toLowerCase())?.status !== 'inactive').map(member => String(member.id)));
     const officeRoster = roster.map(member => ({
       id: String(member.id), name: roleByEmail.get(member.email?.trim().toLowerCase())?.display_name || member.username || 'Anggota tim',
@@ -84,18 +111,45 @@ export async function GET(req: NextRequest) {
     const avatarRows = avatarResult?.ok ? await avatarResult.json() as { key: string; value: unknown }[] : [];
     const avatars = new Map(avatarRows.map(row => [row.key, parseAvatar(row.value)]));
     const tasks = !taskResult.error && Array.isArray(taskResult.data) ? taskResult.data as TaskRow[] : [];
+    const attendance = !attendanceResult.error && Array.isArray(attendanceResult.data) ? attendanceResult.data as AttendanceLogRow[] : [];
     const presenceRows = presenceResult?.ok ? await presenceResult.json() as {user_email:string;session_check_in_timestamp:number;last_seen_at:string;last_activity_at:string;last_foreground_at:string}[] : [];
+    const workspaceCookie = String(req.cookies.get('app_workspace_id')?.value || 'bilik-strategi').trim();
+    const workspaceId = /^[a-zA-Z0-9_-]{1,80}$/.test(workspaceCookie) ? workspaceCookie : 'bilik-strategi';
+    const workspace = encodeURIComponent(workspaceId);
+    const since = new Date();
+    since.setDate(since.getDate() - 92);
+    const sinceDate = since.toISOString().slice(0, 10);
+    const [performanceProfiles, performanceItems, performanceUpdates, performanceReviews] = await Promise.all([
+      optionalAdminRows<PerformanceProfileRow>(`app_performance_profiles?select=*&workspace_id=eq.${workspace}&active=eq.true`),
+      optionalAdminRows<PerformanceItemRow>(`app_performance_items?select=*&workspace_id=eq.${workspace}&active=eq.true&order=sort_order.asc,created_at.asc`),
+      optionalAdminRows<PerformanceUpdateRow>(`app_performance_updates?select=item_id,user_email,progress,status,activity_date,updated_at&workspace_id=eq.${workspace}&activity_date=gte.${sinceDate}&order=activity_date.desc,updated_at.desc`),
+      optionalAdminRows<PerformanceReviewRow>(`app_performance_reviews?select=user_email,overall_score,period_end,updated_at&workspace_id=eq.${workspace}&order=period_end.desc,updated_at.desc`),
+    ]);
+    const performance = { profiles: performanceProfiles, items: performanceItems, updates: performanceUpdates, reviews: performanceReviews };
     const members = buildOfficeMembers(officeRoster, sessions).filter(member => activeIds.has(member.id)).map(member => ({
-      ...member, presenceIdle: (()=>{
+      ...member, profilePicture: roster.find(item=>String(item.id)===member.id)?.profilePicture || undefined, role: (()=>{
+        const email=officeRoster.find(item=>item.id===member.id)?.email.toLowerCase();
+        const assigned=roleByEmail.get(email||'');
+        return assigned?.is_superuser===true?'owner':String(assigned?.role||'member').trim().toLowerCase();
+      })(), presenceIdle: (()=>{
         const email=officeRoster.find(item=>item.id===member.id)?.email.toLowerCase();
         const tracked=presenceRows.find(p=>p.user_email?.toLowerCase()===email && Number(p.session_check_in_timestamp)>0 && Number(p.session_check_in_timestamp)===member.startedAt);
         return Boolean(tracked && member.status !== 'paused' && resolvePresenceSnapshot({isOnline:true,isPaused:false,lastActivityAt:tracked.last_activity_at,lastSeenAt:tracked.last_seen_at,lastForegroundAt:tracked.last_foreground_at}).state!=='active');
       })(), tasks: memberTasks(officeRoster.find(item => item.id === member.id)!, tasks),
       avatar: avatars.get(`spatial-avatar:${teamId}:${member.id}`) || undefined,
+    })).map(member => ({
+      ...member,
+      profile: buildMemberProfile(
+        member,
+        officeRoster.find(item => item.id === member.id)!,
+        officeRoster,
+        tasks,
+        attendance,
+        performance,
+        canEditOffice || member.id === String(user.id),
+      ),
     }));
     const office = await readOfficeSpace(teamId, members);
-    const ownRole = roleByEmail.get(user.email.trim().toLowerCase());
-    const canEditOffice = ownRole?.is_superuser === true || ['admin', 'owner'].includes(String(ownRole?.role || '').trim().toLowerCase());
     return json({ viewerRole: ownRole?.is_superuser === true ? 'owner' : String(ownRole?.role || 'member').trim().toLowerCase(), space: office.space, spaceStorage: office.ready, canEditOffice, members, viewerId: String(user.id), avatarStorage: Boolean(avatarResult?.ok), syncedAt: new Date().toISOString() });
   } catch {
     return json({ error: 'Data tim atau presensi belum dapat diperbarui. Coba sinkronkan kembali.' }, 503);

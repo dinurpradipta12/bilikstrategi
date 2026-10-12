@@ -6,7 +6,11 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { applyAvatarAppearance } from './avatar-visual';
 import { DESK_SURFACE_Y, ORNAMENTS, ROOM_LIGHTS, lightEnabled, ornamentFootprint, type LightMode, ornamentError, type Ornament } from './space';
-import { AVATAR_ASSETS, AVATAR_MODELS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
+import { AVATAR_ASSETS, AVATAR_MODELS, AVATAR_CHAT_TTL_MS, defaultAvatar, bubbleLabel, DESKS_PER_ROOM, deskPosition, memberHash, memberZone, travelPath, zonePosition, officeTime, type DeskLayout, type OfficeZone, type OfficeMember } from './model';
+
+export const AMBIENT_BUBBLE_PERIOD_SECONDS = 16;
+export const AMBIENT_BUBBLE_VISIBLE_SECONDS = 8;
+export const AMBIENT_BUBBLE_STAGGER_SECONDS = 2.5;
 
 const CHARACTERS = [...AVATAR_MODELS];
 const FURNITURE = [...new Set(['floor_wood_3m', 'floor_ivory_3m', 'wall_with_window_3m', 'office_desk', 'office_swivel_chair', 'laptop', 'coffee_mug', 'desk_plant', 'floor_plant', 'bookshelf', 'book_stack', 'sofa', 'side_table', 'area_rug', 'floor_lamp', 'pinboard', 'keyboard', 'drawer_cabinet', 'whiteboard', 'flower_vase', 'wood_chair', ...Object.keys(ORNAMENTS).filter(key=>!['round_meeting_table','coffee_machine','team_radio','window'].includes(key))])];
@@ -14,10 +18,11 @@ type CharacterBones = { hips?: THREE.Bone; spine?: THREE.Bone; head?: THREE.Bone
 type Rig = { root: THREE.Group; model: THREE.Group; mixer: THREE.AnimationMixer; actions: Map<string, THREE.AnimationAction>; action: string; bones: CharacterBones; mug: THREE.Group };
 type Occupant = {
   member: OfficeMember; rig: Rig; slot: number; zone: OfficeZone; style: string;
-  route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; name: HTMLSpanElement; offset: number;
+  route: THREE.Vector3[]; label: HTMLButtonElement; bubble: HTMLSpanElement; name: HTMLSpanElement; offset: number; reportedBubbleKey: string;
 };
 export type ObjectMenuTarget = { id: string; x: number; y: number };
-export type SceneOptions = { onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onObjectMenu: (target: ObjectMenuTarget) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number, y?: number) => void };
+export type OfficeBubbleEvent = { key: string; memberId: string; text: string; seenAt: number; source: 'ambient' | 'chat' };
+export type SceneOptions = { environmentStyle?: 'default' | 'work-center'; onSelect: (id: string) => void; onError: (message: string) => void; onReady: () => void; onSelectDesk: (slot: number) => void; onObjectMenu: (target: ObjectMenuTarget) => void; onSelectOrnament: (id: string) => void; onMoveOrnament: (id: string, x: number, z: number, y?: number) => void; onBubble?: (event: OfficeBubbleEvent) => void };
 
 export class OfficeScene {
   private scene = new THREE.Scene();
@@ -75,7 +80,7 @@ export class OfficeScene {
   private contextLost = (event: Event) => { event.preventDefault(); this.options.onError('Tampilan 3D terhenti. Muat ulang tampilan atau gunakan daftar tim.'); };
 
   constructor(private host: HTMLElement, private labels: HTMLElement, private options: SceneOptions) {
-    this.scene.background = new THREE.Color('#eeeae3');
+    this.scene.background = new THREE.Color(this.options.environmentStyle === 'work-center' ? '#ffffff' : '#eeeae3');
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -249,6 +254,16 @@ export class OfficeScene {
     return mesh;
   }
 
+  private landscapeTree(x: number, z: number, scale = 1) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.17 * scale, .23 * scale, 1.55 * scale, 8), new THREE.MeshStandardMaterial({ color: '#9b765d', roughness: .88 }));
+    trunk.position.set(x, .72 * scale, z); this.scene.add(trunk); this.track(trunk);
+    const crownMaterial = new THREE.MeshStandardMaterial({ color: '#9fbd91', roughness: .9 });
+    for (const [dx, dy, dz, size] of [[0, 1.72, 0, .83], [-.46, 1.55, .08, .58], [.44, 1.58, -.06, .62]] as const) {
+      const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(size * scale, 1), crownMaterial.clone());
+      crown.position.set(x + dx * scale, dy * scale, z + dz * scale); this.scene.add(crown); this.track(crown);
+    }
+  }
+
   private wall(x: number, z: number, length: number, rotate = false, door = false, glazed = false, name = '') {
     const frame = glazed ? '#567267' : '#a39a87';
     const localBox = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) =>
@@ -344,6 +359,17 @@ export class OfficeScene {
       label.addEventListener('click', () => this.editMode ? this.options.onSelectOrnament(`desk:${this.room * DESKS_PER_ROOM + slot}`) : this.options.onSelectDesk(this.room * DESKS_PER_ROOM + slot));
       this.labels.appendChild(label); this.deskLabels.set(slot, label);
     }
+    // The preview uses a larger white campus so the office never floats inside
+    // an empty sky. The existing dashboard keeps the original compact plot.
+    if (this.options.environmentStyle === 'work-center') {
+      this.box(1, -.36, -4, 118, .5, 94, '#f7f9f7');
+      this.box(0, -.20, -26, 72, .12, 16, '#edf1ee');
+      this.box(-25, -.13, -19, 18, .10, 28, '#dfeadb');
+      this.box(25, -.13, -19, 18, .10, 28, '#e3ecdf');
+      this.box(0, -.12, -17.5, 2.2, .06, 12, '#d8dfdb');
+      for (let x = -30; x <= 30; x += 4) this.box(x, -.125, -26, .08, .03, 4.8, '#ffffff');
+      for (const [x, z, scale] of [[-31,-12,1.1],[-25,-13,.9],[-19,-13,1.05],[19,-13,1],[25,-13,.92],[31,-12,1.12],[-30,-25,.85],[-21,-26,.95],[21,-26,.95],[30,-25,.85]] as const) this.landscapeTree(x,z,scale);
+    }
     // Street, sidewalk and a planted pocket garden outside the glazed office.
     this.box(1, -0.18, 1, 48, 0.2, 36, '#c4d3b1');
     this.box(0, -0.055, 7, 44, 0.12, 2, '#dedbd0');
@@ -375,14 +401,16 @@ export class OfficeScene {
       this.wall(x,-13.5,3,false,false,true);
     }
     this.wall(9,-7.5,6,false,true,true,'MEETING');
-    // Hollow metal neon-box casing: visible depth with an illuminated front rim.
-    for (const x of [-2.9,2.9]) this.box(x,3.28,6.20,.13,.86,.30,'#172d28');
-    for (const y of [2.85,3.71]) this.box(0,y,6.20,5.93,.13,.30,'#172d28');
-    for (const x of [-2.45,2.45]) this.box(x,2.9,6.08,.09,.32,.1,'#172d28');
-    const glow = new THREE.MeshBasicMaterial({color:'#7fffd4',toneMapped:false});
-    const rim = (x:number,y:number,w:number,h:number) => { const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,.025),glow); mesh.position.set(x,y,6.36); this.scene.add(mesh); this.track(mesh); mesh.castShadow=false; };
-    for (const x of [-2.86,2.86]) rim(x,3.28,.025,.78);
-    for (const y of [2.89,3.67]) rim(0,y,5.7,.025);
+    if (this.options.environmentStyle !== 'work-center') {
+      // Hollow metal neon-box casing: visible depth with an illuminated front rim.
+      for (const x of [-2.9,2.9]) this.box(x,3.28,6.20,.13,.86,.30,'#172d28');
+      for (const y of [2.85,3.71]) this.box(0,y,6.20,5.93,.13,.30,'#172d28');
+      for (const x of [-2.45,2.45]) this.box(x,2.9,6.08,.09,.32,.1,'#172d28');
+      const glow = new THREE.MeshBasicMaterial({color:'#7fffd4',toneMapped:false});
+      const rim = (x:number,y:number,w:number,h:number) => { const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,.025),glow); mesh.position.set(x,y,6.36); this.scene.add(mesh); this.track(mesh); mesh.castShadow=false; };
+      for (const x of [-2.86,2.86]) rim(x,3.28,.025,.78);
+      for (const y of [2.89,3.67]) rim(0,y,5.7,.025);
+    }
     for(const [key,room] of Object.entries(ROOM_LIGHTS)) {
       const light=new THREE.PointLight('#ffe4b0',0,key==='workspace'?13:8,2); light.position.set(room.x,2.65,room.z);this.scene.add(light);
       const material=new THREE.MeshStandardMaterial({color:'#eee4c9',emissive:'#ffe4b0',emissiveIntensity:0});
@@ -419,6 +447,7 @@ export class OfficeScene {
   setEnvironment(schedule?: AttendanceSchedule) { this.schedule = schedule; this.skyMinute = -1; }
   setBrand(brand: { name: string; logo: string }) {
     this.brand = brand;
+    if (this.options.environmentStyle === 'work-center') return;
     if (!this.loaded) return;
     const canvas=document.createElement('canvas'); if (!canvas.getContext) return;
     canvas.width=1280; canvas.height=176;
@@ -688,11 +717,20 @@ export class OfficeScene {
   private chairSeat(slot:number,zone:'garden'|'meeting') {
     const prefix=zone==='meeting'?'meeting-chair-':'garden-chair-';
     const inZone=(item:Ornament)=>zone==='meeting'?item.x>6&&item.x<12&&item.z<-7.5:item.x>=12;
-    const available=this.ornaments.filter(item=>item.room===this.room&&item.asset==='wood_chair'
-      &&(item.id.startsWith(prefix)||inZone(item))).sort((a,b)=>a.id.localeCompare(b.id));
+    const seatNumber=(item:Ornament)=>Number(item.id.match(/meeting-chair-(\d+)/)?.[1]??Number.MAX_SAFE_INTEGER);
+    const available=this.ornaments.filter(item=>item.room===this.room&&(item.asset==='wood_chair'||(zone==='meeting'&&item.asset==='office_swivel_chair'))
+      &&(item.id.startsWith(prefix)||inZone(item))).sort((a,b)=>zone==='meeting'?seatNumber(a)-seatNumber(b):a.id.localeCompare(b.id));
     const assignments=new Map<number,Ornament>(),used=new Set<string>();
-    const members=this.current.filter(({member})=>memberZone(member,Date.now())===zone).sort((a,b)=>a.slot-b.slot||a.member.id.localeCompare(b.member.id));
+    const management=(member:OfficeMember)=>/^(?:owner|admin|manager|superuser)$/i.test(member.role||'')?0:1;
+    const members=this.current.filter(({member})=>memberZone(member,Date.now())===zone).sort((a,b)=>zone==='meeting'
+      ? management(a.member)-management(b.member)||(a.member.activity?.seat??a.slot)-(b.member.activity?.seat??b.slot)||a.member.id.localeCompare(b.member.id)
+      : a.slot-b.slot||a.member.id.localeCompare(b.member.id));
     for(const entry of members) {
+      if(zone==='meeting') {
+        const item=available.find(candidate=>!used.has(candidate.id));
+        if(item){used.add(item.id);assignments.set(entry.slot,item);}
+        continue;
+      }
       const expected=zonePosition(entry.slot,zone,this.deskLayout);
       const item=available.filter(candidate=>!used.has(candidate.id)).sort((a,b)=>{
         return Math.hypot(a.x-expected.x,a.z-expected.z)-Math.hypot(b.x-expected.x,b.z-expected.z)||a.id.localeCompare(b.id);
@@ -756,7 +794,7 @@ export class OfficeScene {
   }
   private walkRoom(from:[number,number],end:[number,number],zone:OfficeZone,ignore:string[]):[number,number][]|null {
     const [xmin,xmax,zmin,zmax]=this.zoneBounds(zone);
-    const obstacles=this.ornaments.filter(o=>o.room===this.room&&o.asset!=='area_rug'&&!ignore.includes(o.id)&&(o.y||0)<1&&!(o.asset==='wood_chair'&&Math.hypot(o.x-from[0],o.z-from[1])<.6)).map(ornamentFootprint);
+    const obstacles=this.ornaments.filter(o=>o.room===this.room&&o.asset!=='area_rug'&&!ignore.includes(o.id)&&(o.y||0)<1&&!((o.asset==='wood_chair'||o.asset==='office_swivel_chair')&&Math.hypot(o.x-from[0],o.z-from[1])<.65)).map(ornamentFootprint);
     const step=.25,key=(x:number,z:number)=>`${Math.round((x-xmin)/step)},${Math.round((z-zmin)/step)}`;
     const point=(k:string):[number,number]=>{const [x,z]=k.split(',').map(Number);return [xmin+x*step,zmin+z*step];};
     const free=(p:[number,number])=>p[0]>xmin+.12&&p[0]<xmax-.12&&p[1]>zmin+.12&&p[1]<zmax-.12&&!obstacles.some(b=>p[0]>b.xmin-.17&&p[0]<b.xmax+.17&&p[1]>b.zmin-.17&&p[1]<b.zmax+.17);
@@ -790,7 +828,7 @@ export class OfficeScene {
     const bubble = document.createElement('span'); bubble.className = 'office-bubble';
     const name = document.createElement('span'); name.className = 'office-name';
     label.append(bubble, name); this.labels.appendChild(label);
-    const occupant: Occupant = { member, rig: this.rig(member), slot, label, bubble, name, zone: this.activeZone(member,slot), style: JSON.stringify(member.avatar), route: [], offset: memberHash(member.id) % 24 };
+    const occupant: Occupant = { member, rig: this.rig(member), slot, label, bubble, name, zone: this.activeZone(member,slot), style: JSON.stringify(member.avatar), route: [], offset: memberHash(member.id) % 24, reportedBubbleKey: '' };
     const p = this.destination(slot, occupant.zone);
     occupant.rig.root.position.set(p.x, 0, p.z); occupant.rig.root.rotation.y = p.rotation;
     return occupant;
@@ -859,7 +897,16 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
-  resetCamera() { this.camera.position.set(28, 33, 41); this.controls.target.set(0, 1.6, -1.5); this.controls.update(); }
+  resetCamera() {
+    if (this.options.environmentStyle === 'work-center') {
+      this.camera.position.set(16.1, 15.8, 19.7);
+      this.controls.target.set(2.3, .4, -1.8);
+    } else {
+      this.camera.position.set(28, 33, 41);
+      this.controls.target.set(0, 1.6, -1.5);
+    }
+    this.controls.update();
+  }
   focusObject(id:string) {
     const object=id.startsWith('desk:')?this.desks.get(Number(id.slice(5))%DESKS_PER_ROOM):this.decorations.get(id);
     if(!object) return;
@@ -940,11 +987,20 @@ export class OfficeScene {
       if (coffee && rig.bones.head) rig.bones.head.rotation.x = -sip * .08;
       rig.mug.visible = settled && occupant.zone === 'pantry';
       if (settled) rig.root.rotation.y = destination.rotation;
-      const bubbleNow=Date.now(),chatActive=Boolean(member.chat&&bubbleNow>=member.chat.sentAt&&bubbleNow-member.chat.sentAt<15_000);
+      const bubbleNow=Date.now(),chatActive=Boolean(member.chat&&bubbleNow>=member.chat.sentAt&&bubbleNow-member.chat.sentAt<AVATAR_CHAT_TTL_MS);
       const text = settled ? bubbleLabel(member, occupant.zone, this.moving||chatActive ? bubbleNow : 0) : '';
       if (occupant.bubble.textContent !== text) occupant.bubble.textContent = text;
-      occupant.bubble.hidden = !text || (!chatActive && id !== this.selected && (!this.moving || (t + occupant.slot * 3) % 25 >= 5));
+      const ambientPhase=(t+occupant.slot*AMBIENT_BUBBLE_STAGGER_SECONDS)%AMBIENT_BUBBLE_PERIOD_SECONDS;
+      occupant.bubble.hidden = !text || (!chatActive && id !== this.selected && (!this.moving || ambientPhase >= AMBIENT_BUBBLE_VISIBLE_SECONDS));
       occupant.bubble.dataset.chat=String(chatActive);
+      if(occupant.bubble.hidden) occupant.reportedBubbleKey='';
+      else {
+        const bubbleKey=chatActive?`chat:${member.chat!.sentAt}`:`ambient:${Math.floor((t+occupant.slot*AMBIENT_BUBBLE_STAGGER_SECONDS)/AMBIENT_BUBBLE_PERIOD_SECONDS)}:${text}`;
+        if(occupant.reportedBubbleKey!==bubbleKey) {
+          occupant.reportedBubbleKey=bubbleKey;
+          this.options.onBubble?.({key:bubbleKey,memberId:id,text,seenAt:bubbleNow,source:chatActive?'chat':'ambient'});
+        }
+      }
       occupant.label.dataset.zone = occupant.zone;
       occupant.label.dataset.walking = String(!settled);
       occupant.label.dataset.status = member.status;
@@ -970,13 +1026,14 @@ export class OfficeScene {
     if (minute !== this.skyMinute) {
       this.skyMinute = minute;
       const time = officeTime(Date.now(), this.schedule), night = time.phase === 'Malam', warm = time.phase === 'Pagi' || time.phase === 'Sore';
-      (this.scene.background as THREE.Color).set(night ? '#1e304a' : warm ? '#edd5ba' : '#dbe8ec');
+      const workCenterEnvironment = this.options.environmentStyle === 'work-center';
+      (this.scene.background as THREE.Color).set(workCenterEnvironment ? '#ffffff' : night ? '#1e304a' : warm ? '#edd5ba' : '#dbe8ec');
       this.ambient.intensity = night ? .85 : 1.5; this.ambient.color.set(night ? '#bacfed' : '#fff5e4');
       this.sun.intensity = night ? .3 : warm ? 1.6 : 2;
       this.sun.color.set(night ? '#9caeef' : warm ? '#ffd5a0' : '#fff4df');
       this.sun.position.set(Math.cos((time.hour-6)/12*Math.PI)*14, night ? 8 : 8 + Math.sin((time.hour-6)/12*Math.PI)*7, 9);
       this.updateLights();
-      this.stars.visible = night; this.clouds.visible = !night;
+      this.stars.visible = !workCenterEnvironment && night; this.clouds.visible = !workCenterEnvironment && !night;
     }
     if (this.signTexture) this.signTexture.offset.x = this.moving ? (this.time * .035) % 1 : this.signTexture.offset.x;
     if (this.moving) this.clouds.position.x = Math.sin(this.time * .012) * 3;

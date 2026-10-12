@@ -37,6 +37,7 @@ type AttendanceAction = 'checkin' | 'pause' | 'resume' | 'checkout';
 
 const DEFAULT_PROJECT = 'Bilik Strategi Workspace';
 const ATTENDANCE_EVENT = 'bilik-attendance-changed';
+export const OPEN_FLOATING_ATTENDANCE_EVENT = 'bilik-open-floating-attendance';
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -170,7 +171,7 @@ function checkoutRecord(session: ActiveAttendance, viewer: Viewer, totalSeconds:
   };
 }
 
-export default function FloatingAttendance() {
+export default function FloatingAttendance({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const actionInFlightRef = useRef(false);
   const [viewer, setViewer] = useState<Viewer | null>(null);
@@ -340,6 +341,16 @@ export default function FloatingAttendance() {
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [panelOpen]);
+
+  useEffect(() => {
+    const openPanel = () => {
+      setPanelOpen(true);
+      if (viewer?.name) void refreshSession(viewer.name);
+    };
+
+    window.addEventListener(OPEN_FLOATING_ATTENDANCE_EVENT, openPanel);
+    return () => window.removeEventListener(OPEN_FLOATING_ATTENDANCE_EVENT, openPanel);
+  }, [refreshSession, viewer?.name]);
 
   const runAction = async (nextAction: AttendanceAction) => {
     if (!viewer || actionInFlightRef.current) return;
@@ -600,7 +611,7 @@ export default function FloatingAttendance() {
         </section>
       )}
 
-      <div className="group relative">
+      {!hideTrigger && <div className="group relative">
         {session && !panelOpen && (
           <div
             data-floating-attendance-actions
@@ -670,7 +681,7 @@ export default function FloatingAttendance() {
             className="pointer-events-none absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#FFF0ED] bg-[#4F9D78] shadow-sm md:h-3.5 md:w-3.5 dark:!border-[#20242C] dark:!bg-[#F4C95D]"
           />
         )}
-      </div>
+      </div>}
     </div>
   );
 }

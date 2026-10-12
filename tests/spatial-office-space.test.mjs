@@ -207,7 +207,7 @@ test('changing desk again before arriving still leaves the original chair throug
   const final = zonePosition(5, 'desk'); assert.deepEqual(secondClaim.at(-1), [final.x, final.z]);
 });
 
-test('new furnishing migration seeds every area once and preserves removals, claims and lighting',()=>{
+test('new furnishing migration seeds every area once and preserves custom removals, claims and lighting',()=>{
   const members=Array.from({length:14},(_,i)=>({id:String(i)}));
   const old=space.normalizeSpace({version:4,claims:{'0':10},ornaments:space.DEFAULT_ORNAMENTS.map(o=>o.id.startsWith('lead-')?{...o,z:o.z+1.5}:o),revision:8},members);
   assert.equal(old.version,8);assert.equal(old.claims['0'],10);
@@ -215,7 +215,20 @@ test('new furnishing migration seeds every area once and preserves removals, cla
   assert.doesNotThrow(()=>space.parseOrnaments(old.ornaments,2));
   const edited={...old,ornaments:old.ornaments.filter(o=>o.id!=='meeting-chair-0'),lights:{'0:meeting':'off'}};
   const reloaded=space.normalizeSpace(edited,members);
-  assert.ok(!reloaded.ornaments.some(o=>o.id==='meeting-chair-0'));assert.equal(reloaded.lights['0:meeting'],'off');
+  assert.ok(reloaded.ornaments.some(o=>o.id==='meeting-chair-0'));assert.equal(reloaded.lights['0:meeting'],'off');
+});
+test('meeting furniture uses a long table and tracks the roster per office area',()=>{
+  const six=Array.from({length:6},(_,i)=>({id:`person-${i}`}));
+  const initial=space.normalizeSpace(null,six);
+  assert.equal(initial.ornaments.filter(o=>o.room===0&&o.id.startsWith('meeting-chair-')).length,6);
+  assert.equal(initial.ornaments.find(o=>o.id==='meeting-chair-0').asset,'office_swivel_chair');
+  assert.equal(initial.ornaments.find(o=>o.id==='meeting-chair-0').color,'#52684e');
+  assert.ok(initial.ornaments.some(o=>o.id==='meeting-table-long'&&o.asset==='meeting_table'));
+  assert.ok(!initial.ornaments.some(o=>o.asset==='round_meeting_table'));
+  const expanded=space.normalizeSpace(initial,Array.from({length:14},(_,i)=>({id:`person-${i}`})));
+  assert.equal(expanded.ornaments.filter(o=>o.room===0&&/^meeting-chair-\d+$/.test(o.id)).length,12);
+  assert.equal(expanded.ornaments.filter(o=>o.room===1&&/^meeting-chair-\d+-area-1$/.test(o.id)).length,2);
+  assert.ok(expanded.ornaments.find(o=>o.id==='meeting-table-long').scale[0]>initial.ornaments.find(o=>o.id==='meeting-table-long').scale[0]);
 });
 test('all furnished objects are valid and supported tabletop objects follow a moved counter',()=>{
   const base=space.normalizeSpace(null,[{id:'a'}]);
@@ -306,15 +319,14 @@ test('corridor migrations move Project Lead as a room, widen the lounge passage 
   assert.ok(moved.x>6&&moved.z<-7.5);
 });
 
-test('meeting assigns unique existing seats per office, reports full capacity and releases expired seats',()=>{
+test('meeting assigns every roster member a unique dynamic seat and releases expired seats',()=>{
   const roster=Array.from({length:7},(_,i)=>({id:`a${i}`}));let current=space.normalizeSpace(null,roster);
-  for(let i=0;i<6;i++) current=space.setActivity(current,`a${i}`,'meeting',1000);
-  assert.equal(new Set(Object.values(current.activities).map(a=>a.seat)).size,6);
-  assert.throws(()=>space.setActivity(current,'a6','meeting',2000),/penuh/);
+  for(let i=0;i<7;i++) current=space.setActivity(current,`a${i}`,'meeting',1000);
+  assert.equal(new Set(Object.values(current.activities).map(a=>a.seat)).size,7);
   current=space.setActivity(current,'a0','desk',2000);
-  current=space.setActivity(current,'a6','meeting',2000);assert.equal(current.activities.a6.seat,0);
-  const later=space.setActivity(current,'a0','meeting',901001);assert.equal(later.activities.a0.seat,1);
-  const reloaded=space.normalizeSpace(current,roster);assert.equal(reloaded.activities.a6.zone,'meeting');assert.equal(reloaded.activities.a6.seat,0);
+  current=space.setActivity(current,'a0','meeting',2000);assert.equal(current.activities.a0.seat,0);
+  const later=space.setActivity(current,'a1','meeting',901001);assert.equal(later.activities.a1.seat,1);
+  const reloaded=space.normalizeSpace(current,roster);assert.equal(reloaded.activities.a0.zone,'meeting');assert.equal(reloaded.activities.a0.seat,0);
 });
 
 

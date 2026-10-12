@@ -1,4 +1,4 @@
-import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, type OfficeActivityZone, type DeskLayout, type OfficeMember } from './model';
+import { DESKS_PER_ROOM, deskBounds, zonePath, deskPosition, deskCorridor, meetingSeatPosition, type OfficeActivityZone, type DeskLayout, type OfficeMember } from './model';
 import { normalizeOfficeMusic, resolveMusicSource, type OfficeMusic } from './music';
 
 export const ORNAMENTS = {
@@ -82,7 +82,7 @@ function sameOrnament(a: Ornament | undefined, b: Ornament) {
 }
 export const ROOM_LIGHTS = {
   workspace:{label:'Workspace',x:0,z:0}, manager:{label:'Manager',x:-3,z:-9}, lead:{label:'Project Lead',x:3,z:-10.5},
-  lounge:{label:'Lounge',x:9,z:-3}, pantry:{label:'Pantry',x:9,z:3.8}, meeting:{label:'Meeting room',x:9,z:-10.5}, corridor:{label:'Lorong meeting',x:7.5,z:-6.25},
+  lounge:{label:'Lounge',x:9,z:-3}, pantry:{label:'Pantry',x:9,z:3.8}, meeting:{label:'Meeting room',x:10.7,z:-8.7}, corridor:{label:'Lorong meeting',x:7.5,z:-6.25},
 } as const;
 export type LightMode='auto'|'on'|'off';
 export type StickyNote={id:string;boardId:string;authorId:string;text:string;color:string;revision:number};
@@ -130,10 +130,22 @@ export const ROOM_FURNITURE: Ornament[] = [
   ...Array.from({length:12},(_,i)=>({id:`garden-chair-${i}`,asset:'wood_chair' as const,x:13.25+Math.floor(i/2)*.95,z:i%2?-2.4:0,rotation:i%2?0:Math.PI,room:0})),
   {id:'pantry-coffee-machine',asset:'coffee_machine',x:9.35,z:5.5,y:.94,rotation:0,room:0},
   {id:'garden-table',asset:'side_table',x:16,z:-3.2,rotation:0,room:0},
-  {id:'meeting-round-table',asset:'round_meeting_table',x:9,z:-10.75,rotation:0,room:0},
-  ...Array.from({length:6},(_,i)=>{const a=i*Math.PI/3+Math.PI/6;return {id:`meeting-chair-${i}`,asset:'wood_chair' as const,x:9+Math.sin(a)*1.9,z:-10.75+Math.cos(a)*1.9,rotation:(a+Math.PI)%(Math.PI*2),room:0};}),
-  {id:'meeting-vase',asset:'flower_vase',x:9,z:-10.75,y:.86,rotation:0,room:0},
 ];
+const MEETING_FIXTURE_ID=/^(?:meeting-round-table|meeting-table-long|meeting-vase|meeting-chair-\d+)(?:-area-\d+)?$/;
+const roomFixtureId=(id:string,room:number)=>room?`${id}-area-${room}`:id;
+export function meetingFurniture(room:number,count:number):Ornament[] {
+  const seats=Math.max(0,Math.min(DESKS_PER_ROOM,Math.floor(count)));
+  const positions=Array.from({length:seats},(_,seat)=>meetingSeatPosition(seat,seats));
+  const maxOffset=Math.max(0,...positions.map(position=>Math.abs(position.x-9)));
+  const tableLength=Math.min(5.2,Math.max(3.5,maxOffset*2+.8));
+  return [
+    {id:roomFixtureId('meeting-table-long',room),asset:'meeting_table',x:9,z:-10.75,scale:[tableLength/2.37,1,1],rotation:0,room},
+    ...positions.map((position,seat)=>seat===0
+      ? {id:roomFixtureId('meeting-chair-0',room),asset:'office_swivel_chair' as const,...position,scale:[.92,.92,.92] as [number,number,number],color:'#52684e',room}
+      : {id:roomFixtureId(`meeting-chair-${seat}`,room),asset:'wood_chair' as const,...position,room}),
+    {id:roomFixtureId('meeting-vase',room),asset:'flower_vase',x:9,z:-10.75,y:.79,scale:[.72,.72,.72],rotation:0,room},
+  ];
+}
 export function applySharedAction(space:OfficeSpace,action:SharedOfficeAction,viewerId:string,admin:boolean):OfficeSpace {
   if(!Object.hasOwn(space.claims,viewerId)) throw new Error('Anda bukan anggota kantor.');
   if(action.type==='chat') {
@@ -177,7 +189,7 @@ export function applySharedAction(space:OfficeSpace,action:SharedOfficeAction,vi
 export function spaceCapacity(space: OfficeSpace, count: number) {
   return Math.max(DESKS_PER_ROOM, Math.ceil(count / DESKS_PER_ROOM) * DESKS_PER_ROOM, Math.ceil((Math.max(-1, ...Object.values(space.claims),...space.desks.map(d=>d.slot)) + 1) / DESKS_PER_ROOM) * DESKS_PER_ROOM);
 }
-export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>[]): OfficeSpace {
+export function normalizeSpace(value: unknown, members: Array<Pick<OfficeMember, 'id'> & Partial<Pick<OfficeMember, 'status'|'presenceIdle'|'role'>>>): OfficeSpace {
   let raw = value && typeof value === 'object' ? value as Partial<OfficeSpace> : {};
   if ((raw.version || 0)<4) {
     const remap=(slot:number)=>Math.floor(slot/10)*DESKS_PER_ROOM+slot%10;
@@ -235,6 +247,14 @@ export function normalizeSpace(value: unknown, members: Pick<OfficeMember, 'id'>
   for(let area=0;area<areas;area++) if(!furnishedRooms.includes(area)) {
     for(const item of [...(area?DEFAULT_ORNAMENTS:[]),...ROOM_FURNITURE]) {const id=area?`${item.id}-area-${area}`:item.id;if(!ornaments.some(o=>o.id===id)) ornaments.push({...item,id,room:area});}
     furnishedRooms.push(area);
+  }
+  // The meeting set is roster-driven rather than a one-time furnishing seed.
+  // Rebuild only these generated fixtures so every area always has one chair
+  // per member while all custom room edits remain untouched.
+  for(let i=ornaments.length-1;i>=0;i--) if(MEETING_FIXTURE_ID.test(ornaments[i].id)) ornaments.splice(i,1);
+  for(let area=0;area<areas;area++) {
+    const memberCount=Object.values(claims).filter(slot=>Math.floor(slot/DESKS_PER_ROOM)===area).length;
+    ornaments.push(...meetingFurniture(area,memberCount));
   }
   const chats=Object.fromEntries(sorted.flatMap(member=>{const chat=raw.chats?.[member.id];return chat&&typeof chat.text==='string'&&chat.text.trim()&&chat.text.length<=150&&Number.isFinite(chat.sentAt)?[[member.id,{text:chat.text.trim(),sentAt:chat.sentAt}]]:[];}));
   const music=normalizeOfficeMusic(raw.music),playback=music&&raw.musicPlayback&&raw.musicPlayback.url===music.url&&typeof raw.musicPlayback.playing==='boolean'&&Number.isFinite(raw.musicPlayback.startedAt)&&Number.isFinite(raw.musicPlayback.updatedAt)?{url:music.url,playing:raw.musicPlayback.playing,startedAt:raw.musicPlayback.startedAt,updatedAt:raw.musicPlayback.updatedAt,updatedBy:typeof raw.musicPlayback.updatedBy==='string'?raw.musicPlayback.updatedBy.slice(0,128):''}:null;
@@ -464,7 +484,8 @@ export function setActivity(space: OfficeSpace, viewerId: string, zone: unknown,
     if(zone==='meeting') {
       const room=Math.floor(space.claims[viewerId]/DESKS_PER_ROOM);
       const occupied=new Set(Object.entries(activities).filter(([id,a])=>id!==viewerId&&a.zone==='meeting'&&a.until>now&&Math.floor(space.claims[id]/DESKS_PER_ROOM)===room).map(([,a])=>a.seat));
-      seat=Array.from({length:6},(_,i)=>i).find(i=>!occupied.has(i)&&space.ornaments.some(o=>o.room===room&&(o.id===`meeting-chair-${i}`||o.id===`meeting-chair-${i}-area-${room}`)));
+      const capacity=space.ornaments.filter(o=>o.room===room&&/^meeting-chair-\d+(?:-area-\d+)?$/.test(o.id)).length;
+      seat=Array.from({length:capacity},(_,i)=>i).find(i=>!occupied.has(i)&&space.ornaments.some(o=>o.room===room&&(o.id===`meeting-chair-${i}`||o.id===`meeting-chair-${i}-area-${room}`)));
       if(seat===undefined) throw new Error('Kursi meeting sedang penuh atau belum tersedia. Pilih aktivitas lain.');
     }
     activities[viewerId] = {zone:zone as OfficeActivityZone,until:now+(zone==='meeting'?15:5)*60_000,...(seat!==undefined?{seat}:{})};

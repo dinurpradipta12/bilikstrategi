@@ -17,6 +17,7 @@ import {
   Users,
   ExternalLink,
   ChevronRight,
+  FolderKanban,
 } from 'lucide-react';
 import { RefreshCw, X, Trash2 } from 'lucide-react';
 import { AgencyProject } from '@/lib/mock/data';
@@ -28,6 +29,8 @@ import {
   uniqueProjectsByReference,
 } from '@/lib/projects/dedupe';
 import ProjectDetailClient from '@/components/projects/ProjectDetailClient';
+import WorkCenterProjectFolder from '@/components/projects/WorkCenterProjectFolder';
+import { normalizeProjectLookupName, readWorkCenterProject, type WorkCenterProjectSnapshot } from '@/lib/projects/work-center-snapshot';
 
 type ViewMode = 'list' | 'board' | 'timeline' | 'calendar';
 
@@ -789,12 +792,57 @@ function ProjectsRouteContent() {
   const searchParams = useSearchParams();
   const pathProjectId = pathname.match(/^\/projects\/([^/]+)\/?$/)?.[1] || '';
   const projectId = searchParams.get('projectId') || (pathProjectId ? decodeURIComponent(pathProjectId) : '');
+  const projectName = searchParams.get('projectName') || '';
 
   if (projectId) {
     return <ProjectDetailClient id={projectId} />;
   }
 
+  if (projectName) {
+    return <ProjectNameRoute name={projectName} />;
+  }
+
   return <ProjectsListPage />;
+}
+
+function ProjectNameRoute({ name }: { name: string }) {
+  const [canonicalId, setCanonicalId] = useState('');
+  const [snapshot, setSnapshot] = useState<WorkCenterProjectSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let disposed = false;
+    const resolveProject = async () => {
+      const key = normalizeProjectLookupName(name);
+      const results = await Promise.allSettled([
+        fetch('/api/supabase/projects', { cache: 'no-store' }).then(response => response.ok ? response.json() : null),
+        fetch('/api/clickup/projects', { cache: 'no-store' }).then(response => response.ok ? response.json() : null),
+      ]);
+      if (disposed) return;
+      const projects = results.flatMap(result => result.status === 'fulfilled' && Array.isArray(result.value?.projects) ? result.value.projects : []);
+      const match = projects.find(project => normalizeProjectLookupName(projectText(project?.name)) === key);
+      if (match) setCanonicalId(projectText(match.id || match.clickup_list_id || match.list_id));
+      else setSnapshot(readWorkCenterProject(name));
+      setLoading(false);
+    };
+    void resolveProject();
+    return () => { disposed = true; };
+  }, [name]);
+
+  if (canonicalId) return <ProjectDetailClient id={canonicalId} />;
+  if (loading) return <div className="min-h-[40vh] flex items-center justify-center text-sm text-[#737680]">Membuka folder project...</div>;
+  if (snapshot) return <WorkCenterProjectFolder snapshot={snapshot} />;
+
+  return (
+    <div className="min-h-[45vh] flex items-center justify-center px-4">
+      <div className="max-w-md rounded-2xl border border-[#E2E6E0] bg-white p-8 text-center shadow-sm">
+        <FolderKanban className="mx-auto h-8 w-8 text-[#718274]" />
+        <h1 className="mt-4 text-lg font-bold text-[#2F4337]">Project tidak ditemukan</h1>
+        <p className="mt-2 text-xs leading-6 text-[#7A857B]">Tidak ada project bernama <strong>{name}</strong> di aplikasi dan snapshot Work Center tidak tersedia.</p>
+        <Link href="/projects" className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#344D3B] px-4 py-2.5 text-xs font-semibold text-white">Kembali ke Project Hub <ChevronRight className="h-3.5 w-3.5" /></Link>
+      </div>
+    </div>
+  );
 }
 
 export default function ProjectsPage() {

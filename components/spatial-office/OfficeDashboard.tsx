@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, ArrowLeft, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -15,14 +15,16 @@ import OfficeActivityMenu, { OFFICE_ACTIONS } from './OfficeActivityMenu';
 import OfficeObjectMenu from './OfficeObjectMenu';
 import OfficeMusicPlayer from './OfficeMusicPlayer';
 import OfficeSignEditor from './OfficeSignEditor';
-import type { ObjectMenuTarget } from '@/lib/spatial-office/scene';
+import OfficeWeather from './OfficeWeather';
+import type { ObjectMenuTarget, OfficeBubbleEvent } from '@/lib/spatial-office/scene';
 import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament } from '@/lib/spatial-office/space';
+import { normalizeProjectLookupName, rememberWorkCenterProject, workCenterProjectHref } from '@/lib/projects/work-center-snapshot';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
 const DEFAULT_SIGN_TEXT=/agency/i.test(OFFICE_BRAND.name)?OFFICE_BRAND.name:`${OFFICE_BRAND.name} Agency`;
 const DEMO_MEMBERS: OfficeMember[] = [
-  { id: 'demo-1', name: 'Alya', status: 'working', project: 'Brand identity' },
+  { id: 'demo-1', name: 'Alya', role: 'manager', status: 'working', project: 'Brand identity' },
   { id: 'demo-2', name: 'Bima', status: 'working', project: 'Website tim' },
   { id: 'demo-3', name: 'Citra', status: 'paused', project: 'Content plan' },
   { id: 'demo-4', name: 'Dara', status: 'working', project: 'Content plan' },
@@ -30,8 +32,70 @@ const DEMO_MEMBERS: OfficeMember[] = [
   { id: 'demo-6', name: 'Farhan', status: 'working', project: 'Social media' },
 ];
 type Data = OfficeSnapshot & { seats: Map<string, number> };
+type WorkCenterTab = 'today' | 'projects' | 'inbox';
+type WorkCenterNotification = {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  entity_url?: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+type WorkCenterApproval = {
+  id: string;
+  title: string;
+  requested_by_name?: string;
+  status: string;
+  submitted_at?: string;
+};
+type WorkCenterFeed = {
+  notifications: WorkCenterNotification[];
+  unreadCount: number;
+  approvals: WorkCenterApproval[];
+  loading: boolean;
+};
+type WorkCenterChatMessage = {
+  key: string;
+  memberId: string;
+  name: string;
+  text: string;
+  seenAt: number;
+  profilePicture?: string;
+};
 
-export default function OfficeDashboard({ demo = false, immersive = false, onStatistics }: { demo?: boolean; immersive?: boolean; onStatistics?: () => void }) {
+function formatWorkDuration(seconds: number) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours ? `${hours}j ${minutes}m` : `${minutes}m`;
+}
+
+function roleLabel(value?: string) {
+  if (!value) return 'Team member';
+  return value.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function compactDate(value?: string) {
+  if (!value) return 'Baru saja';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Baru saja';
+  return date.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function memberProjectSummaries(member: OfficeMember, now: number) {
+  const projects = (member.profile?.projects || []).map(project => ({ ...project }));
+  if (!member.project) return projects;
+  const current = projects.find(project => project.name.toLocaleLowerCase('id-ID') === member.project.toLocaleLowerCase('id-ID'));
+  const sessionSeconds = workedSeconds(member, now);
+  if (!current) {
+    projects.unshift({ name: member.project, trackedSeconds: sessionSeconds, timeSource: 'session' as const, taskCount: member.tasks?.length || 0, completedTasks: 0 });
+  } else if (current.timeSource !== 'tasks') {
+    current.trackedSeconds += sessionSeconds;
+  }
+  return projects;
+}
+
+export default function OfficeDashboard({ demo = false, immersive = false, workCenterPreview = false, onStatistics }: { demo?: boolean; immersive?: boolean; workCenterPreview?: boolean; onStatistics?: () => void }) {
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [now, setNow] = useState(0);
   const [schedule, setSchedule] = useState<AttendanceSchedule>();
@@ -67,15 +131,70 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const [selected, setSelected] = useState('');
   const [room, setRoom] = useState(0);
   const [motion, setMotion] = useState(true);
+  const [showSceneBubbles,setShowSceneBubbles]=useState(false);
   const [query, setQuery] = useState('');
   const [chatText,setChatText]=useState('');
+  const [workCenterChatHistory,setWorkCenterChatHistory]=useState<WorkCenterChatMessage[]>([]);
+  const [workCenterTab,setWorkCenterTab]=useState<WorkCenterTab>('today');
+  const [workCenterFeed,setWorkCenterFeed]=useState<WorkCenterFeed>({notifications:[],unreadCount:0,approvals:[],loading:true});
+  const [memberProfilePopover,setMemberProfilePopover]=useState<{id:string;left:number;bottom:number}|null>(null);
   const [demoCounter, setDemoCounter] = useState(7);
+
+  useEffect(()=>{
+    if(!memberProfilePopover) return;
+    const closeFromOutside=(event:PointerEvent)=>{
+      const target=event.target as Element | null;
+      if(target?.closest('.office-member-profile-popover,.office-agent-card')) return;
+      setMemberProfilePopover(null);
+    };
+    const closeFromKeyboard=(event:KeyboardEvent)=>{if(event.key==='Escape')setMemberProfilePopover(null);};
+    const closeFromViewport=()=>setMemberProfilePopover(null);
+    document.addEventListener('pointerdown',closeFromOutside);
+    document.addEventListener('keydown',closeFromKeyboard);
+    window.addEventListener('resize',closeFromViewport);
+    return ()=>{
+      document.removeEventListener('pointerdown',closeFromOutside);
+      document.removeEventListener('keydown',closeFromKeyboard);
+      window.removeEventListener('resize',closeFromViewport);
+    };
+  },[memberProfilePopover]);
 
   useEffect(()=>{
     if(!notice) return;
     const timer=window.setTimeout(()=>setNotice(''),4200);
     return ()=>window.clearTimeout(timer);
   },[notice]);
+
+  useEffect(()=>{
+    if(!workCenterPreview) return;
+    let disposed=false;
+    const load=async()=>{
+      const [notificationsResult,approvalsResult]=await Promise.allSettled([
+        fetch('/api/notifications?limit=12',{cache:'no-store'}).then(async response=>({ok:response.ok,payload:await response.json().catch(()=>({}))})),
+        fetch('/api/approvals',{cache:'no-store'}).then(async response=>({ok:response.ok,payload:await response.json().catch(()=>({}))})),
+      ]);
+      if(disposed) return;
+      setWorkCenterFeed(previous=>{
+        const notificationResponse=notificationsResult.status==='fulfilled'&&notificationsResult.value.ok?notificationsResult.value.payload:null;
+        const approvalResponse=approvalsResult.status==='fulfilled'&&approvalsResult.value.ok?approvalsResult.value.payload:null;
+        const notifications=Array.isArray(notificationResponse?.notifications)?notificationResponse.notifications:previous.notifications;
+        const approvals=Array.isArray(approvalResponse?.requests)?approvalResponse.requests:previous.approvals;
+        const unread=Number(notificationResponse?.unreadCount);
+        return {
+          notifications,
+          approvals,
+          unreadCount:Number.isFinite(unread)?unread:notifications.filter((item:WorkCenterNotification)=>!item.is_read).length,
+          loading:false,
+        };
+      });
+    };
+    void load();
+    const interval=window.setInterval(load,30_000);
+    const refresh=()=>void load();
+    window.addEventListener('focus',refresh);
+    window.addEventListener('notifications-refresh',refresh);
+    return()=>{disposed=true;window.clearInterval(interval);window.removeEventListener('focus',refresh);window.removeEventListener('notifications-refresh',refresh);};
+  },[workCenterPreview]);
 
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -168,6 +287,31 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     };
   }, [demo, refresh]);
 
+  useEffect(()=>{
+    if(!demo||!workCenterPreview) return;
+    let disposed=false;
+    let controller:AbortController|undefined;
+    const loadLivePreview=async()=>{
+      controller?.abort();
+      controller=new AbortController();
+      const timeout=window.setTimeout(()=>controller?.abort(),15_000);
+      try{
+        const response=await fetch('/api/spatial-office',{cache:'no-store',signal:controller.signal});
+        if(!response.ok) return;
+        const payload=await response.json();
+        if(disposed||!Array.isArray(payload.members)||!payload.members.length) return;
+        setData(previous=>{
+          const space=normalizeSpace(payload.space||previous.space,payload.members);
+          return {...previous,...payload,space,seats:new Map(Object.entries(space.claims))};
+        });
+      }catch{/* The isolated local preview intentionally keeps its demo fallback. */}
+      finally{window.clearTimeout(timeout);}
+    };
+    void loadLivePreview();
+    const interval=window.setInterval(loadLivePreview,30_000);
+    return()=>{disposed=true;controller?.abort();window.clearInterval(interval);};
+  },[demo,workCenterPreview,refresh]);
+
   const space = useMemo(() => normalizeSpace(data.space || { claims: Object.fromEntries(data.seats) }, data.members), [data]);
   const rooms = spaceCapacity(space, data.members.length) / DESKS_PER_ROOM;
   const canEdit = demo ? demoAdmin : data.canEditOffice === true;
@@ -182,12 +326,94 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
   const active = data.members.filter(member => member.status !== 'offline').length;
   const paused = data.members.filter(member => member.status === 'paused').length;
   const selectedMember = data.members.find(member => member.id === selected);
+  const workCenterMember = selectedMember ?? data.members.find(member => member.status === 'working') ?? data.members[0];
+  const viewerMember = data.members.find(member => member.id === data.viewerId) ?? data.members.find(member => member.status !== 'offline');
+  const rememberChatBubble=useCallback((event:OfficeBubbleEvent)=>{
+    if(!workCenterPreview) return;
+    const member=data.members.find(candidate=>candidate.id===event.memberId);
+    if(!member||member.status==='offline'||(member.presenceIdle&&member.status!=='paused')) return;
+    const key=`${event.memberId}:${event.key}`;
+    setWorkCenterChatHistory(previous=>{
+      if(previous.some(message=>message.key===key)) return previous;
+      return [...previous,{key,memberId:member.id,name:member.name,text:event.text,seenAt:event.seenAt,profilePicture:member.profilePicture}].slice(-8);
+    });
+  },[data.members,workCenterPreview]);
+  const visibleChatHistory=useMemo(()=>{
+    const online=new Set(data.members.filter(member=>member.status!=='offline'&&(!member.presenceIdle||member.status==='paused')).map(member=>member.id));
+    return workCenterChatHistory.filter(message=>online.has(message.memberId)).slice(-5);
+  },[data.members,workCenterChatHistory]);
+  const teamTasks = useMemo(()=>data.members.flatMap(member=>(member.tasks||[]).map((task,index)=>({
+    id:`${member.id}-${index}-${task.name}`,
+    name:task.name,
+    status:task.status,
+    member:member.name,
+    project:member.project,
+    done:['done','completed','closed'].includes(task.status.toLowerCase()),
+  }))).sort((a,b)=>Number(a.done)-Number(b.done)||Number(b.status==='in_progress')-Number(a.status==='in_progress')||a.name.localeCompare(b.name,'id-ID')),[data.members]);
+  const activeTasks=teamTasks.filter(task=>!task.done);
+  const projectRollups=useMemo(()=>{
+    const grouped=new Map<string,{name:string;trackedSeconds:number;taskCount:number;completedTasks:number;members:Set<string>}>();
+    for(const member of data.members){
+      for(const project of memberProjectSummaries(member,now)){
+        const key=project.name.trim().toLocaleLowerCase('id-ID');
+        if(!key) continue;
+        const current=grouped.get(key)||{name:project.name,trackedSeconds:0,taskCount:0,completedTasks:0,members:new Set<string>()};
+        current.trackedSeconds+=Math.max(0,project.trackedSeconds||0);
+        current.taskCount+=Math.max(0,project.taskCount||0);
+        current.completedTasks+=Math.max(0,project.completedTasks||0);
+        current.members.add(member.name);
+        grouped.set(key,current);
+      }
+    }
+    return [...grouped.entries()].map(([key,project])=>{
+      const tasks=teamTasks.filter(task=>normalizeProjectLookupName(task.project||'')===key);
+      return {
+        ...project,
+        taskCount:Math.max(project.taskCount,tasks.length),
+        completedTasks:Math.max(project.completedTasks,tasks.filter(task=>task.done).length),
+        members:[...project.members],
+        tasks,
+      };
+    }).sort((a,b)=>b.members.length-a.members.length||b.trackedSeconds-a.trackedSeconds||a.name.localeCompare(b.name,'id-ID'));
+  },[data.members,now,teamTasks]);
+  const rememberProjectFolder=(project:typeof projectRollups[number])=>{
+    rememberWorkCenterProject({
+      version:1,
+      savedAt:new Date().toISOString(),
+      name:project.name,
+      trackedSeconds:project.trackedSeconds,
+      taskCount:project.taskCount,
+      completedTasks:project.completedTasks,
+      members:project.members.map(name=>{
+        const member=data.members.find(candidate=>candidate.name===name);
+        return {name,role:roleLabel(member?.profile?.roleTitle||member?.role),status:member?.status||'offline'};
+      }),
+      tasks:project.tasks.map(task=>({id:task.id,name:task.name,status:task.status,member:task.member,done:task.done})),
+    });
+  };
+  const pendingApprovals=workCenterFeed.approvals.filter(approval=>approval.status==='pending');
+  const unreadNotifications=workCenterFeed.notifications.filter(notification=>!notification.is_read);
+  const floatingProfileMember = memberProfilePopover ? data.members.find(member => member.id === memberProfilePopover.id) : undefined;
+  const floatingProfileProjects = floatingProfileMember ? memberProjectSummaries(floatingProfileMember, now) : [];
+  const currentWhiteboard = space.ornaments.find(ornament => ornament.room === currentRoom && ornament.asset === 'whiteboard');
+  const currentRadio = space.ornaments.find(ornament => ornament.room === currentRoom && ornament.asset === 'team_radio');
   const selectMember = (id: string) => {
     if (draft) return;
-    setSelected(id); setPanel('member');
+    setSelected(id); setPanel(workCenterPreview ? null : 'member');
     setEditing(current => current?.id === id ? current : null);
     const slot = data.seats.get(id);
     if (slot !== undefined) setRoom(Math.floor(slot / DESKS_PER_ROOM));
+  };
+  const toggleMemberProfile = (member: OfficeMember, target: HTMLButtonElement) => {
+    selectMember(member.id);
+    if(memberProfilePopover?.id===member.id){setMemberProfilePopover(null);return;}
+    const rect=target.getBoundingClientRect();
+    const width=Math.min(410,window.innerWidth-24);
+    setMemberProfilePopover({
+      id:member.id,
+      left:Math.max(12,Math.min(rect.left,window.innerWidth-width-12)),
+      bottom:Math.max(12,window.innerHeight-rect.top+10),
+    });
   };
   const openEditor = () => {
     const member = data.members.find(m => m.id === (demo ? selected : data.viewerId));
@@ -302,7 +528,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     event.preventDefault();
     const text=chatText.trim();
     if(!text||!viewerCheckedIn||spaceSaving) return;
-    if(await saveSpace({type:'chat',text})) setChatText('');
+    if(await saveSpace({type:'chat',text})) {setNow(Date.now());setChatText('');}
   };
   const selectDesk = (slot: number) => { setObjectMenu({id:`desk:${slot}`,x:45,y:45,room:currentRoom}); setSpaceError(''); };
   const openLayout = () => {
@@ -329,16 +555,17 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
     else if(await saveSpace({type:'layout',ornaments,desks:space.desks,layoutRevision:space.layoutRevision})) closeObjectMenu();
   };
 
-  return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
+  return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
     {immersive && <header className="office-game-hud">
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
+      <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER PREVIEW · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
       <div className="office-game-actions">
         <div className="office-clock" title={`Zona waktu ${clock.timezone}${schedule?.configured ? '' : ' · jadwal standar Sen–Jum 08:30–17:30'}`}>
           {clock.phase === 'Malam' ? <Moon size={14} /> : <Sun size={14} />}<div><time>{now ? clock.clock : '—:—:—'}</time><small>{clock.phase} · {clock.timezone.split('/').at(-1)}</small></div>
         </div>
+        <OfficeWeather />
         {rooms > 1 && <select aria-label="Area kantor" value={currentRoom} onChange={event => { setRoom(Number(event.target.value)); setSelectedOrnament(''); }}>{Array.from({ length: rooms }, (_, i) => <option key={i} value={i}>Area {i + 1}</option>)}</select>}
-        {onStatistics ? <button type="button" title="Kembali ke dashboard" aria-label="Kembali ke dashboard" onClick={onStatistics}><ArrowLeft size={17} /><span className="office-back-copy">Dashboard</span></button> : <Link className="office-back-dashboard" href="/dashboard" aria-label="Kembali ke dashboard"><ArrowLeft size={17} /></Link>}
+        {onStatistics ? <button type="button" title="Kembali ke workspace" aria-label="Kembali ke workspace" onClick={onStatistics}><LayoutDashboard size={17} /><span className="office-back-copy">Workspace</span></button> : <Link className="office-back-dashboard" href="/dashboard" aria-label="Kembali ke workspace"><LayoutDashboard size={17} /><span className="office-back-copy">Workspace</span></Link>}
         <button type="button" aria-label="Sinkronkan data kantor" disabled={refreshing} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button>
       </div>
     </header>}
@@ -367,7 +594,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
           <button type="button" className="office-motion" aria-label={motion ? 'Jeda animasi' : 'Aktifkan animasi'} aria-pressed={!motion} onClick={() => setMotion(value => !value)}>{motion ? <Pause size={14} /> : <Play size={14} />}<span>{motion ? 'Jeda animasi' : 'Aktifkan animasi'}</span></button>
         </div>
       </div>
-      <OfficeCanvas signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={selected} onSelect={id=>{if(draft)return;selectMember(id);if(demo||id===data.viewerId){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
+      <OfficeCanvas workCenterPreview={workCenterPreview} showBubbles={!workCenterPreview||showSceneBubbles} onBubble={rememberChatBubble} officeTools={workCenterPreview?{onActivity:()=>{setActivityMenu(true);setUtility(null);setObjectMenu(null);setSpaceError('');},onLights:()=>{setUtility({boardId:null});setSpaceError('');},onWhiteboard:currentWhiteboard?()=>{setUtility({boardId:currentWhiteboard.id});setSpaceError('');}:undefined,onRadio:currentRadio?()=>{setMusicOpen(true);setUtility(null);setObjectMenu(null);setSpaceError('');}:undefined,bubblesVisible:showSceneBubbles,onBubbles:()=>setShowSceneBubbles(value=>!value)}:undefined} signText={space.signText||DEFAULT_SIGN_TEXT} lights={space.lights} schedule={schedule} desks={draft && canEdit ? draft.desks : space.desks} members={members} motion={motion} selected={workCenterPreview ? workCenterMember?.id || selected : selected} onSelect={id=>{if(draft)return;selectMember(id);if(!workCenterPreview&&(demo||id===data.viewerId)){setActivityMenu(true);setSpaceError('');setPanel(null);}}} room={currentRoom} ornaments={shownOrnaments} editing={Boolean(draft && canEdit && !spaceSaving)} selectedOrnament={selectedOrnament} onSelectOrnament={id=>{setSelectedOrnament(id);setSpaceError('');}} onSelectDesk={selectDesk} onObjectMenu={target=>{const asset=shownOrnaments.find(o=>o.id===target.id)?.asset;if(!draft&&asset==='whiteboard'){setUtility({boardId:target.id});setObjectMenu(null);}else if(!draft&&asset==='team_radio'){setMusicOpen(true);setObjectMenu(null);}else setObjectMenu({...target,room:currentRoom});setSpaceError('');}} onMoveOrnament={(id, x, z, y) => {
         if(!draft || !canEdit || spaceSaving) return;
         try {
           if(id.startsWith('desk:')) setDraft({...draft,desks:moveDesk(draft.desks,Number(id.slice(5)),{x,z},rooms,draft.ornaments)});
@@ -383,7 +610,55 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Jeda: lounge · Checkout: keluar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
-    {immersive&&<form className="office-avatar-chat" onSubmit={event=>void sendAvatarChat(event)}>
+    {workCenterPreview && <aside className="office-work-center-panel" aria-label="Pusat operasional tim">
+      <header className="office-work-center-header">
+        <div><div className="office-work-center-kicker"><span /> WORK CENTER <small>PREVIEW</small></div><p>{active} online · {paused} istirahat · {projectRollups.length} project</p></div>
+        <button className="office-work-center-presence-trigger" type="button" aria-label="Buka presensi live" title="Presensi live" onClick={()=>window.dispatchEvent(new Event('bilik-open-floating-attendance'))}><Clock3 size={16}/><i data-active={Boolean(viewerMember&&viewerMember.status!=='offline')}/></button>
+      </header>
+      <div className="office-work-center-tabs" role="tablist" aria-label="Pusat operasional tim">
+        {([['today','Hari Ini'],['projects','Projects'],['inbox','Inbox']] as const).map(([tab,label])=><button id={`work-center-tab-${tab}`} aria-controls={`work-center-panel-${tab}`} key={tab} type="button" role="tab" aria-selected={workCenterTab===tab} onClick={()=>setWorkCenterTab(tab)}>{label}</button>)}
+      </div>
+      <div className="office-work-center-body" id={`work-center-panel-${workCenterTab}`} role="tabpanel" aria-labelledby={`work-center-tab-${workCenterTab}`}>
+        {workCenterTab==='today'&&<>
+          <section className="office-work-center-team-summary"><span>RINGKASAN TIM</span><strong>{active} dari {data.members.length} anggota hadir</strong><p>{activeTasks.length} task masih aktif di {projectRollups.length} project.</p></section>
+          <div className="office-work-center-metrics office-work-center-metrics-team">
+            <div><Users size={14}/><strong>{active}</strong><span>Online</span></div>
+            <div><ListChecks size={14}/><strong>{activeTasks.length}</strong><span>Task aktif</span></div>
+            <div><CircleAlert size={14}/><strong>{pendingApprovals.length}</strong><span>Approval</span></div>
+            <div><Bell size={14}/><strong>{workCenterFeed.unreadCount}</strong><span>Belum dibaca</span></div>
+          </div>
+          <section className="office-work-center-team-tasks">
+            <div className="office-work-center-section-title"><span>PRIORITAS AKTIF</span><Link href="/my-tasks">Lihat semua <ArrowUpRight size={10}/></Link></div>
+            {activeTasks.length?activeTasks.slice(0,4).map((task,index)=><article key={task.id}><i data-active={task.status==='in_progress'}>{index+1}</i><div><strong>{task.name}</strong><span>{task.member}{task.project?` · ${task.project}`:''}</span></div><em>{task.status.replaceAll('_',' ')}</em></article>):<p className="office-work-center-empty"><CheckCircle2 size={16}/> Tidak ada task aktif yang perlu ditindaklanjuti.</p>}
+          </section>
+          <section className="office-work-center-quick-links" aria-label="Akses cepat">
+            <Link href="/timeline"><Clock3 size={15}/><span><strong>Timeline tim</strong><small>Lihat jadwal & deadline</small></span><ArrowUpRight size={11}/></Link>
+            <Link href="/approvals"><CheckCircle2 size={15}/><span><strong>Approval Center</strong><small>{pendingApprovals.length?`${pendingApprovals.length} menunggu tinjauan`:'Tidak ada yang tertunda'}</small></span><ArrowUpRight size={11}/></Link>
+          </section>
+        </>}
+        {workCenterTab==='projects'&&<section className="office-work-center-projects">
+          <div className="office-work-center-section-title"><span>PROJECT AKTIF</span><Link href="/projects">Buka hub <ArrowUpRight size={10}/></Link></div>
+          {projectRollups.length?projectRollups.map(project=>{
+            const progress=project.taskCount?Math.min(100,Math.round(project.completedTasks/project.taskCount*100)):0;
+            return <Link href={workCenterProjectHref(project.name)} onClick={()=>rememberProjectFolder(project)} key={project.name} className="office-work-center-project-card" aria-label={`Buka folder project ${project.name}`}><div className="office-work-center-project-card-heading"><span><FolderKanban size={15}/></span><div><strong>{project.name}</strong><small>{project.members.join(', ')}</small></div><b>{progress}%</b></div><i><span style={{width:`${progress}%`}}/></i><footer><span>{project.taskCount} task</span><span>{formatWorkDuration(project.trackedSeconds)} tercatat</span></footer></Link>;
+          }):<p className="office-work-center-empty">Belum ada project aktif dari data tim.</p>}
+        </section>}
+        {workCenterTab==='inbox'&&<section className="office-work-center-inbox">
+          <div className="office-work-center-inbox-summary"><div><Bell size={15}/><span><strong>{workCenterFeed.unreadCount}</strong><small>Notifikasi baru</small></span></div><div><CircleAlert size={15}/><span><strong>{pendingApprovals.length}</strong><small>Approval tertunda</small></span></div></div>
+          <div className="office-work-center-section-title"><span>NOTIFIKASI</span><Link href="/notifications">Lihat semua <ArrowUpRight size={10}/></Link></div>
+          {unreadNotifications.length?unreadNotifications.slice(0,4).map(notification=><Link href={notification.entity_url||'/notifications'} key={notification.id} className="office-work-center-inbox-item"><i><Bell size={12}/></i><div><strong>{notification.title}</strong><span>{notification.message}</span><small>{compactDate(notification.created_at)}</small></div></Link>):<p className="office-work-center-empty">{workCenterFeed.loading?'Mengambil notifikasi…':'Semua notifikasi sudah dibaca.'}</p>}
+          <div className="office-work-center-section-title office-work-center-approval-title"><span>MENUNGGU APPROVAL</span><Link href="/approvals">Buka center <ArrowUpRight size={10}/></Link></div>
+          {pendingApprovals.length?pendingApprovals.slice(0,3).map(approval=><Link href="/approvals" key={approval.id} className="office-work-center-inbox-item"><i><CheckCircle2 size={12}/></i><div><strong>{approval.title}</strong><span>{approval.requested_by_name||'Permintaan tim'}</span><small>{compactDate(approval.submitted_at)}</small></div></Link>):<p className="office-work-center-empty">Tidak ada approval yang menunggu.</p>}
+        </section>}
+      </div>
+    </aside>}
+    {workCenterPreview&&<div className="office-work-center-chat-stack">
+      {visibleChatHistory.length>0&&<div className="office-work-center-chat-history" aria-label="Riwayat percakapan kantor" aria-live="polite">{visibleChatHistory.map(message=><article key={message.key}><span className="office-work-center-chat-avatar" style={message.profilePicture?{backgroundImage:`url(${JSON.stringify(message.profilePicture)})`}:undefined}>{message.profilePicture?'':message.name.slice(0,2).toUpperCase()}</span><div><strong>{message.name}</strong><p>{message.text}</p></div></article>)}</div>}
+      <form className="office-work-center-chat" onSubmit={event=>void sendAvatarChat(event)}>
+        <label htmlFor="work-center-chat">Tulis pesan untuk ruang 3D</label><input id="work-center-chat" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Tulis pesan…':'Check-in untuk mengirim pesan'}/><small>{chatText.length}/150</small><button type="submit" disabled={!chatText.trim()||!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} aria-label="Kirim pesan avatar"><Send size={14}/></button>
+      </form>
+    </div>}
+    {immersive&&!workCenterPreview&&<form className="office-avatar-chat" onSubmit={event=>void sendAvatarChat(event)}>
       <input aria-label="Pesan bubble avatar" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Ketik pesan avatar…':'Check-in untuk mengobrol'}/>
       <span>{chatText.length}/150</span>
       <button type="submit" disabled={!chatText.trim()||!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} aria-label="Kirim pesan avatar"><Send size={15}/></button>
@@ -452,6 +727,58 @@ export default function OfficeDashboard({ demo = false, immersive = false, onSta
         </div> : <><Link href="/attendance" className="office-primary-link"><Check size={15} /> Buka presensi <ArrowUpRight size={15} /></Link><Link href="/office-preview" target="_blank" className="office-preview-link">Coba simulasi gerakan <ArrowUpRight size={13} /></Link></>}
       </aside>
     </div>
+    {workCenterPreview && floatingProfileMember && memberProfilePopover && <aside
+      id={`office-member-profile-${floatingProfileMember.id}`}
+      className="office-member-profile-popover"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`office-member-profile-title-${floatingProfileMember.id}`}
+      style={{left:memberProfilePopover.left,bottom:memberProfilePopover.bottom}}
+    >
+      <header>
+        <span className="office-member-profile-avatar">{floatingProfileMember.name.slice(0,2).toUpperCase()}<i className={`status-${floatingProfileMember.status}`}/></span>
+        <div><strong id={`office-member-profile-title-${floatingProfileMember.id}`}>{floatingProfileMember.name}</strong><span>{roleLabel(floatingProfileMember.profile?.roleTitle||floatingProfileMember.role)}{floatingProfileMember.profile?.division?` · ${floatingProfileMember.profile.division}`:''}</span></div>
+        <button type="button" onClick={()=>setMemberProfilePopover(null)} aria-label={`Tutup profil ${floatingProfileMember.name}`}><X size={15}/></button>
+      </header>
+      <div className="office-member-profile-body">
+        <div className="office-member-profile-status"><span><i className={`status-${floatingProfileMember.status}`}/>{statusLabel(floatingProfileMember)}</span><strong>{floatingProfileMember.project||'Belum ada project aktif'}</strong></div>
+        <div className="office-member-profile-metrics">
+          <div><Target size={14}/><span><strong>{floatingProfileMember.profile?.kpis.length||0}</strong>KPI aktif</span></div>
+          <div><ListChecks size={14}/><span><strong>{floatingProfileMember.tasks?.length||0}</strong>Task berjalan</span></div>
+          <div><BriefcaseBusiness size={14}/><span><strong>{floatingProfileProjects.length}</strong>Project</span></div>
+        </div>
+
+        <section className="office-member-profile-section">
+          <h4><BriefcaseBusiness size={13}/> Jobdesk</h4>
+          {floatingProfileMember.profile?.jobSummary&&<p>{floatingProfileMember.profile.jobSummary}</p>}
+          {floatingProfileMember.profile?.jobDescriptions.length ? <ul>{floatingProfileMember.profile.jobDescriptions.slice(0,4).map((item,index)=><li key={`${item}-${index}`}>{item}</li>)}</ul> : !floatingProfileMember.profile?.jobSummary&&<p className="is-empty">Jobdesk belum diringkas di modul Performance.</p>}
+        </section>
+
+        <section className="office-member-profile-section">
+          <div className="office-member-profile-heading"><h4><Target size={13}/> KPI &amp; OKR</h4>{floatingProfileMember.profile?.latestScore!==undefined&&<span>Nilai {Math.round(floatingProfileMember.profile.latestScore)}</span>}</div>
+          {floatingProfileMember.profile?.kpis.length ? <div className="office-member-profile-kpis">{floatingProfileMember.profile.kpis.slice(0,4).map(kpi=><article key={kpi.id}>
+            <div><strong>{kpi.title}</strong><span>{kpi.cadence.replaceAll('_',' ')||'Target'}{kpi.targetValue?` · target ${kpi.targetValue}${kpi.unit==='percent'?'%':` ${kpi.unit}`}`:''}</span></div>
+            {kpi.progress!==undefined?<><b>{Math.round(kpi.progress)}%</b><i><span style={{width:`${Math.max(0,Math.min(100,kpi.progress))}%`}}/></i></>:<b title={floatingProfileMember.profile?.performanceRestricted?'Progres hanya terlihat oleh pemilik dan admin':'Belum ada update'}>—</b>}
+          </article>)}</div> : <p className="is-empty">Belum ada KPI yang terhubung dengan profil ini.</p>}
+          {floatingProfileMember.profile?.performanceRestricted&&<small className="office-member-profile-private">Progress KPI hanya terlihat oleh pemilik profil dan admin.</small>}
+        </section>
+
+        <section className="office-member-profile-section">
+          <div className="office-member-profile-heading"><h4><ListChecks size={13}/> Task aktif</h4><span>{floatingProfileMember.tasks?.length||0}</span></div>
+          {floatingProfileMember.tasks?.length?<div className="office-member-profile-tasks">{floatingProfileMember.tasks.slice(0,4).map((task,index)=><article key={`${task.name}-${index}`}><i>{index+1}</i><div><strong>{task.name}</strong><span>{task.status.replaceAll('_',' ')}</span></div></article>)}</div>:<p className="is-empty">Tidak ada task aktif yang terhubung.</p>}
+        </section>
+
+        <section className="office-member-profile-section">
+          <div className="office-member-profile-heading"><h4><Timer size={13}/> Project &amp; waktu kerja</h4><span>{floatingProfileProjects.length}</span></div>
+          {floatingProfileProjects.length?<div className="office-member-profile-projects">{floatingProfileProjects.slice(0,5).map(project=><article key={project.name}><div><strong>{project.name}</strong><span>{project.taskCount?`${project.completedTasks}/${project.taskCount} task selesai`:'Project presensi aktif'}</span></div><b>{formatWorkDuration(project.trackedSeconds)}</b></article>)}</div>:<p className="is-empty">Belum ada project atau waktu kerja yang tercatat.</p>}
+        </section>
+      </div>
+      <footer><Link href="/performance">Performance <ArrowUpRight size={11}/></Link><Link href="/tasks">Tasks <ArrowUpRight size={11}/></Link><Link href="/projects">Projects <ArrowUpRight size={11}/></Link></footer>
+    </aside>}
+    {workCenterPreview && <nav className="office-agent-strip" aria-label="Pilih anggota tim">
+      <div className="office-agent-strip-label"><span>TEAM</span><strong>{active} online</strong></div>
+      <div className="office-agent-strip-list">{data.members.map(member=><button key={member.id} type="button" className="office-agent-card" aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-avatar">{member.name.slice(0,2).toUpperCase()}<i className={`status-${member.status}`}/></span><span className="office-agent-copy"><strong>{member.name}</strong><small>{member.project||statusLabel(member)}</small></span></button>)}</div>
+    </nav>}
     <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {realtimeConnected ? 'Realtime + cadangan 10 detik' : 'Sinkron tiap 10 detik'}</span>}</footer>
   </section>;
 }
