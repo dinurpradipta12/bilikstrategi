@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Settings, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type SyntheticEvent } from 'react';
+import { MapPin, Lightbulb, StickyNote, Radio, Send, Type, LayoutDashboard, PencilRuler, Moon, Sun, ArrowUpRight, Box, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Coffee, LogIn, LogOut, Pause, Play, Plus, RefreshCw, Settings, Users, X, BriefcaseBusiness, Target, ListChecks, Timer, Bell, FolderKanban, CircleAlert, CheckCircle2, CalendarOff, LockKeyhole } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { deskLabel, deskPosition, officeTime, type DeskLayout, type OfficeActivityZone, defaultAvatar, parseAvatar, workedSeconds, DESKS_PER_ROOM, reconcileSeats, statusLabel, type AvatarStyle, type OfficeMember, type OfficeSnapshot } from '@/lib/spatial-office/model';
 import { OFFICE_BRAND } from '@/lib/spatial-office/branding';
@@ -17,6 +17,8 @@ import OfficeObjectMenu from './OfficeObjectMenu';
 import OfficeMusicPlayer from './OfficeMusicPlayer';
 import OfficeSignEditor from './OfficeSignEditor';
 import OfficeWeather from './OfficeWeather';
+import HolidayAdminControl from './HolidayAdminControl';
+import { useHolidayAccess } from '@/components/auth/HolidayAccessContext';
 import type { ObjectMenuTarget, OfficeBubbleEvent } from '@/lib/spatial-office/scene';
 import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, moveRoomLight, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament, type RoomLightKey, type RoomLightPosition } from '@/lib/spatial-office/space';
 import { normalizeProjectLookupName, rememberWorkCenterProject, workCenterProjectHref } from '@/lib/projects/work-center-snapshot';
@@ -93,6 +95,18 @@ function compactDate(value?: string) {
   return date.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function holidayDateLabel(value?: string) {
+  if (!value) return '';
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 function memberProjectSummaries(member: OfficeMember, now: number) {
   const projects = (member.profile?.projects || []).map(project => ({ ...project }));
   if (!member.project) return projects;
@@ -107,6 +121,7 @@ function memberProjectSummaries(member: OfficeMember, now: number) {
 }
 
 export default function OfficeDashboard({ demo = false, immersive = false, workCenterPreview = false, embeddedAttendance = false, onStatistics }: { demo?: boolean; immersive?: boolean; workCenterPreview?: boolean; embeddedAttendance?: boolean; onStatistics?: () => void }) {
+  const { access: holidayAccess, locked: holidayLocked } = useHolidayAccess();
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [now, setNow] = useState(0);
   const [schedule, setSchedule] = useState<AttendanceSchedule>();
@@ -596,7 +611,24 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     setDraft({...draft,ornaments}); setSelectedOrnament(''); closeObjectMenu();
   };
 
-  return <section className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''}`} aria-label="Kantor 3D">
+  const blockHolidayInteraction = useCallback((event: SyntheticEvent) => {
+    if (!holidayLocked) return;
+    const target = event.target as Element | null;
+    if (target?.closest('.office-holiday-lock')) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, [holidayLocked]);
+
+  return <section
+    className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''} ${holidayLocked ? 'office-holiday-locked' : ''}`}
+    aria-label="Kantor 3D"
+    data-holiday-locked={holidayLocked || undefined}
+    onClickCapture={blockHolidayInteraction}
+    onSubmitCapture={blockHolidayInteraction}
+    onKeyDownCapture={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') blockHolidayInteraction(event);
+    }}
+  >
     {immersive && <header className="office-game-hud">
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER${demo ? ' PREVIEW' : ''} · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
@@ -845,6 +877,18 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       <div className="office-account-control"><button type="button" className="office-account-trigger" aria-label={`Buka menu akun ${accountMember?.name||''}`.trim()} aria-haspopup="dialog" aria-expanded={Boolean(accountPopover)} aria-controls="office-account-menu" onClick={event=>toggleAccountPopover(event.currentTarget)}><span className="office-account-trigger-avatar" aria-hidden="true" data-photo={Boolean(accountMember?.profilePicture)} style={accountMember?.profilePicture?{backgroundImage:`url(${JSON.stringify(accountMember.profilePicture)})`}:undefined}>{accountMember?.profilePicture?'':(accountMember?.name||'AK').slice(0,2).toUpperCase()}</span><ChevronDown size={13}/></button></div>
       <div className="office-agent-strip-list">{data.members.map(member=>{const {label,Icon}=memberStatusMeta(member.status);return <button key={member.id} type="button" className="office-agent-card" aria-pressed={workCenterMember?.id===member.id} aria-expanded={memberProfilePopover?.id===member.id} aria-controls={`office-member-profile-${member.id}`} onClick={event=>toggleMemberProfile(member,event.currentTarget)}><span className="office-agent-status" data-status={member.status} title={label} aria-label={label}><Icon size={12}/></span><span className="office-agent-avatar" aria-hidden="true" data-photo={Boolean(member.profilePicture)} style={member.profilePicture?{backgroundImage:`url(${JSON.stringify(member.profilePicture)})`}:undefined}>{member.profilePicture?'':member.name.slice(0,2).toUpperCase()}</span><span className="office-agent-copy"><strong>{member.name}</strong><small>{memberJobTitle(member)}</small></span></button>})}</div>
     </nav>}
+    {!demo && <HolidayAdminControl key={holidayAccess?.control.updatedAt || 'holiday-control'} />}
+    {holidayLocked && holidayAccess && <div className="office-holiday-lock" role="dialog" aria-modal="true" aria-labelledby="office-holiday-lock-title">
+      <section>
+        <span className="office-holiday-lock-icon"><CalendarOff size={24} /></span>
+        <p>WORKSPACE SEDANG LIBUR</p>
+        <h2 id="office-holiday-lock-title">Hari ini libur</h2>
+        <time>{holidayDateLabel(holidayAccess.date)}</time>
+        <strong>{holidayAccess.message}</strong>
+        <div><Clock3 size={15} /><span><small>Workspace dibuka kembali</small>{holidayAccess.nextWorkingLabel}</span></div>
+        <footer><LockKeyhole size={13} /> Seluruh tombol dan halaman kerja dikunci. Owner atau Admin tetap dapat masuk.</footer>
+      </section>
+    </div>}
     <footer className="office-footnote"><span>Karakter bergerak sebagai ilustrasi suasana kerja; bukan pelacakan aktivitas.</span>{!demo && data.syncedAt && <span>Sinkron terakhir {new Date(data.syncedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {realtimeConnected ? 'Realtime + cadangan 10 detik' : 'Sinkron tiap 10 detik'}</span>}</footer>
   </section>;
 }

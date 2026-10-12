@@ -1239,6 +1239,78 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-account-popover>nav small{margin-top:2px;color:#8a9588;font-size:7px}
 .office-account-popover button:focus-visible,.office-account-popover a:focus-visible{outline:2px solid #54725a;outline-offset:2px}
 
+.office-holiday-admin{position:absolute;right:24px;bottom:112px;z-index:78;color:#2e4537}
+.office-holiday-admin-compact{display:flex;align-items:center;gap:9px;padding:7px 8px 7px 11px;border:1px solid #d5dfd1;border-radius:14px;background:#fffffff2;box-shadow:0 12px 32px #20352e24;backdrop-filter:blur(12px)}
+.office-holiday-admin-compact>div{display:flex;min-width:116px;align-items:center;gap:7px}
+.office-holiday-admin-compact>div>svg{color:#58795f}
+.office-holiday-admin-compact>div span,.office-holiday-admin-compact strong,.office-holiday-admin-compact small{display:block}
+.office-holiday-admin-compact strong{font-size:9px}
+.office-holiday-admin-compact small{margin-top:2px;color:#819080;font-size:7px;font-weight:500}
+.office-holiday-switch{display:flex;align-items:center;gap:5px;cursor:pointer}
+.office-holiday-switch input,.office-holiday-setting-row input{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+.office-holiday-switch>span,.office-holiday-setting-row::after{content:"";position:relative;display:block;width:32px;height:18px;border-radius:99px;background:#a9b6aa;transition:background .18s ease;box-shadow:inset 0 0 0 1px #80918126}
+.office-holiday-switch>span::after,.office-holiday-setting-row::before{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #23392f36;transition:transform .18s ease}
+.office-holiday-switch input:checked+span,.office-holiday-setting-row:has(input:checked)::after{background:#c46558}
+.office-holiday-switch input:checked+span::after,.office-holiday-setting-row:has(input:checked)::before{transform:translateX(14px)}
+.office-holiday-switch input:focus-visible+span{outline:2px solid #54725a;outline-offset:2px}
+.office-holiday-switch em{min-width:24px;color:#657663;font-size:7px;font-style:normal;font-weight:750}
+.office-holiday-schedule-button{display:grid;width:31px;height:31px;place-items:center;border:1px solid #d5dfd1;border-radius:9px;background:#f3f7f0;color:#55705a}
+.office-holiday-admin-panel{position:absolute;right:0;bottom:50px;width:min(370px,calc(100vw - 28px));overflow:hidden;border:1px solid #d5dfd1;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 24px 70px #1f342d3b}
+.office-holiday-admin-panel>header{display:grid;grid-template-columns:38px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #e2e8df;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}
+.office-holiday-admin-panel>header>span{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:#fff0ed;color:#bd5b50}
+.office-holiday-admin-panel>header strong,.office-holiday-admin-panel>header small{display:block}
+.office-holiday-admin-panel>header strong{font-size:12px}
+.office-holiday-admin-panel>header small{margin-top:3px;color:#7b8979;font-size:8px}
+.office-holiday-admin-panel>header button{display:grid;width:30px;height:30px;place-items:center;border:1px solid #d4ddd0;border-radius:9px;background:#fff;color:#60725f}
+.office-holiday-admin-body{display:grid;gap:10px;padding:13px 14px}
+.office-holiday-admin-note{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:10px;background:#eef4eb;color:#58705b}
+.office-holiday-admin-note svg{flex:none;margin-top:1px}
+.office-holiday-admin-note p{margin:0;font-size:8px;line-height:1.5}
+.office-holiday-setting-row{position:relative;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #edf0eb;cursor:pointer}
+.office-holiday-setting-row>span{min-width:0;padding-right:45px}
+.office-holiday-setting-row strong,.office-holiday-setting-row small{display:block}
+.office-holiday-setting-row strong{font-size:9px}
+.office-holiday-setting-row small{margin-top:3px;color:#849083;font-size:7px;line-height:1.35}
+.office-holiday-setting-row::after{position:absolute;right:0}
+.office-holiday-setting-row::before{z-index:1;right:16px;left:auto}
+.office-holiday-date-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.office-holiday-date-grid label,.office-holiday-message-field{display:grid;gap:5px;color:#697a69;font-size:8px;font-weight:750}
+.office-holiday-date-grid input,.office-holiday-message-field textarea{min-width:0;border:1px solid #dce4d9;border-radius:9px;background:#fafcf9;padding:8px;color:#31483a;font:9px/1.35 inherit;outline:0}
+.office-holiday-date-grid input:focus,.office-holiday-message-field textarea:focus{border-color:#789278;box-shadow:0 0 0 2px #7892781f}
+.office-holiday-message-field{position:relative}
+.office-holiday-message-field textarea{resize:none}
+.office-holiday-message-field>small{position:absolute;right:7px;bottom:6px;color:#9aa499;font-size:7px}
+.office-holiday-error,.office-holiday-success{margin:0;font-size:8px;font-weight:700;line-height:1.45}
+.office-holiday-error{color:#c4564e}.office-holiday-success{display:flex;align-items:center;gap:5px;color:#4f855c}
+.office-holiday-admin-panel>footer{display:flex;justify-content:flex-end;gap:7px;padding:10px 14px;border-top:1px solid #e5e9e3;background:#fafbf9}
+.office-holiday-admin-panel>footer button{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;border:1px solid #d8e0d5;border-radius:9px;background:#fff;color:#60725f;font-size:8px;font-weight:750}
+.office-holiday-admin-panel>footer .is-primary{border-color:#49674f;background:#49674f;color:#fff}
+.office-holiday-admin-panel button:disabled,.office-holiday-admin input:disabled{opacity:.5;cursor:not-allowed}
+
+.spatial-office[data-holiday-locked=true]>:not(.office-holiday-lock){pointer-events:none;user-select:none}
+.spatial-office[data-holiday-locked=true]>.office-stage,.spatial-office[data-holiday-locked=true]>.office-work-center-panel,.spatial-office[data-holiday-locked=true]>.office-agent-strip{filter:saturate(.72) brightness(.88)}
+.office-holiday-lock{position:absolute;inset:12px;z-index:90;display:grid;place-items:center;border-radius:18px;background:#20382f52;backdrop-filter:blur(5px);pointer-events:auto}
+.office-holiday-lock>section{width:min(420px,calc(100% - 28px));padding:24px;border:1px solid #d7e0d4;border-radius:22px;background:#fffffff5;color:#30483a;text-align:center;box-shadow:0 24px 80px #172b244f}
+.office-holiday-lock-icon{display:grid;width:52px;height:52px;margin:0 auto 13px;place-items:center;border-radius:17px;background:#eef4e9;color:#59785f;box-shadow:inset 0 0 0 1px #d9e5d4}
+.office-holiday-lock>section>p{margin:0;color:#80907f;font-size:8px;font-weight:800;letter-spacing:.17em}
+.office-holiday-lock h2{margin:7px 0 3px;font-size:22px;letter-spacing:-.03em}
+.office-holiday-lock time{color:#849084;font-size:9px}
+.office-holiday-lock>section>strong{display:block;margin:15px 0;color:#48604e;font-size:13px;line-height:1.55}
+.office-holiday-lock>section>div{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #dce5d9;border-radius:12px;background:#f5f8f3;text-align:left}
+.office-holiday-lock>section>div svg{flex:none;color:#66826a}
+.office-holiday-lock>section>div span{font-size:9px;font-weight:750}
+.office-holiday-lock>section>div small{display:block;margin-bottom:3px;color:#879487;font-size:7px;font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.office-holiday-lock footer{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;color:#899488;font-size:8px;line-height:1.45}
+
+@media(max-width:620px){
+ .office-holiday-admin{right:14px;bottom:92px}
+ .office-holiday-admin-compact>div{display:none}
+ .office-holiday-admin-panel{right:-2px;width:min(350px,calc(100vw - 20px))}
+ .office-holiday-date-grid{grid-template-columns:1fr}
+ .office-holiday-lock{inset:8px}
+ .office-holiday-lock>section{padding:20px}
+}
+
 .office-member-profile-popover{position:fixed;z-index:70;display:flex;width:min(410px,calc(100vw - 24px));max-height:min(610px,calc(100dvh - 118px));flex-direction:column;overflow:hidden;border:1px solid #d7dfd4;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 22px 70px #1f342d38,0 4px 15px #23382f16;animation:office-profile-enter .16s ease-out}
 @keyframes office-profile-enter{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 .office-member-profile-popover>header{display:grid;grid-template-columns:44px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid #e6eae4;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}

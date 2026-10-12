@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import FloatingSidebar from '@/components/layout/FloatingSidebar';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import CommandMenu from '@/components/layout/CommandMenu';
 import CreateTaskModal from '@/components/tasks/CreateTaskModal';
-import HolidayAccessBlock, { type HolidayAccessSnapshot } from '@/components/auth/HolidayAccessBlock';
+import {
+  HolidayAccessProvider,
+  type HolidayAccessSnapshot,
+} from '@/components/auth/HolidayAccessContext';
 import FloatingAttendance from '@/components/attendance/FloatingAttendance';
 import AppPresenceTracker from '@/components/attendance/AppPresenceTracker';
 
@@ -18,6 +21,7 @@ import {
   pageKeyForPathname,
 } from '@/lib/auth/page-access';
 import { hasUnrestrictedPageAccess } from '@/lib/auth/app-role';
+import { normalizeHolidayControl } from '@/lib/attendance/schedule';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -25,10 +29,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [pageAccessState, setPageAccessState] = useState<'checking' | 'allowed' | 'denied'>('checking');
-  const [holidayAccessState, setHolidayAccessState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
+  const [holidayAccessState, setHolidayAccessState] = useState<'checking' | 'ready'>('checking');
   const [holidayAccess, setHolidayAccess] = useState<HolidayAccessSnapshot | null>(null);
+  const [holidayRefreshToken, setHolidayRefreshToken] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
+  const refreshHolidayAccess = useCallback(() => {
+    setHolidayRefreshToken((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     // 1. Strict Authentication Check for All Dashboard Routes
@@ -68,14 +76,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (isAuthenticated !== true) {
-      setPageAccessState('checking');
       return;
     }
 
     const pageKey = pageKeyForPathname(pathname);
 
     let cancelled = false;
-    setPageAccessState('checking');
+    queueMicrotask(() => {
+      if (!cancelled) setPageAccessState('checking');
+    });
 
     fetch('/api/clickup/user', { cache: 'no-store' })
       .then(async (response) => {
@@ -131,8 +140,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (isAuthenticated !== true) {
-      setHolidayAccessState('checking');
-      setHolidayAccess(null);
       return;
     }
 
@@ -144,27 +151,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           cache: 'no-store',
         });
         if (!response.ok) {
-          if (!cancelled) setHolidayAccessState('allowed');
+          if (!cancelled) setHolidayAccessState('ready');
           return;
         }
 
         const data = await response.json().catch(() => ({}));
         const access = data?.access;
 
-        // Holiday enforcement stays fail-open until the schedule migration and
-        // server service key are both available, preventing accidental lockout.
-        if (
-          cancelled ||
-          data?.storage_ready !== true ||
-          data?.access_control_ready !== true ||
-          access?.allowed !== false
-        ) {
-          if (!cancelled) {
-            setHolidayAccess(null);
-            setHolidayAccessState('allowed');
-          }
-          return;
-        }
+        if (cancelled) return;
 
         setHolidayAccess({
           date: String(access.date || ''),
@@ -173,13 +167,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ? access.request_status
             : 'none',
           requestReason: access.request?.reason ? String(access.request.reason) : undefined,
+          isAdmin: access?.is_admin === true,
+          isHoliday: access?.is_holiday === true,
+          allowed: access?.allowed !== false,
+          mode: ['manual', 'scheduled', 'weekly'].includes(String(access?.holiday_mode))
+            ? access.holiday_mode
+            : null,
+          message: String(access?.holiday_message || 'Hari ini libur. Besok kita kembali lagi.'),
+          control: normalizeHolidayControl(
+            access?.holiday_control,
+            Boolean(access?.holiday_control?.configured)
+          ),
+          storageReady: data?.access_control_ready === true,
         });
-        setHolidayAccessState('blocked');
+        setHolidayAccessState('ready');
       } catch {
         // A temporary API or database failure must not lock out the workspace.
         if (!cancelled) {
           setHolidayAccess(null);
-          setHolidayAccessState('allowed');
+          setHolidayAccessState('ready');
         }
       }
     };
@@ -187,13 +193,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     loadHolidayAccess();
     const interval = window.setInterval(loadHolidayAccess, 10000);
     window.addEventListener('focus', loadHolidayAccess);
+    window.addEventListener('bilik-holiday-control-refresh', loadHolidayAccess);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener('focus', loadHolidayAccess);
+      window.removeEventListener('bilik-holiday-control-refresh', loadHolidayAccess);
     };
-  }, [isAuthenticated]);
+  }, [holidayRefreshToken, isAuthenticated]);
+
+  const holidayLocked = Boolean(
+    holidayAccess?.isHoliday &&
+    holidayAccess.allowed === false &&
+    holidayAccess.isAdmin === false
+  );
+
+  useEffect(() => {
+    if (holidayAccessState === 'ready' && holidayLocked && pathname !== '/dashboard') {
+      router.replace('/dashboard');
+    }
+  }, [holidayAccessState, holidayLocked, pathname, router]);
+
+  const holidayContextValue = {
+    access: holidayAccess,
+    locked: holidayLocked,
+    refresh: refreshHolidayAccess,
+  };
 
   if (isAuthenticated === false) {
     return (
@@ -221,8 +247,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (holidayAccessState === 'blocked' && holidayAccess) {
-    return <HolidayAccessBlock access={holidayAccess} />;
+  if (holidayLocked && pathname !== '/dashboard') {
+    return (
+      <div className="min-h-screen bg-[#F7F7F8] flex items-center justify-center text-[#24324A] p-6">
+        <div className="max-w-sm text-center space-y-3">
+          <div className="w-8 h-8 border-3 border-[#24324A]/20 border-t-[#4F9D78] rounded-full animate-spin mx-auto" />
+          <h1 className="text-base font-extrabold">Workspace sedang libur</h1>
+          <p className="text-xs text-[#737680]">Mengarahkan kembali ke dashboard kantor…</p>
+        </div>
+      </div>
+    );
   }
 
   if (pageAccessState === 'denied') {
@@ -237,11 +271,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (pathname === '/dashboard') return <div data-office-shell data-app-shell className="min-h-dvh bg-[#e8ece1] text-[#263d39]">
-    <main>{children}</main><AppPresenceTracker /><FloatingSidebar />
-  </div>;
+  if (pathname === '/dashboard') return <HolidayAccessProvider value={holidayContextValue}>
+    <div data-office-shell data-app-shell className="min-h-dvh bg-[#e8ece1] text-[#263d39]">
+      <main>{children}</main>
+      {!holidayLocked && <><AppPresenceTracker /><FloatingSidebar /></>}
+    </div>
+  </HolidayAccessProvider>;
 
   return (
+    <HolidayAccessProvider value={holidayContextValue}>
     <div data-app-shell className="min-h-screen bg-[#F7F7F8] text-[#202124] flex flex-col md:flex-row">
       {/* Collapsible Sidebar (Desktop) */}
       <div data-sidebar-layer className="hidden md:block">
@@ -287,5 +325,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
 
     </div>
+    </HolidayAccessProvider>
   );
 }

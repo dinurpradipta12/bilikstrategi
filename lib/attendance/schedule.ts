@@ -31,6 +31,23 @@ export type AttendanceAccessRequest = {
   createdAt?: string | null;
 };
 
+export type HolidayControl = {
+  manualActive: boolean;
+  scheduledEnabled: boolean;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  message: string;
+  updatedAt?: string | null;
+  updatedByName?: string | null;
+  configured?: boolean;
+};
+
+export type ActiveHolidayControl = {
+  active: boolean;
+  mode: 'manual' | 'scheduled' | null;
+  nextOpenAt: string | null;
+};
+
 // JavaScript uses Sunday = 0. The UI deliberately presents Monday first.
 export const WORK_WEEK: ReadonlyArray<Pick<WorkDaySchedule, 'day' | 'label' | 'shortLabel'>> = [
   { day: 1, label: 'Senin', shortLabel: 'Sen' },
@@ -48,6 +65,17 @@ export const DEFAULT_WORK_DAYS: WorkDaySchedule[] = WORK_WEEK.map((day) => ({
   startTime: '08:30',
   endTime: '17:30',
 }));
+
+export const DEFAULT_HOLIDAY_CONTROL: HolidayControl = {
+  manualActive: false,
+  scheduledEnabled: false,
+  scheduledStart: null,
+  scheduledEnd: null,
+  message: 'Hari ini libur. Besok kita kembali lagi.',
+  updatedAt: null,
+  updatedByName: null,
+  configured: false,
+};
 
 function normalizeTime(value: unknown, fallback: string) {
   const candidate = String(value || '').trim();
@@ -104,6 +132,56 @@ export function normalizeAttendanceSchedule(row?: Record<string, unknown> | null
     updatedAt: row?.updated_at ? String(row.updated_at) : null,
     configured,
   } satisfies AttendanceSchedule;
+}
+
+function normalizeIsoDate(value: unknown) {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function normalizeHolidayControl(
+  value?: Record<string, unknown> | null,
+  configured = true
+): HolidayControl {
+  const source = value && typeof value === 'object' ? value : {};
+  const message = String(source.message || DEFAULT_HOLIDAY_CONTROL.message).trim().slice(0, 240);
+
+  return {
+    manualActive: source.manualActive === true || source.manual_active === true,
+    scheduledEnabled: source.scheduledEnabled === true || source.scheduled_enabled === true,
+    scheduledStart: normalizeIsoDate(source.scheduledStart ?? source.scheduled_start),
+    scheduledEnd: normalizeIsoDate(source.scheduledEnd ?? source.scheduled_end),
+    message: message || DEFAULT_HOLIDAY_CONTROL.message,
+    updatedAt: normalizeIsoDate(source.updatedAt ?? source.updated_at),
+    updatedByName: source.updatedByName || source.updated_by_name
+      ? String(source.updatedByName || source.updated_by_name).trim().slice(0, 120)
+      : null,
+    configured,
+  };
+}
+
+export function resolveHolidayControl(
+  control: HolidayControl,
+  now: Date | number = new Date()
+): ActiveHolidayControl {
+  if (control.manualActive) {
+    return { active: true, mode: 'manual', nextOpenAt: null };
+  }
+
+  const timestamp = now instanceof Date ? now.getTime() : Number(now);
+  const startsAt = control.scheduledStart ? Date.parse(control.scheduledStart) : Number.NaN;
+  const endsAt = control.scheduledEnd ? Date.parse(control.scheduledEnd) : Number.NaN;
+  const scheduledActive = control.scheduledEnabled
+    && Number.isFinite(timestamp)
+    && Number.isFinite(startsAt)
+    && Number.isFinite(endsAt)
+    && startsAt <= timestamp
+    && timestamp < endsAt;
+
+  return scheduledActive
+    ? { active: true, mode: 'scheduled', nextOpenAt: control.scheduledEnd }
+    : { active: false, mode: null, nextOpenAt: null };
 }
 
 export function formatDateYmd(date = new Date(), timeZone?: string) {

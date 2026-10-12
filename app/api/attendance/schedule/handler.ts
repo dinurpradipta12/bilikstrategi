@@ -19,10 +19,13 @@ import {
   getWorkDayForDate,
   isValidDateYmd,
   normalizeAttendanceSchedule,
+  normalizeHolidayControl,
   normalizeWorkDays,
+  resolveHolidayControl,
   toAttendanceAccessRequest,
   type AttendanceAccessRequest,
   type AttendanceSchedule,
+  type HolidayControl,
 } from '@/lib/attendance/schedule';
 
 export const runtime = 'edge';
@@ -35,6 +38,8 @@ type RequestIdentity = {
   appRole: AppRole;
   isAdmin: boolean;
 };
+
+const HOLIDAY_CONTROL_KEY = `attendance-holiday-control:${ATTENDANCE_WORKSPACE_KEY}`;
 
 function decodeCookie(value: string | undefined) {
   if (!value) return '';
@@ -115,6 +120,45 @@ async function readSchedule() {
   return { schedule, configured, error: result.error };
 }
 
+async function readHolidayControl() {
+  if (!isSupabaseAdminConfigured()) {
+    return normalizeHolidayControl(null, false);
+  }
+
+  const response = await supabaseAdminFetch(
+    `app_settings?select=value,updated_at&key=eq.${encodeURIComponent(HOLIDAY_CONTROL_KEY)}&limit=1`
+  );
+  if (!response.ok) throw new Error(await response.text());
+  const rows = await response.json().catch(() => []);
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  return normalizeHolidayControl(
+    row?.value ? { ...row.value, updated_at: row.updated_at || row.value?.updated_at } : null,
+    Boolean(row?.value)
+  );
+}
+
+async function saveHolidayControl(control: HolidayControl, identity: RequestIdentity) {
+  const updatedAt = new Date().toISOString();
+  const value = {
+    manual_active: control.manualActive,
+    scheduled_enabled: control.scheduledEnabled,
+    scheduled_start: control.scheduledStart,
+    scheduled_end: control.scheduledEnd,
+    message: control.message,
+    updated_at: updatedAt,
+    updated_by_email: identity.email || null,
+    updated_by_name: identity.name || null,
+  };
+  const response = await supabaseAdminFetch('app_settings?on_conflict=key', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({ key: HOLIDAY_CONTROL_KEY, value, updated_at: updatedAt }),
+  });
+
+  if (!response.ok) throw new Error(await response.text());
+  return normalizeHolidayControl(value, true);
+}
+
 async function readRequest(email: string, requestDate: string): Promise<AttendanceAccessRequest | null> {
   if (!email || !isSupabaseAdminConfigured()) return null;
 
@@ -142,6 +186,24 @@ async function readPendingRequests(): Promise<AttendanceAccessRequest[]> {
 function getRequestedDate(value: unknown, timezone: string) {
   const candidate = String(value || '');
   return isValidDateYmd(candidate) ? candidate : formatDateYmd(new Date(), timezone);
+}
+
+function scheduledReturnLabel(value: string | null, timezone: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  try {
+    return date.toLocaleString('id-ID', {
+      timeZone: timezone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return date.toLocaleString('id-ID');
+  }
 }
 
 async function saveSchedule(
@@ -174,19 +236,23 @@ export async function GET(req: NextRequest) {
     const identity = await resolveIdentity(req);
     const { searchParams } = new URL(req.url);
     const includeRequests = searchParams.get('include_requests') === '1';
-    const { schedule, configured } = await readSchedule();
+    const [{ schedule, configured }, holidayControl] = await Promise.all([
+      readSchedule(),
+      readHolidayControl(),
+    ]);
     const date = getRequestedDate(searchParams.get('date'), schedule.timezone);
     const workDay = getWorkDayForDate(schedule, date);
-    const isHoliday = configured && workDay?.isWorking !== true;
-    const accessControlReady = configured && isSupabaseAdminConfigured();
+    const weeklyHoliday = configured && workDay?.isWorking !== true;
+    const activeControl = resolveHolidayControl(holidayControl);
+    const isHoliday = weeklyHoliday || activeControl.active;
+    const accessControlReady = isSupabaseAdminConfigured() && (configured || holidayControl.configured === true);
     const request = !identity.isAdmin && accessControlReady
       ? await readRequest(identity.email, date)
       : null;
     const allowed =
       identity.isAdmin ||
       !isHoliday ||
-      !accessControlReady ||
-      request?.status === 'approved';
+      !accessControlReady;
 
     let requests: AttendanceAccessRequest[] = [];
     if (identity.isAdmin && includeRequests && accessControlReady) {
@@ -203,9 +269,14 @@ export async function GET(req: NextRequest) {
         date,
         is_holiday: isHoliday,
         allowed,
+        holiday_mode: activeControl.mode || (weeklyHoliday ? 'weekly' : null),
+        holiday_message: holidayControl.message,
+        holiday_control: holidayControl,
         request_status: identity.isAdmin ? 'approved' : request?.status || 'none',
         request,
-        next_working_label: getNextWorkingLabel(schedule, date),
+        next_working_label: activeControl.nextOpenAt
+          ? scheduledReturnLabel(activeControl.nextOpenAt, schedule.timezone)
+          : getNextWorkingLabel(schedule, date),
       },
       requests,
     });
@@ -252,6 +323,46 @@ export async function POST(req: NextRequest) {
 
     if (!isSupabaseAdminConfigured()) {
       return noStoreJson({ error: 'SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di environment server.' }, 503);
+    }
+
+    if (action === 'update_holiday_control') {
+      if (!identity.isAdmin) {
+        return noStoreJson({ error: 'Hanya Admin atau Owner yang dapat mengatur mode hari libur.' }, 403);
+      }
+
+      const scheduledEnabled = body.scheduled_enabled === true || body.scheduledEnabled === true;
+      const scheduledStart = body.scheduled_start || body.scheduledStart
+        ? new Date(String(body.scheduled_start || body.scheduledStart))
+        : null;
+      const scheduledEnd = body.scheduled_end || body.scheduledEnd
+        ? new Date(String(body.scheduled_end || body.scheduledEnd))
+        : null;
+
+      if (scheduledEnabled) {
+        if (!scheduledStart || !scheduledEnd || Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())) {
+          return noStoreJson({ error: 'Waktu mulai dan selesai jadwal libur wajib diisi.' }, 400);
+        }
+        if (scheduledEnd.getTime() <= scheduledStart.getTime()) {
+          return noStoreJson({ error: 'Waktu selesai harus setelah waktu mulai.' }, 400);
+        }
+      }
+
+      const control = normalizeHolidayControl({
+        manual_active: body.manual_active === true || body.manualActive === true,
+        scheduled_enabled: scheduledEnabled,
+        scheduled_start: scheduledEnabled ? scheduledStart?.toISOString() : null,
+        scheduled_end: scheduledEnabled ? scheduledEnd?.toISOString() : null,
+        message: String(body.message || '').trim() || undefined,
+        updated_by_name: identity.name,
+      });
+      const savedControl = await saveHolidayControl(control, identity);
+      const activeControl = resolveHolidayControl(savedControl);
+      return noStoreJson({
+        success: true,
+        holiday_control: savedControl,
+        active: activeControl.active,
+        mode: activeControl.mode,
+      });
     }
 
     if (action === 'request_access') {
