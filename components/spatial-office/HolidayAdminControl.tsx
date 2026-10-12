@@ -105,7 +105,7 @@ export default function HolidayAdminControl({ onPreview }: { onPreview?: (messag
     const previous = draft;
     const next = { ...draft, manualActive: active };
     setDraft(next);
-    const saved = await save(next, active ? 'Workspace dikunci untuk anggota.' : 'Workspace dibuka kembali untuk anggota.');
+    const saved = await save(next, active ? 'Mode libur aktif. Workspace dikunci.' : 'Workspace dibuka kembali.');
     if (!saved) {
       setDraft(previous);
       return;
@@ -129,7 +129,7 @@ export default function HolidayAdminControl({ onPreview }: { onPreview?: (messag
       <div className="office-holiday-admin-compact">
         <div>
           <ShieldCheck size={13} />
-          <span><strong>Mode libur</strong><small>{active ? 'Anggota terkunci' : 'Workspace terbuka'}</small></span>
+          <span><strong>Mode libur</strong><small>{active ? 'Workspace terkunci' : 'Workspace terbuka'}</small></span>
         </div>
         <label className="office-holiday-switch" title="Tutup atau buka workspace anggota sekarang">
           <input
@@ -167,7 +167,7 @@ export default function HolidayAdminControl({ onPreview }: { onPreview?: (messag
           <div className="office-holiday-admin-body">
             <div className="office-holiday-admin-note">
               <ShieldCheck size={14} />
-              <p>Admin tetap dapat memakai seluruh aplikasi. Anggota hanya melihat dashboard kantor dalam keadaan terkunci.</p>
+              <p>Saat mode libur aktif, semua navigasi dan tools dikunci. Admin hanya dapat memakai kontrol ini untuk membuka workspace kembali.</p>
             </div>
 
             <label className="office-holiday-setting-row">

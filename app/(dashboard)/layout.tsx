@@ -204,9 +204,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [holidayRefreshToken, isAuthenticated]);
 
   const holidayLocked = Boolean(
-    holidayAccess?.isHoliday &&
-    holidayAccess.allowed === false &&
-    holidayAccess.isAdmin === false
+    holidayAccess?.isHoliday && (
+      holidayAccess.isAdmin === false ||
+      holidayAccess.mode === 'manual' ||
+      holidayAccess.mode === 'scheduled'
+    )
   );
 
   useEffect(() => {

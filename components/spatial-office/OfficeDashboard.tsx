@@ -616,14 +616,18 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     if (!holidayLocked) return;
     const target = event.target as Element | null;
     if (target?.closest('.office-holiday-lock')) return;
+    if (holidayAccess?.isAdmin && target?.closest('.office-holiday-admin')) return;
     event.preventDefault();
     event.stopPropagation();
-  }, [holidayLocked]);
+  }, [holidayAccess?.isAdmin, holidayLocked]);
 
-  const adminHolidayLive = Boolean(holidayAccess?.isAdmin && holidayAccess.isHoliday);
-  const adminHolidayMessage = holidayAccess?.isAdmin
-    ? (adminHolidayLive ? holidayAccess.message : holidayMessagePreview || '')
-    : '';
+  const holidayPreviewOnly = Boolean(
+    holidayAccess?.isAdmin && holidayMessagePreview && !holidayAccess.isHoliday
+  );
+  const holidayOverlayVisible = holidayLocked || holidayPreviewOnly;
+  const holidayOverlayMessage = holidayLocked
+    ? holidayAccess?.message || 'Hari ini libur. Besok kita kembali lagi.'
+    : holidayMessagePreview || '';
 
   return <section
     className={`spatial-office ${immersive ? 'office-game' : ''} ${workCenterPreview ? 'office-work-center' : ''} ${panel ? `office-panel-${panel}` : ''} ${editing ? 'office-avatar-editing' : ''} ${holidayLocked ? 'office-holiday-locked' : ''}`}
@@ -667,17 +671,6 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     </div>
     <div className="office-stage">
       {embeddedAttendance && <FloatingAttendance placement="office-stage" />}
-      {adminHolidayMessage && <aside className="office-holiday-admin-preview" data-live={adminHolidayLive || undefined} role="status" aria-live="polite">
-        <span><CalendarOff size={18} /></span>
-        <div>
-          <small>{adminHolidayLive ? 'MODE LIBUR AKTIF · PREVIEW ADMIN' : 'PRATINJAU PESAN ANGGOTA'}</small>
-          <strong>{adminHolidayMessage}</strong>
-          <p>{adminHolidayLive ? `Dibuka kembali ${holidayAccess?.nextWorkingLabel || 'sesuai jadwal kerja'}` : 'Ini hanya pratinjau. Anggota belum dikunci.'}</p>
-        </div>
-        {adminHolidayLive
-          ? <em>AKTIF</em>
-          : <button type="button" onClick={() => setHolidayMessagePreview(null)} aria-label="Tutup pratinjau pesan libur"><X size={14} /></button>}
-      </aside>}
       <div className="office-stage-bar">
         <div className="office-room-name"><span className="office-room-icon"><Box size={17} /></span><div><strong>Meja komunal</strong><span>Area {currentRoom + 1} dari {rooms} · {members.length} anggota</span></div></div>
         <div className="office-stage-actions">
@@ -700,15 +693,20 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
         {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,draft?.desks||space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?deskLabel(menuSlot):menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
       </OfficeCanvas>
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
-      {holidayLocked && holidayAccess && <div className="office-holiday-lock" role="dialog" aria-modal="true" aria-labelledby="office-holiday-lock-title">
+      {holidayOverlayVisible && <div className="office-holiday-lock" data-preview={holidayPreviewOnly || undefined} role="dialog" aria-modal={holidayLocked} aria-labelledby="office-holiday-lock-title">
         <section>
+          {holidayPreviewOnly && <button type="button" className="office-holiday-lock-close" onClick={() => setHolidayMessagePreview(null)} aria-label="Tutup pratinjau pesan libur"><X size={16} /></button>}
           <span className="office-holiday-lock-icon"><CalendarOff size={24} /></span>
-          <p>WORKSPACE SEDANG LIBUR</p>
+          <p>{holidayPreviewOnly ? 'PRATINJAU MODE LIBUR' : 'WORKSPACE SEDANG LIBUR'}</p>
           <h2 id="office-holiday-lock-title">Hari ini libur</h2>
-          <time>{holidayDateLabel(holidayAccess.date)}</time>
-          <strong>{holidayAccess.message}</strong>
-          <div><Clock3 size={15} /><span><small>Workspace dibuka kembali</small>{holidayAccess.nextWorkingLabel}</span></div>
-          <footer><LockKeyhole size={13} /> Seluruh tombol dan halaman kerja dikunci. Owner atau Admin tetap dapat masuk.</footer>
+          <time>{holidayPreviewOnly ? 'Tampilan contoh untuk Admin' : holidayDateLabel(holidayAccess?.date)}</time>
+          <strong>{holidayOverlayMessage}</strong>
+          <div><Clock3 size={15} /><span><small>Workspace dibuka kembali</small>{holidayAccess?.nextWorkingLabel || 'sesuai jadwal kerja berikutnya'}</span></div>
+          <footer><LockKeyhole size={13} /> {holidayPreviewOnly
+            ? 'Ini hanya pratinjau. Workspace belum dikunci.'
+            : holidayAccess?.isAdmin
+              ? 'Semua navigasi dikunci. Kontrol Mode libur tetap tersedia agar Admin dapat membuka workspace kembali.'
+              : 'Seluruh tombol, tools, dan halaman kerja sedang dikunci.'}</footer>
         </section>
       </div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Jeda: lounge · Checkout: keluar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
