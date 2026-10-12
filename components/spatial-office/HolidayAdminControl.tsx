@@ -110,6 +110,7 @@ export default function HolidayAdminControl({ onPreview }: { onPreview?: (messag
       setDraft(previous);
       return;
     }
+    setOpen(false);
     onPreview?.(active ? (next.message.trim() || DEFAULT_HOLIDAY_CONTROL.message) : null);
   };
 
@@ -212,7 +213,10 @@ export default function HolidayAdminControl({ onPreview }: { onPreview?: (messag
             <button
               type="button"
               className="is-preview"
-              onClick={() => onPreview?.(draft.message.trim() || DEFAULT_HOLIDAY_CONTROL.message)}
+              onClick={() => {
+                onPreview?.(draft.message.trim() || DEFAULT_HOLIDAY_CONTROL.message);
+                setOpen(false);
+              }}
             >
               <Eye size={14} /> Pratinjau pesan
             </button>

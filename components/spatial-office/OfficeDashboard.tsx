@@ -693,22 +693,6 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
         {objectMenu&&objectMenu.room===currentRoom&&(menuSlot!==null?!deskPosition(menuSlot,draft?.desks||space.desks).removed:Boolean(menuItem))&&<OfficeObjectMenu key={objectMenu.id} target={objectMenu} title={menuSlot!==null?deskLabel(menuSlot):menuItem?ORNAMENTS[menuItem.asset].label:'Objek kantor'} slot={menuSlot} owner={menuOwner} viewerId={viewerId} members={data.members} canEdit={canEdit} ready={sharedReady} busy={spaceSaving} hasDraft={Boolean(draft)} error={spaceError} onClose={closeObjectMenu} onEdit={editMenuObject} onClaim={async()=>{if(menuSlot!==null&&await saveSpace({type:'claim',slot:menuSlot})) closeObjectMenu();}} onAssign={async memberId=>{if(menuSlot!==null&&await saveSpace({type:'assign',slot:menuSlot,memberId})) closeObjectMenu();}} onDelete={()=>void deleteMenuObject()}/>}
       </OfficeCanvas>
       {!data.members.length && !refreshing && !error && <div className="office-empty">Tim belum memiliki anggota. Meja akan muncul mengikuti data tim.</div>}
-      {holidayOverlayVisible && <div className="office-holiday-lock" data-preview={holidayPreviewOnly || undefined} role="dialog" aria-modal={holidayLocked} aria-labelledby="office-holiday-lock-title">
-        <section>
-          {holidayPreviewOnly && <button type="button" className="office-holiday-lock-close" onClick={() => setHolidayMessagePreview(null)} aria-label="Tutup pratinjau pesan libur"><X size={16} /></button>}
-          <span className="office-holiday-lock-icon"><CalendarOff size={24} /></span>
-          <p>{holidayPreviewOnly ? 'PRATINJAU MODE LIBUR' : 'WORKSPACE SEDANG LIBUR'}</p>
-          <h2 id="office-holiday-lock-title">Hari ini libur</h2>
-          <time>{holidayPreviewOnly ? 'Tampilan contoh untuk Admin' : holidayDateLabel(holidayAccess?.date)}</time>
-          <strong>{holidayOverlayMessage}</strong>
-          <div><Clock3 size={15} /><span><small>Workspace dibuka kembali</small>{holidayAccess?.nextWorkingLabel || 'sesuai jadwal kerja berikutnya'}</span></div>
-          <footer><LockKeyhole size={13} /> {holidayPreviewOnly
-            ? 'Ini hanya pratinjau. Workspace belum dikunci.'
-            : holidayAccess?.isAdmin
-              ? 'Semua navigasi dikunci. Kontrol Mode libur tetap tersedia agar Admin dapat membuka workspace kembali.'
-              : 'Seluruh tombol, tools, dan halaman kerja sedang dikunci.'}</footer>
-        </section>
-      </div>}
       <div className="office-stage-footer"><span><i /> Sudah check-in</span><span>Jeda: lounge · Checkout: keluar kantor</span><p>Bubble: project & tugas · Pantry: animasi 1 menit setiap 15 menit kerja.</p></div>
     </div>
     {workCenterPreview && <aside className="office-work-center-panel" aria-label="Pusat operasional tim">
@@ -759,6 +743,22 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       <form className="office-work-center-chat" onSubmit={event=>void sendAvatarChat(event)}>
         <label htmlFor="work-center-chat">Tulis pesan untuk ruang 3D</label><input id="work-center-chat" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Tulis pesan…':'Check-in untuk mengirim pesan'}/><small>{chatText.length}/150</small><button type="submit" disabled={!chatText.trim()||!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} aria-label="Kirim pesan avatar"><Send size={14}/></button>
       </form>
+    </div>}
+    {holidayOverlayVisible && <div className="office-holiday-lock" data-preview={holidayPreviewOnly || undefined} role="dialog" aria-modal={holidayLocked} aria-labelledby="office-holiday-lock-title">
+      <section>
+        {holidayPreviewOnly && <button type="button" className="office-holiday-lock-close" onClick={() => setHolidayMessagePreview(null)} aria-label="Tutup pratinjau pesan libur"><X size={16} /></button>}
+        <span className="office-holiday-lock-icon"><CalendarOff size={24} /></span>
+        <p>{holidayPreviewOnly ? 'PRATINJAU MODE LIBUR' : 'WORKSPACE SEDANG LIBUR'}</p>
+        <h2 id="office-holiday-lock-title">Hari ini libur</h2>
+        <time>{holidayPreviewOnly ? 'Tampilan contoh untuk Admin' : holidayDateLabel(holidayAccess?.date)}</time>
+        <strong>{holidayOverlayMessage}</strong>
+        <div><Clock3 size={15} /><span><small>Workspace dibuka kembali</small>{holidayAccess?.nextWorkingLabel || 'sesuai jadwal kerja berikutnya'}</span></div>
+        <footer><LockKeyhole size={13} /> {holidayPreviewOnly
+          ? 'Ini hanya pratinjau. Workspace belum dikunci.'
+          : holidayAccess?.isAdmin
+            ? 'Semua navigasi dikunci. Kontrol Mode libur tetap tersedia agar Admin dapat membuka workspace kembali.'
+            : 'Seluruh tombol, tools, dan halaman kerja sedang dikunci.'}</footer>
+      </section>
     </div>}
     {immersive&&!workCenterPreview&&<form className="office-avatar-chat" onSubmit={event=>void sendAvatarChat(event)}>
       <input aria-label="Pesan bubble avatar" value={chatText} onChange={event=>setChatText(event.target.value)} maxLength={150} disabled={!viewerCheckedIn||!sharedReady||spaceSaving||Boolean(draft)} placeholder={viewerCheckedIn?'Ketik pesan avatar…':'Check-in untuk mengobrol'}/>

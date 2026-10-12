@@ -1055,7 +1055,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-work-center .office-camera-hint{display:none}
 .office-game.office-work-center>.office-game-dock,.office-game.office-work-center.office-panel-member>.office-bottom-grid,.office-game.office-work-center.office-panel-team>.office-bottom-grid{display:none}
 
-.office-work-center-panel{grid-column:2;grid-row:2;display:flex;min-width:0;min-height:0;flex-direction:column;overflow:hidden;border:1px solid #dce3dc;border-radius:18px;background:#fff;box-shadow:0 10px 30px #20352e0f}
+.office-work-center-panel{grid-column:2;grid-row:2;display:flex;min-width:0;min-height:0;flex-direction:column;overflow:visible;border:1px solid #dce3dc;border-radius:18px;background:#fff;box-shadow:0 10px 30px #20352e0f}
 .office-work-center-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px 15px;border-bottom:1px solid #e0e4da;background:#fff}
 .office-work-center-header>div{min-width:0}
 .office-work-center-header .office-work-center-kicker{padding:0}
@@ -1255,7 +1255,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-switch input:focus-visible+span{outline:2px solid #54725a;outline-offset:2px}
 .office-holiday-switch em{min-width:24px;color:#657663;font-size:7px;font-style:normal;font-weight:750}
 .office-holiday-schedule-button{display:grid;width:31px;height:31px;place-items:center;border:1px solid #d5dfd1;border-radius:9px;background:#f3f7f0;color:#55705a}
-.office-holiday-admin-panel{position:absolute;right:12px;bottom:calc(100% + 8px);display:flex;width:min(364px,calc(100vw - 40px));max-height:min(520px,calc(100dvh - 190px));overflow:hidden;flex-direction:column;border:1px solid #d5dfd1;border-radius:18px;background:#fff;color:#2e4537;box-shadow:0 24px 70px #1f342d3b}
+.office-holiday-admin-panel{position:absolute;right:12px;bottom:calc(100% + 14px);z-index:130;isolation:isolate;display:flex;width:min(350px,calc(100vw - 40px));max-height:min(520px,calc(100dvh - 190px));overflow:hidden;flex-direction:column;border:1px solid #c8d5c5;border-radius:20px;background:#fff;color:#2e4537;box-shadow:0 30px 80px #172b2447,0 10px 28px #172b2429,0 0 0 1px #ffffff inset}
 .office-holiday-admin-panel>header{display:grid;grid-template-columns:38px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid #e2e8df;background:linear-gradient(135deg,#f5f9f3,#edf4e9)}
 .office-holiday-admin-panel>header>span{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:#fff0ed;color:#bd5b50}
 .office-holiday-admin-panel>header strong,.office-holiday-admin-panel>header small{display:block}
@@ -1271,8 +1271,9 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-setting-row strong,.office-holiday-setting-row small{display:block}
 .office-holiday-setting-row strong{font-size:9px}
 .office-holiday-setting-row small{margin-top:3px;color:#849083;font-size:7px;line-height:1.35}
-.office-holiday-setting-row::after{position:absolute;right:0}
-.office-holiday-setting-row::before{z-index:1;right:16px;left:auto}
+.office-holiday-setting-row::after{position:absolute;top:50%;right:0;transform:translateY(-50%)}
+.office-holiday-setting-row::before{z-index:1;top:50%;right:16px;left:auto;transform:translateY(-50%)}
+.office-holiday-setting-row:has(input:checked)::before{transform:translate(14px,-50%)}
 .office-holiday-date-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .office-holiday-date-grid label,.office-holiday-message-field{display:grid;gap:5px;color:#697a69;font-size:8px;font-weight:750}
 .office-holiday-date-grid input,.office-holiday-message-field textarea{min-width:0;border:1px solid #dce4d9;border-radius:9px;background:#fafcf9;padding:8px;color:#31483a;font:9px/1.35 inherit;outline:0}
@@ -1288,13 +1289,14 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-admin-panel>footer .is-primary{border-color:#49674f;background:#49674f;color:#fff}
 .office-holiday-admin-panel button:disabled,.office-holiday-admin input:disabled{opacity:.5;cursor:not-allowed}
 
-.spatial-office[data-holiday-locked=true]>:not(.office-stage):not(.office-work-center-panel){pointer-events:none;user-select:none}
+.spatial-office[data-holiday-locked=true]>:not(.office-stage):not(.office-work-center-panel):not(.office-holiday-lock){pointer-events:none;user-select:none}
 .spatial-office[data-holiday-locked=true]>.office-work-center-panel>:not(.office-holiday-admin),.spatial-office[data-holiday-locked=true]>.office-agent-strip{pointer-events:none;user-select:none;filter:saturate(.55) brightness(.82);opacity:.68}
 .spatial-office[data-holiday-locked=true]>.office-work-center-panel>.office-holiday-admin{pointer-events:auto}
 .spatial-office[data-holiday-locked=true]>.office-game-hud .office-game-actions{filter:saturate(.45);opacity:.55}
 .spatial-office[data-holiday-locked=true]>.office-stage{user-select:none}
-.spatial-office[data-holiday-locked=true]>.office-stage>*:not(.office-holiday-lock){pointer-events:none}
+.spatial-office[data-holiday-locked=true]>.office-stage>*{pointer-events:none}
 .office-holiday-lock{position:absolute;inset:0;z-index:90;display:grid;place-items:center;border-radius:17px;background:#20382f5f;backdrop-filter:blur(9px) saturate(.68);pointer-events:auto}
+.office-work-center>.office-holiday-lock{position:relative;inset:auto;z-index:120;grid-column:1;grid-row:2;align-self:stretch;justify-self:stretch;min-width:0;min-height:0;overflow:hidden;border:1px solid #cad4ca;border-radius:18px;background:#20382f66;backdrop-filter:blur(10px) saturate(.62);-webkit-backdrop-filter:blur(10px) saturate(.62);box-shadow:0 10px 30px #20352e12}
 .office-holiday-lock>section{position:relative;width:min(420px,calc(100% - 28px));padding:28px 24px;border:1px solid #d7e0d4;border-radius:22px;background:#fffffff2;color:#30483a;text-align:center;box-shadow:0 24px 80px #172b245c}
 .office-holiday-lock-close{position:absolute;top:13px;right:13px;display:grid;width:32px;height:32px;place-items:center;border:1px solid #d5ded2;border-radius:10px;background:#fff;color:#637563}
 .office-holiday-lock-icon{display:grid;width:52px;height:52px;margin:0 auto 13px;place-items:center;border-radius:17px;background:#eef4e9;color:#59785f;box-shadow:inset 0 0 0 1px #d9e5d4}
