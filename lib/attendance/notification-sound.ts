@@ -11,19 +11,24 @@ type Tone = {
 };
 
 const SOUND_PATTERNS: Record<AttendanceSoundType, Tone[]> = {
+  // Warm, rising major arpeggio: a friendly "welcome in" cue.
   checkin: [
-    { frequency: 740, startsAt: 0, duration: 0.13, gain: 0.1, wave: 'sine' },
-    { frequency: 988, startsAt: 0.1, duration: 0.16, gain: 0.12, wave: 'sine' },
-    { frequency: 1319, startsAt: 0.22, duration: 0.2, gain: 0.1, wave: 'sine' },
+    { frequency: 523.25, startsAt: 0, duration: 0.26, gain: 0.07, wave: 'sine' },
+    { frequency: 659.25, startsAt: 0.11, duration: 0.3, gain: 0.065, wave: 'sine' },
+    { frequency: 783.99, startsAt: 0.23, duration: 0.36, gain: 0.06, wave: 'triangle' },
   ],
+  // Soft, descending tones: slower and calmer for break time.
   pause: [
-    { frequency: 659, startsAt: 0, duration: 0.18, gain: 0.09, wave: 'triangle' },
-    { frequency: 523, startsAt: 0.18, duration: 0.24, gain: 0.08, wave: 'triangle' },
+    { frequency: 587.33, startsAt: 0, duration: 0.38, gain: 0.055, wave: 'sine' },
+    { frequency: 493.88, startsAt: 0.18, duration: 0.46, gain: 0.05, wave: 'sine' },
+    { frequency: 392, startsAt: 0.38, duration: 0.52, gain: 0.042, wave: 'sine' },
   ],
+  // Bright, sparkling rise: an upbeat and fresh end-of-day cue.
   checkout: [
-    { frequency: 988, startsAt: 0, duration: 0.13, gain: 0.1, wave: 'sine' },
-    { frequency: 659, startsAt: 0.11, duration: 0.15, gain: 0.1, wave: 'sine' },
-    { frequency: 440, startsAt: 0.24, duration: 0.24, gain: 0.09, wave: 'sine' },
+    { frequency: 659.25, startsAt: 0, duration: 0.16, gain: 0.06, wave: 'triangle' },
+    { frequency: 783.99, startsAt: 0.08, duration: 0.18, gain: 0.065, wave: 'triangle' },
+    { frequency: 1046.5, startsAt: 0.17, duration: 0.28, gain: 0.07, wave: 'sine' },
+    { frequency: 1318.51, startsAt: 0.3, duration: 0.22, gain: 0.045, wave: 'sine' },
   ],
 };
 
