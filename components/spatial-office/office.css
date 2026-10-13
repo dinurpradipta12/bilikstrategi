@@ -1288,7 +1288,20 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-account-popover>nav small{margin-top:2px;color:#8a9588;font-size:7px}
 .office-account-popover button:focus-visible,.office-account-popover a:focus-visible{outline:2px solid #54725a;outline-offset:2px}
 
-.office-holiday-admin{position:relative;z-index:6;display:flex;flex:none;justify-content:flex-end;padding:10px 12px;border-top:1px solid #e1e7df;background:#fafcf9;color:#2e4537}
+.office-work-center-footer-controls{position:relative;z-index:6;display:flex;flex:none;align-items:center;justify-content:flex-end;gap:8px;padding:10px 12px;border-top:1px solid #e1e7df;background:#fafcf9;color:#2e4537}
+.office-theme-control{display:grid;grid-template-columns:28px minmax(0,1fr) 32px;align-items:center;gap:7px;min-width:132px;min-height:47px;padding:7px 8px;border:1px solid #d5dfd1;border-radius:13px;background:#f5f8f3;color:#2e4537;text-align:left;box-shadow:0 4px 14px #20352e10;transition:border-color .18s ease,background .18s ease,transform .18s ease}
+.office-theme-control:hover{border-color:#aabca6;background:#eef5eb;transform:translateY(-1px)}
+.office-theme-control:focus-visible{outline:2px solid #54725a;outline-offset:2px}
+.office-theme-control-icon{display:grid;width:28px;height:28px;place-items:center;border:1px solid #d6dfd2;border-radius:9px;background:#fff;color:#b5842d}
+.office-theme-control-copy,.office-theme-control-copy strong,.office-theme-control-copy small{display:block;min-width:0}
+.office-theme-control-copy strong{font-size:9px;white-space:nowrap}
+.office-theme-control-copy small{margin-top:2px;overflow:hidden;color:#819080;font-size:7px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.office-theme-control-switch{position:relative;display:block;width:32px;height:18px;border-radius:99px;background:#a9b6aa;box-shadow:inset 0 0 0 1px #80918126;transition:background .18s ease}
+.office-theme-control-switch>i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #23392f36;transition:transform .18s ease}
+.office-theme-control[data-active=true] .office-theme-control-switch{background:#58705f}
+.office-theme-control[data-active=true] .office-theme-control-switch>i{transform:translateX(14px)}
+.office-theme-control[data-active=true] .office-theme-control-icon{border-color:#53675a;background:#26342d;color:#d8df91}
+.office-holiday-admin{position:relative;z-index:6;display:flex;flex:none;justify-content:flex-end;color:#2e4537}
 .office-holiday-admin-compact{display:flex;align-items:center;gap:9px;padding:7px 8px 7px 11px;border:1px solid #d5dfd1;border-radius:13px;background:#f5f8f3;box-shadow:0 4px 14px #20352e10}
 .office-holiday-admin-compact>div{display:flex;min-width:116px;align-items:center;gap:7px}
 .office-holiday-admin-compact>div>svg{color:#58795f}
@@ -1338,9 +1351,51 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-admin-panel>footer .is-primary{border-color:#49674f;background:#49674f;color:#fff}
 .office-holiday-admin-panel button:disabled,.office-holiday-admin input:disabled{opacity:.5;cursor:not-allowed}
 
+html.dark .office-workcenter-preview-shell,html.dark .office-game.office-work-center{background:#101713;color:#e2ebe3}
+html.dark .office-work-center>.office-game-hud,html.dark .office-work-center-panel,html.dark .office-agent-strip{border-color:#33443a;background:#18211c;color:#e2ebe3;box-shadow:0 10px 30px #050b0870}
+html.dark .office-work-center>.office-stage{border-color:#33443a;background:#111814;box-shadow:0 10px 30px #050b0870}
+html.dark .office-work-center .office-game-actions>button,html.dark .office-work-center .office-game-actions>select,html.dark .office-work-center .office-back-dashboard,html.dark .office-work-center .office-clock{border-color:#3b4b41;background:#202b25;color:#e2ebe3}
+html.dark .office-work-center .office-game-brand span,html.dark .office-work-center-header p{color:#9aaa9b}
+html.dark .office-work-center-header,html.dark .office-work-center-tabs,html.dark .office-work-center-footer-controls{border-color:#34443a;background:#18211c;color:#e2ebe3}
+html.dark .office-work-center-body{background:#151e19;color:#e2ebe3}
+html.dark .office-work-center-tabs button{color:#94a497}
+html.dark .office-work-center-tabs button[aria-selected=true]{color:#b7d3bc}
+html.dark .office-work-center-tabs button[aria-selected=true]::after{background:#8caf92}
+html.dark .office-work-center-presence-trigger,html.dark .office-work-center-metrics>div,html.dark .office-work-center-team-tasks article>i,html.dark .office-work-center-quick-links>a,html.dark .office-work-center-project-card,html.dark .office-work-center-inbox-summary>div,html.dark .office-work-center-inbox-item>i{border-color:#38493e;background:#202b25;color:#dfe9e0}
+html.dark .office-work-center-presence-trigger:hover,html.dark .office-work-center-quick-links>a:hover,html.dark .office-work-center-project-card:hover{border-color:#66816d;background:#26342c}
+html.dark .office-work-center-team-summary,html.dark .office-work-center-project{border-color:#38493e;background:linear-gradient(145deg,#202b25,#1b2720)}
+html.dark .office-work-center-team-summary>strong,html.dark .office-work-center-quick-links strong,html.dark .office-work-center-project-card,html.dark .office-work-center-inbox-item{color:#dce8de}
+html.dark .office-work-center-team-summary>span,html.dark .office-work-center-team-summary>p,html.dark .office-work-center-metrics span,html.dark .office-work-center-team-tasks article span,html.dark .office-work-center-team-tasks article em,html.dark .office-work-center-quick-links small,html.dark .office-work-center-project-card-heading small,html.dark .office-work-center-project-card>footer,html.dark .office-work-center-inbox-item span,html.dark .office-work-center-inbox-item small{color:#96a79a}
+html.dark .office-work-center-team-tasks article,html.dark .office-work-center-inbox-item{border-color:#2e3e34}
+html.dark .office-work-center-project-card-heading>span{background:#2b3b30;color:#9bc0a1}
+html.dark .office-work-center-project-card>i{background:#34433a}
+html.dark .office-account-control{border-color:#34443a}
+html.dark .office-account-trigger,html.dark .office-agent-strip-list button{color:#dfe9e0}
+html.dark .office-account-trigger:hover,html.dark .office-account-trigger[aria-expanded=true],html.dark .office-agent-strip-list button:hover,html.dark .office-agent-strip-list button[aria-pressed=true]{border-color:#607a66;background:#26352c;color:#eef6ef}
+html.dark .office-agent-strip-list button{border-color:#34443a;background:#1c2721}
+html.dark .office-agent-strip-list button[data-focused=true]{border-color:#719879;background:#263b2c;box-shadow:inset 0 0 0 1px #5f8366,0 0 0 3px #78a27a20}
+html.dark .office-agent-copy small{color:#9aaa9d}
+html.dark .office-work-center-footer-controls{box-shadow:0 -10px 22px #050b081f}
+html.dark .office-theme-control,html.dark .office-holiday-admin-compact{border-color:#3a4c40;background:#202b25;color:#e3ece4;box-shadow:0 4px 14px #050b084d}
+html.dark .office-theme-control:hover{border-color:#607a66;background:#26352c}
+html.dark .office-theme-control-icon{border-color:#46594c;background:#18211c;color:#e1b45d}
+html.dark .office-theme-control-copy small,html.dark .office-holiday-admin-compact small,html.dark .office-holiday-switch em{color:#9aaa9d}
+html.dark .office-holiday-schedule-button{border-color:#43564a;background:#26342c;color:#b9d0bc}
+html.dark .office-holiday-admin-panel{border-color:#45584b;background:#18211c;color:#e2ebe3;box-shadow:0 30px 80px #020604b8,0 10px 28px #02060480,0 0 0 1px #33443a inset}
+html.dark .office-holiday-admin-panel>header{border-color:#34443a;background:linear-gradient(135deg,#202b25,#1a251f)}
+html.dark .office-holiday-admin-panel>header button,html.dark .office-holiday-admin-panel>footer button{border-color:#3d5043;background:#202b25;color:#dce8de}
+html.dark .office-holiday-admin-note{background:#26352c;color:#b5cbb9}
+html.dark .office-holiday-setting-row{border-color:#2e3e34}
+html.dark .office-holiday-setting-row small,html.dark .office-holiday-admin-panel>header small{color:#98a89b}
+html.dark .office-holiday-date-grid input,html.dark .office-holiday-message-field textarea{border-color:#3c4e42;background:#111914;color:#e2ebe3}
+html.dark .office-holiday-admin-panel>footer{border-color:#34443a;background:#151e19}
+html.dark .office-holiday-admin-panel>footer .is-preview{border-color:#48604f;background:#202d25;color:#b7d3bc}
+html.dark .office-holiday-admin-panel>footer .is-primary{border-color:#789b80;background:#6c8f74;color:#0e1711}
+
 .spatial-office[data-holiday-locked=true]>:not(.office-stage):not(.office-work-center-panel):not(.office-holiday-lock){pointer-events:none;user-select:none}
-.spatial-office[data-holiday-locked=true]>.office-work-center-panel>:not(.office-holiday-admin),.spatial-office[data-holiday-locked=true]>.office-agent-strip{pointer-events:none;user-select:none;filter:saturate(.55) brightness(.82);opacity:.68}
-.spatial-office[data-holiday-locked=true]>.office-work-center-panel>.office-holiday-admin{pointer-events:auto}
+.spatial-office[data-holiday-locked=true]>.office-work-center-panel>:not(.office-work-center-footer-controls),.spatial-office[data-holiday-locked=true]>.office-agent-strip{pointer-events:none;user-select:none;filter:saturate(.55) brightness(.82);opacity:.68}
+.spatial-office[data-holiday-locked=true]>.office-work-center-panel>.office-work-center-footer-controls .office-theme-control{pointer-events:none;filter:saturate(.55) brightness(.82);opacity:.55}
+.spatial-office[data-holiday-locked=true]>.office-work-center-panel>.office-work-center-footer-controls .office-holiday-admin{pointer-events:auto}
 .spatial-office[data-holiday-locked=true]>.office-game-hud .office-game-actions{filter:saturate(.45);opacity:.55}
 .spatial-office[data-holiday-locked=true]>.office-stage{user-select:none}
 .spatial-office[data-holiday-locked=true]>.office-stage>*{pointer-events:none}
@@ -1360,11 +1415,17 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-holiday-lock footer{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;color:#899488;font-size:8px;line-height:1.45}
 
 @media(max-width:900px){
- .office-work-center-panel>.office-holiday-admin{grid-column:1;grid-row:2;align-self:end}
+ .office-work-center-panel>.office-work-center-footer-controls{grid-column:1;grid-row:2;align-self:end;flex-wrap:wrap}
+ .office-work-center-footer-controls>.office-theme-control{flex:1}
+ .office-work-center-footer-controls>.office-holiday-admin{width:100%}
+ .office-work-center-footer-controls .office-holiday-admin-compact{width:100%;justify-content:space-between}
  .office-holiday-admin-panel{right:auto;left:12px;width:min(364px,calc(100vw - 44px))}
 }
 @media(max-width:620px){
- .office-work-center-panel>.office-holiday-admin{grid-column:auto;grid-row:auto;align-self:auto;padding:8px 10px}
+ .office-work-center-panel>.office-work-center-footer-controls{grid-column:auto;grid-row:auto;align-self:auto;flex-wrap:nowrap;padding:8px 10px}
+ .office-work-center-footer-controls>.office-theme-control{min-width:0}
+ .office-work-center-footer-controls>.office-holiday-admin{width:auto}
+ .office-work-center-footer-controls .office-holiday-admin-compact{width:auto}
  .office-holiday-admin-compact>div{display:none}
  .office-holiday-admin-panel{right:10px;left:auto;width:min(350px,calc(100vw - 36px));max-height:calc(100dvh - 174px)}
  .office-holiday-date-grid{grid-template-columns:1fr}

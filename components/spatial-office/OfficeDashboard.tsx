@@ -18,6 +18,7 @@ import OfficeMusicPlayer from './OfficeMusicPlayer';
 import OfficeSignEditor from './OfficeSignEditor';
 import OfficeWeather from './OfficeWeather';
 import HolidayAdminControl from './HolidayAdminControl';
+import OfficeThemeControl from './OfficeThemeControl';
 import { useHolidayAccess } from '@/components/auth/HolidayAccessContext';
 import type { ObjectMenuTarget, OfficeBubbleEvent } from '@/lib/spatial-office/scene';
 import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, moveRoomLight, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament, type RoomLightKey, type RoomLightPosition } from '@/lib/spatial-office/space';
@@ -770,7 +771,10 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
           {pendingApprovals.length?pendingApprovals.slice(0,3).map(approval=><Link href="/approvals" key={approval.id} className="office-work-center-inbox-item"><i><CheckCircle2 size={12}/></i><div><strong>{approval.title}</strong><span>{approval.requested_by_name||'Permintaan tim'}</span><small>{compactDate(approval.submitted_at)}</small></div></Link>):<p className="office-work-center-empty">Tidak ada approval yang menunggu.</p>}
         </section>}
       </div>
-      {!demo && <HolidayAdminControl key={holidayAccess?.control.updatedAt || 'holiday-control'} onPreview={setHolidayMessagePreview} />}
+      <footer className="office-work-center-footer-controls" aria-label="Pengaturan tampilan dan workspace">
+        <OfficeThemeControl />
+        {!demo && <HolidayAdminControl key={holidayAccess?.control.updatedAt || 'holiday-control'} onPreview={setHolidayMessagePreview} />}
+      </footer>
     </aside>}
     {workCenterPreview&&<div className="office-work-center-chat-stack">
       {visibleChatHistory.length>0&&<div className="office-work-center-chat-history" aria-label="Riwayat percakapan kantor" aria-live="polite">{visibleChatHistory.map(message=><article key={message.key}><span className="office-work-center-chat-avatar" style={message.profilePicture?{backgroundImage:`url(${JSON.stringify(message.profilePicture)})`}:undefined}>{message.profilePicture?'':message.name.slice(0,2).toUpperCase()}</span><div><strong>{message.name}</strong><p>{message.text}</p></div></article>)}</div>}
