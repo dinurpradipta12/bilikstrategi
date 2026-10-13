@@ -36,7 +36,7 @@ for (const asset of new Set([...model.AVATAR_MODELS, ...Object.keys(spaceModel.O
 }
 function office() {
   const engine = Object.create(OfficeScene.prototype);
-  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], wallPanels: [], decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
+  Object.assign(engine, { scene: new THREE.Scene(), camera:new THREE.PerspectiveCamera(), controls:{target:new THREE.Vector3(),update(){}}, labels: new Element(), templates, characterClips, desks: new Map(), deskLabels: new Map(), occupants: new Map(), geometries: new Set(), materials: new Set(), blockedActivities:new Map(), lights:{}, roomLights:new Map(), roomLabels: [], doors: [], wallPanels: [], architectureMeshes:new Set(), focusHiddenArchitecture:new Set(), focusOcclusionRay:new THREE.Ray(), focusOcclusionDirection:new THREE.Vector3(), focusOcclusionTarget:new THREE.Vector3(), focusOcclusionHit:new THREE.Vector3(), focusOcclusionBounds:new THREE.Box3(), decorations: new Map(), ornaments: [], current: [], room: 0, deskLayout: [], schedule: { timezone: 'Asia/Makassar', days: Array.from({ length: 7 }, (_, day) => ({ day, isWorking: true, startTime: '00:00', endTime: '00:00' })) }, loaded: false, outline: null, options: { onSelect() {}, onSelectDesk() {} } });
   const meetingRoster=Array.from({length:6},(_,i)=>({id:`fixture-${i}`}));
   engine.buildRoom(); engine.loaded = true; engine.setOrnaments(spaceModel.normalizeSpace(null,meetingRoster).ornaments,0,false,''); return engine;
 }
@@ -374,8 +374,13 @@ test('member focus follows the avatar and restores the exact previous camera',()
   assert.ok(engine.camera.position.distanceTo(engine.controls.target)<4.2,'focus should frame the avatar closely');
   assert.equal(focused.rig.root.rotation.y,Math.atan2(engine.camera.position.x-avatar.x,engine.camera.position.z-avatar.z));
   assert.equal(other.rig.root.visible,false);assert.equal(other.label.style.visibility,'hidden');
+  const wall=new THREE.Mesh(new THREE.BoxGeometry(2,3,.2),new THREE.MeshBasicMaterial());
+  wall.position.copy(engine.camera.position).lerp(avatar.clone().setY(1.05),.5);
+  engine.scene.add(wall);engine.architectureMeshes.add(wall);engine.updateFocusedCamera(.05);
+  assert.equal(wall.visible,false,'architecture between the camera and avatar should be hidden');
   assert.equal(engine.controls.enabled,false);assert.equal(engine.controls.minDistance,3);
   engine.focusMember(null);
+  assert.equal(wall.visible,true,'hidden architecture should return as soon as focus closes');
   for(let frame=0;frame<120;frame++) engine.updateFocusedCamera(.05);
   assert.ok(engine.camera.position.distanceTo(originalPosition)<1e-8);
   assert.ok(engine.controls.target.distanceTo(originalTarget)<1e-8);

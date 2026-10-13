@@ -69,6 +69,13 @@ export class OfficeScene {
   private roomLabels: { element: HTMLElement; position: THREE.Vector3 }[] = [];
   private doors: { group: THREE.Group; center: THREE.Vector3; rotate: boolean; travel: number; hold: number }[] = [];
   private wallPanels: { mesh: THREE.Mesh; x: number; z: number; length: number; rotate: boolean; glazed: boolean; cutouts: THREE.Mesh[]; signature: string; posts: { mesh: THREE.Mesh; along: number; cutouts: THREE.Mesh[]; signature: string }[] }[] = [];
+  private architectureMeshes = new Set<THREE.Mesh>();
+  private focusHiddenArchitecture = new Set<THREE.Mesh>();
+  private focusOcclusionRay = new THREE.Ray();
+  private focusOcclusionDirection = new THREE.Vector3();
+  private focusOcclusionTarget = new THREE.Vector3();
+  private focusOcclusionHit = new THREE.Vector3();
+  private focusOcclusionBounds = new THREE.Box3();
   private current: { member: OfficeMember; slot: number }[] = [];
   private raf = 0;
   private lastFrame = 0;
@@ -264,8 +271,12 @@ export class OfficeScene {
 
   private wall(x: number, z: number, length: number, rotate = false, door = false, glazed = false, name = '') {
     const frame = glazed ? '#567267' : '#a39a87';
-    const localBox = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) =>
-      this.box(x + (rotate ? normal : along), y, z + (rotate ? along : normal), rotate ? d : w, h, rotate ? w : d, color, opacity);
+    const localBox = (along: number, y: number, normal: number, w: number, h: number, d: number, color: string, opacity = 1) => {
+      const mesh = this.box(x + (rotate ? normal : along), y, z + (rotate ? along : normal), rotate ? d : w, h, rotate ? w : d, color, opacity);
+      mesh.userData.architecture = glazed ? 'glass' : 'wall';
+      this.architectureMeshes.add(mesh);
+      return mesh;
+    };
     const panel = (along: number, y: number, width: number, height: number) => {
       const mesh = localBox(along, y, 0, width, height, .075, glazed ? '#b8ddd7' : '#e6ddc9', glazed ? .19 : 1);
       mesh.userData.architecture = glazed ? 'glass' : 'wall'; return mesh;
@@ -530,6 +541,7 @@ export class OfficeScene {
       if (signature === wall.signature) continue;
       wall.signature = signature;
       for (const mesh of wall.cutouts) {
+        this.architectureMeshes.delete(mesh); this.focusHiddenArchitecture.delete(mesh);
         this.scene.remove(mesh); mesh.geometry.dispose(); this.geometries.delete(mesh.geometry);
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const material of materials) { material.dispose(); this.materials.delete(material); }
@@ -573,7 +585,7 @@ export class OfficeScene {
         );
         mesh.position.set(wall.x + (wall.rotate ? 0 : cx), (y1 + y2) / 2, wall.z + (wall.rotate ? cx : 0));
         mesh.userData.architecture = wall.glazed ? 'glass' : 'wall';
-        this.scene.add(mesh); this.track(mesh); wall.cutouts.push(mesh);
+        this.scene.add(mesh); this.track(mesh); this.architectureMeshes.add(mesh); wall.cutouts.push(mesh);
       }
       for (const post of wall.posts) {
         const postWindows = windows.filter(item => {
@@ -587,6 +599,7 @@ export class OfficeScene {
         if (postSignature === post.signature) continue;
         post.signature = postSignature;
         for (const mesh of post.cutouts) {
+          this.architectureMeshes.delete(mesh); this.focusHiddenArchitecture.delete(mesh);
           this.scene.remove(mesh); mesh.geometry.dispose(); this.geometries.delete(mesh.geometry);
           const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
           for (const material of materials) { material.dispose(); this.materials.delete(material); }
@@ -609,7 +622,8 @@ export class OfficeScene {
           if (end - start < .01) continue;
           const mesh = new THREE.Mesh(new THREE.BoxGeometry(wall.rotate ? .07 : .12, end - start, wall.rotate ? .12 : .07), new THREE.MeshStandardMaterial({ color: wall.glazed ? '#567267' : '#a39a87', roughness: .7 }));
           mesh.position.set(wall.x + (wall.rotate ? 0 : post.along), (start + end) / 2, wall.z + (wall.rotate ? post.along : 0));
-          this.scene.add(mesh); this.track(mesh); post.cutouts.push(mesh);
+          mesh.userData.architecture = wall.glazed ? 'glass' : 'wall';
+          this.scene.add(mesh); this.track(mesh); this.architectureMeshes.add(mesh); post.cutouts.push(mesh);
         }
       }
     }
@@ -908,8 +922,32 @@ export class OfficeScene {
       if (!visible) occupant.label.style.visibility = 'hidden';
     }
   }
+  private restoreFocusOccluders() {
+    for (const mesh of this.focusHiddenArchitecture) if (this.architectureMeshes.has(mesh)) mesh.visible = true;
+    this.focusHiddenArchitecture.clear();
+  }
+  private syncFocusOcclusion(occupant?: Occupant) {
+    this.restoreFocusOccluders();
+    if (!this.focusedMemberId || !occupant) return;
+    this.focusOcclusionTarget.copy(occupant.rig.root.position);
+    this.focusOcclusionTarget.y += 1.05;
+    this.focusOcclusionDirection.subVectors(this.focusOcclusionTarget, this.camera.position);
+    const targetDistance = this.focusOcclusionDirection.length();
+    if (targetDistance <= .1) return;
+    this.focusOcclusionRay.set(this.camera.position, this.focusOcclusionDirection.normalize());
+    for (const mesh of this.architectureMeshes) {
+      if (!mesh.visible || !mesh.parent) continue;
+      mesh.updateWorldMatrix(true, false);
+      this.focusOcclusionBounds.setFromObject(mesh);
+      const hit = this.focusOcclusionRay.intersectBox(this.focusOcclusionBounds, this.focusOcclusionHit);
+      if (!hit || hit.distanceTo(this.camera.position) >= targetDistance - .08) continue;
+      mesh.visible = false;
+      this.focusHiddenArchitecture.add(mesh);
+    }
+  }
   focusMember(id: string | null) {
     const next = id || '';
+    this.restoreFocusOccluders();
     if (next) {
       if (!this.focusedMemberId && !this.focusReturning) {
         this.focusReturnCamera = { position: this.camera.position.clone(), target: this.controls.target.clone() };
@@ -959,7 +997,7 @@ export class OfficeScene {
     const easing = 1 - Math.exp(-dt * 5);
     if (this.focusedMemberId) {
       const occupant = this.occupants.get(this.focusedMemberId);
-      if (!occupant) return;
+      if (!occupant) { this.restoreFocusOccluders(); return; }
       // Aim slightly to the avatar's right so the person remains visible beside the detail panel.
       this.focusTarget.copy(occupant.rig.root.position).add(this.focusFraming);
       this.focusPosition.copy(this.focusTarget).add(this.focusOffset);
@@ -969,6 +1007,7 @@ export class OfficeScene {
         this.camera.position.x - occupant.rig.root.position.x,
         this.camera.position.z - occupant.rig.root.position.z,
       );
+      this.syncFocusOcclusion(occupant);
       return;
     }
     if (!this.focusReturning || !this.focusReturnCamera) return;
@@ -1135,6 +1174,7 @@ export class OfficeScene {
     this.materials.forEach(material => material.dispose());
     this.textures.forEach(texture => texture.dispose());
     this.renderer.dispose(); this.renderer.forceContextLoss(); this.renderer.domElement.remove();
+    this.architectureMeshes.clear(); this.focusHiddenArchitecture.clear();
     this.labels.replaceChildren();
   }
 }
