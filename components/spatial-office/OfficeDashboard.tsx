@@ -23,6 +23,7 @@ import { useHolidayAccess } from '@/components/auth/HolidayAccessContext';
 import type { ObjectMenuTarget, OfficeBubbleEvent } from '@/lib/spatial-office/scene';
 import { applySharedAction, applyLayout, type SharedOfficeAction, normalizeSpace, claimDesk, assignDesk, removeDesk, ORNAMENTS, moveOrnament, moveDesk, moveRoomLight, setActivity, parseOrnaments, spaceCapacity, type OfficeSpace, type Ornament, type RoomLightKey, type RoomLightPosition } from '@/lib/spatial-office/space';
 import { normalizeProjectLookupName, rememberWorkCenterProject, workCenterProjectHref } from '@/lib/projects/work-center-snapshot';
+import { useTheme } from '@/lib/theme';
 import './office.css';
 
 const OfficeCanvas = dynamic(() => import('./OfficeCanvas'), { ssr: false, loading: () => <div className="office-viewport office-canvas-placeholder">Menyiapkan tampilan 3D…</div> });
@@ -127,6 +128,7 @@ function memberProjectSummaries(member: OfficeMember, now: number) {
 
 export default function OfficeDashboard({ demo = false, immersive = false, workCenterPreview = false, embeddedAttendance = false, onStatistics }: { demo?: boolean; immersive?: boolean; workCenterPreview?: boolean; embeddedAttendance?: boolean; onStatistics?: () => void }) {
   const { access: holidayAccess, locked: holidayLocked } = useHolidayAccess();
+  const { isDark } = useTheme();
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [now, setNow] = useState(0);
   const [schedule, setSchedule] = useState<AttendanceSchedule>();
@@ -676,7 +678,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   >
     {immersive && <header className="office-game-hud">
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER${demo ? ' PREVIEW' : ''} · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
+      <img src={isDark ? OFFICE_BRAND.darkLogo : OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER${demo ? ' PREVIEW' : ''} · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
       <div className="office-game-actions">
         <div className="office-clock" title={`Zona waktu ${clock.timezone}${schedule?.configured ? '' : ' · jadwal standar Sen–Jum 08:30–17:30'}`}>
           {clock.phase === 'Malam' ? <Moon size={14} /> : <Sun size={14} />}<div><time>{now ? clock.clock : '—:—:—'}</time><small>{clock.phase} · {clock.timezone.split('/').at(-1)}</small></div>
