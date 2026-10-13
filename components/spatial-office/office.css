@@ -1199,7 +1199,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-focus-active .office-avatar-label:not([data-selected=true]){opacity:.22}
 .office-focus-active .office-avatar-label[data-focused=true] .office-name{border-color:#4e8059;background:#f2faed;box-shadow:0 0 0 4px #78a47a24,0 8px 22px #1b382c35;color:#284632}
 
-.office-member-focus-panel{grid-column:1;grid-row:2;z-index:32;align-self:center;justify-self:end;width:min(300px,calc(100% - 32px));max-height:calc(100% - 34px);margin-right:17px;overflow:hidden;border:1px solid #cedbc9;border-radius:18px;background:#fffffff5;color:#2e4537;box-shadow:0 24px 70px #172b2447,0 5px 18px #20352e24;animation:office-focus-panel-enter .22s ease-out;pointer-events:auto}
+.office-member-focus-panel{grid-column:1;grid-row:2;z-index:32;align-self:center;justify-self:end;width:min(390px,calc(100% - 32px));max-height:calc(100% - 34px);margin-right:17px;overflow:hidden;border:1px solid #cedbc9;border-radius:18px;background:#fffffff5;color:#2e4537;box-shadow:0 24px 70px #172b2447,0 5px 18px #20352e24;animation:office-focus-panel-enter .22s ease-out;pointer-events:auto}
 @keyframes office-focus-panel-enter{from{opacity:0;transform:translateX(14px) scale(.985)}to{opacity:1;transform:translateX(0) scale(1)}}
 .office-member-focus-panel>header{display:grid;grid-template-columns:42px minmax(0,1fr) 30px;align-items:center;gap:10px;padding:13px 13px 12px;border-bottom:1px solid #e3e9e0;background:linear-gradient(135deg,#f4f9f2,#edf5ea)}
 .office-member-focus-avatar{display:grid;width:42px;height:42px;place-items:center;border:1px solid #bfd0ba;border-radius:13px;background:linear-gradient(145deg,#dfe9da,#cbdac5) center/cover no-repeat;color:#506b52;font-size:9px;font-weight:800;letter-spacing:.04em}
@@ -1446,7 +1446,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
  .office-work-center-tabs{grid-column:2;grid-row:1;padding:0 14px}
  .office-work-center-body{grid-column:2;grid-row:2;padding:10px 14px}
  .office-work-center-chat-stack{grid-column:1;grid-row:2;width:min(370px,calc(100% - 20px));margin:0 0 10px 10px}
- .office-member-focus-panel{grid-column:1;grid-row:2;width:min(292px,calc(100% - 28px));max-height:calc(100% - 26px);margin-right:13px}
+ .office-member-focus-panel{grid-column:1;grid-row:2;width:min(340px,calc(100% - 28px));max-height:calc(100% - 26px);margin-right:13px}
  .office-agent-strip{grid-column:1;grid-row:4;grid-template-columns:74px minmax(0,1fr)}
  .office-agent-strip-list button{flex-basis:154px;height:56px}
  .office-work-center .office-camera-controls{right:10px;bottom:10px}
@@ -1473,7 +1473,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
  .office-work-center-quick-links{grid-template-columns:1fr}
  .office-work-center .office-camera-controls button{padding:8px}
  .office-work-center-chat-stack{width:min(340px,calc(100% - 16px));margin:0 0 8px 8px}
- .office-member-focus-panel{width:min(230px,calc(100% - 16px));max-height:calc(100% - 16px);margin-right:8px;border-radius:14px}
+ .office-member-focus-panel{width:min(260px,calc(100% - 16px));max-height:calc(100% - 16px);margin-right:8px;border-radius:14px}
  .office-member-focus-panel>header{grid-template-columns:34px minmax(0,1fr) 27px;gap:7px;padding:9px}
  .office-member-focus-avatar{width:34px;height:34px;border-radius:10px}
  .office-member-focus-panel>header button{width:27px;height:27px}
