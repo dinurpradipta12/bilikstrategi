@@ -1362,16 +1362,22 @@ html.dark .office-work-center .office-game-brand span,html.dark .office-work-cen
 html.dark .office-work-center-header,html.dark .office-work-center-tabs,html.dark .office-work-center-footer-controls{border-color:#344257;background:#192230;color:#f1f4f8}
 html.dark .office-work-center-body{background:#161f2b;color:#f1f4f8}
 html.dark .office-work-center-tabs button{color:#9caabc}
-html.dark .office-work-center-tabs button[aria-selected=true]{color:#c5d7ea}
-html.dark .office-work-center-tabs button[aria-selected=true]::after{background:#829fbe}
+html.dark .office-work-center-tabs button[aria-selected=true]{color:#fff}
+html.dark .office-work-center-tabs button[aria-selected=true]::after{background:#fff}
 html.dark .office-work-center-presence-trigger,html.dark .office-work-center-metrics>div,html.dark .office-work-center-team-tasks article>i,html.dark .office-work-center-quick-links>a,html.dark .office-work-center-project-card,html.dark .office-work-center-inbox-summary>div,html.dark .office-work-center-inbox-item>i{border-color:#3a485d;background:#222d3c;color:#edf2f8}
 html.dark .office-work-center-presence-trigger:hover,html.dark .office-work-center-quick-links>a:hover,html.dark .office-work-center-project-card:hover{border-color:#607894;background:#29374a}
 html.dark .office-work-center-team-summary,html.dark .office-work-center-project{border-color:#3a485d;background:linear-gradient(145deg,#222d3c,#1b2634)}
 html.dark .office-work-center-team-summary>strong,html.dark .office-work-center-quick-links strong,html.dark .office-work-center-project-card,html.dark .office-work-center-inbox-item{color:#edf2f8}
 html.dark .office-work-center-team-summary>span,html.dark .office-work-center-team-summary>p,html.dark .office-work-center-metrics span,html.dark .office-work-center-team-tasks article span,html.dark .office-work-center-team-tasks article em,html.dark .office-work-center-quick-links small,html.dark .office-work-center-project-card-heading small,html.dark .office-work-center-project-card>footer,html.dark .office-work-center-inbox-item span,html.dark .office-work-center-inbox-item small{color:#9dabbc}
 html.dark .office-work-center-team-tasks article,html.dark .office-work-center-inbox-item{border-color:#303d50}
-html.dark .office-work-center-project-card-heading>span{background:#2b394c;color:#a9c2dd}
+html.dark .office-work-center-project-card-heading>span{background:#2b394c;color:#fff}
 html.dark .office-work-center-project-card>i{background:#344257}
+html.dark .office-work-center-project-card>i>span{background:#9db4cc}
+html.dark .office-work-center .office-clock small,html.dark .office-work-center .office-weather-copy small,html.dark .office-work-center-kicker,html.dark .office-work-center-project>span,html.dark .office-work-center-section-title>span,html.dark .office-work-center-section-title>a,html.dark .office-work-center-section-title button,html.dark .office-work-center-project-card-heading>b{color:#fff}
+html.dark .office-work-center-kicker>span{background:#fff;box-shadow:0 0 0 3px #ffffff24}
+html.dark .office-work-center-metrics-team svg,html.dark .office-work-center-quick-links svg,html.dark .office-work-center-inbox-summary svg,html.dark .office-work-center-inbox-item svg{color:#fff}
+html.dark .office-work-center-team-tasks article>i[data-active=true],html.dark .office-work-center-overview-tasks article>i[data-active=true]{border-color:#607894;background:#29374a;color:#fff}
+html.dark .office-work-center .office-weather-ready{background:#222d3c!important;color:#fff}
 html.dark .office-account-control{border-color:#344257}
 html.dark .office-account-trigger,html.dark .office-agent-strip-list button{color:#edf2f8}
 html.dark .office-account-trigger:hover,html.dark .office-account-trigger[aria-expanded=true],html.dark .office-agent-strip-list button:hover,html.dark .office-agent-strip-list button[aria-pressed=true]{border-color:#607894;background:#29374a;color:#f6f8fb}
@@ -1381,10 +1387,12 @@ html.dark .office-agent-copy small{color:#9dabbc}
 html.dark .office-work-center-footer-controls{box-shadow:0 -10px 22px #080d162e}
 html.dark .office-theme-control,html.dark .office-holiday-admin-compact{border-color:#3d4c61;background:#222d3c;color:#f1f4f8;box-shadow:0 4px 14px #080d1652}
 html.dark .office-theme-control:hover{border-color:#607894;background:#29374a}
-html.dark .office-theme-control-icon{border-color:#4a5c74;background:#182231;color:#f2c56b}
+html.dark .office-theme-control-icon{border-color:#4a5c74;background:#182231;color:#fff}
+html.dark .office-theme-control[data-active=true] .office-theme-control-icon{border-color:#4a5c74;background:#182231;color:#fff}
 html.dark .office-theme-control[data-active=true] .office-theme-control-switch{background:#718dad}
 html.dark .office-theme-control-copy small,html.dark .office-holiday-admin-compact small,html.dark .office-holiday-switch em{color:#9dabbc}
-html.dark .office-holiday-schedule-button{border-color:#465870;background:#29374a;color:#c7d7e8}
+html.dark .office-holiday-admin-compact>div>svg,html.dark .office-holiday-schedule-button{color:#fff}
+html.dark .office-holiday-schedule-button{border-color:#465870;background:#29374a}
 html.dark .office-work-center-chat{border-color:#53657c;background:#263244;box-shadow:0 7px 24px #080d1666}
 html.dark form.office-work-center-chat input#work-center-chat{height:30px;padding:0 10px;border:1px solid #52627a!important;border-radius:9px;background-color:#344156!important;color:#f2f5f9!important}
 html.dark .office-work-center-chat input::placeholder{color:#aab5c4}

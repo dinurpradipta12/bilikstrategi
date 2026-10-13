@@ -10,9 +10,12 @@ type Weather = {
   code: number;
   isDay: boolean;
   place: string;
+  timezone: string;
   updatedAt: number;
 };
 type WeatherStatus = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'unsupported' | 'error';
+export type OfficeLocation = Pick<Weather, 'place' | 'timezone'>;
+type StoredWeather = { coordinates: Coordinates; weather?: Weather };
 
 type WeatherResponse = {
   timezone?: string;
@@ -23,6 +26,15 @@ type WeatherResponse = {
     is_day?: number;
   };
 };
+
+type ReverseGeocodeResponse = {
+  city?: string;
+  locality?: string;
+  principalSubdivision?: string;
+};
+
+const WEATHER_STORAGE_KEY = 'bilik-strategi:office-weather:v1';
+const WEATHER_REFRESH_INTERVAL = 15 * 60 * 1000;
 
 function weatherPresentation(code: number, isDay: boolean): { label: string; Icon: LucideIcon } {
   if (code === 0) return { label: 'Cerah', Icon: isDay ? Sun : Moon };
@@ -35,28 +47,28 @@ function weatherPresentation(code: number, isDay: boolean): { label: string; Ico
   return { label: 'Berawan', Icon: Cloud };
 }
 
-function timezonePlace(timezone?: string) {
-  const segment = timezone?.split('/').at(-1)?.replaceAll('_', ' ');
-  return segment || 'Lokasi Anda';
+function storedWeather(): StoredWeather | null {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(WEATHER_STORAGE_KEY) || 'null') as StoredWeather | null;
+    if (!stored || !Number.isFinite(stored.coordinates?.latitude) || !Number.isFinite(stored.coordinates?.longitude)) return null;
+    return stored;
+  } catch {
+    return null;
+  }
 }
 
-export default function OfficeWeather() {
+export default function OfficeWeather({ onLocationChange }: { onLocationChange?: (location: OfficeLocation) => void }) {
   const [status, setStatus] = useState<WeatherStatus>('idle');
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    controllerRef.current?.abort();
-  }, []);
-
-  const loadWeather = useCallback(async (nextCoordinates: Coordinates) => {
+  const loadWeather = useCallback(async (nextCoordinates: Coordinates, options?: { place?: string; keepExisting?: boolean }) => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setStatus('loading');
+    if (!options?.keepExisting) setStatus('loading');
     try {
       const params = new URLSearchParams({
         latitude: String(nextCoordinates.latitude),
@@ -65,36 +77,77 @@ export default function OfficeWeather() {
         timezone: 'auto',
         forecast_days: '1',
       });
-      const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+      const placeParams = new URLSearchParams({
+        latitude: String(nextCoordinates.latitude),
+        longitude: String(nextCoordinates.longitude),
+        localityLanguage: 'id',
+      });
+      const [response, placeResponse] = await Promise.all([
+        fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal }),
+        fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?${placeParams}`, { signal: controller.signal }).catch(() => null),
+      ]);
       if (!response.ok) throw new Error('weather-request-failed');
       const payload = await response.json() as WeatherResponse;
       const current = payload.current;
       if (!current || !Number.isFinite(current.temperature_2m) || !Number.isFinite(current.weather_code)) throw new Error('weather-data-invalid');
+      let place = options?.place || 'Lokasi Anda';
+      if (placeResponse?.ok) {
+        const placePayload = await placeResponse.json() as ReverseGeocodeResponse;
+        place = placePayload.city || placePayload.locality || placePayload.principalSubdivision || place;
+      }
       if (!mountedRef.current) return;
-      setWeather({
+      const nextWeather: Weather = {
         temperature: current.temperature_2m as number,
         apparentTemperature: Number.isFinite(current.apparent_temperature) ? current.apparent_temperature as number : current.temperature_2m as number,
         code: current.weather_code as number,
         isDay: current.is_day !== 0,
-        place: timezonePlace(payload.timezone),
+        place,
+        timezone: payload.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Makassar',
         updatedAt: Date.now(),
-      });
+      };
+      window.localStorage.setItem(WEATHER_STORAGE_KEY, JSON.stringify({ coordinates: nextCoordinates, weather: nextWeather } satisfies StoredWeather));
+      setCoordinates(nextCoordinates);
+      setWeather(nextWeather);
       setStatus('ready');
+      onLocationChange?.({ place: nextWeather.place, timezone: nextWeather.timezone });
     } catch (error) {
       if (!mountedRef.current || (error instanceof DOMException && error.name === 'AbortError')) return;
-      setStatus('error');
+      setStatus(options?.keepExisting ? 'ready' : 'error');
     }
-  }, []);
+  }, [onLocationChange]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const hydrateTimer = window.setTimeout(() => {
+      const stored = storedWeather();
+      if (stored) {
+        setCoordinates(stored.coordinates);
+        if (stored.weather) {
+          setWeather(stored.weather);
+          setStatus('ready');
+          onLocationChange?.({ place: stored.weather.place, timezone: stored.weather.timezone });
+        }
+        if (!stored.weather || Date.now() - stored.weather.updatedAt >= WEATHER_REFRESH_INTERVAL) {
+          void loadWeather(stored.coordinates, { place: stored.weather?.place, keepExisting: Boolean(stored.weather) });
+        }
+      }
+    }, 0);
+    return () => {
+      window.clearTimeout(hydrateTimer);
+      mountedRef.current = false;
+      controllerRef.current?.abort();
+    };
+  }, [loadWeather, onLocationChange]);
 
   useEffect(() => {
     if (!coordinates) return;
-    const timer = window.setInterval(() => void loadWeather(coordinates), 15 * 60 * 1000);
+    const timer = window.setInterval(() => void loadWeather(coordinates, { place: weather?.place, keepExisting: Boolean(weather) }), WEATHER_REFRESH_INTERVAL);
     return () => window.clearInterval(timer);
-  }, [coordinates, loadWeather]);
+  }, [coordinates, loadWeather, weather]);
 
   const requestWeather = () => {
     if (coordinates) {
-      void loadWeather(coordinates);
+      void loadWeather(coordinates, { place: weather?.place, keepExisting: Boolean(weather) });
       return;
     }
     if (!('geolocation' in navigator)) {
@@ -110,6 +163,7 @@ export default function OfficeWeather() {
         latitude: Math.round(position.coords.latitude * 100) / 100,
         longitude: Math.round(position.coords.longitude * 100) / 100,
       };
+      window.localStorage.setItem(WEATHER_STORAGE_KEY, JSON.stringify({ coordinates: nextCoordinates } satisfies StoredWeather));
       setCoordinates(nextCoordinates);
       void loadWeather(nextCoordinates);
     }, error => {

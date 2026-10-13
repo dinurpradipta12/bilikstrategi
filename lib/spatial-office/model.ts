@@ -188,14 +188,14 @@ export function workedSeconds(member: OfficeMember, now: number) {
   return Math.max(0, member.accumulatedSeconds || 0) + (member.status === 'working' && member.startedAt ? Math.max(0, now - member.startedAt) / 1000 : 0);
 }
 // These destinations illustrate office life; they never write attendance records.
-let timeCache: { second: number; schedule?: AttendanceSchedule; value: ReturnType<typeof calculateOfficeTime> } | undefined;
-export function officeTime(now: number, schedule?: AttendanceSchedule) {
+let timeCache: { second: number; schedule?: AttendanceSchedule; timezoneOverride?: string; value: ReturnType<typeof calculateOfficeTime> } | undefined;
+export function officeTime(now: number, schedule?: AttendanceSchedule, timezoneOverride?: string) {
   const second = Math.floor(now / 1000);
-  if (timeCache?.second === second && timeCache.schedule === schedule) return timeCache.value;
-  const value = calculateOfficeTime(now, schedule); timeCache = { second, schedule, value }; return value;
+  if (timeCache?.second === second && timeCache.schedule === schedule && timeCache.timezoneOverride === timezoneOverride) return timeCache.value;
+  const value = calculateOfficeTime(now, schedule, timezoneOverride); timeCache = { second, schedule, timezoneOverride, value }; return value;
 }
-function calculateOfficeTime(now: number, schedule?: AttendanceSchedule) {
-  let timezone = schedule?.timezone || 'Asia/Makassar';
+function calculateOfficeTime(now: number, schedule?: AttendanceSchedule, timezoneOverride?: string) {
+  let timezone = timezoneOverride || schedule?.timezone || 'Asia/Makassar';
   try { new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch { timezone = 'Asia/Makassar'; }
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]));
   const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday);

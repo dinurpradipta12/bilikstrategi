@@ -16,7 +16,7 @@ import OfficeActivityMenu, { OFFICE_ACTIONS } from './OfficeActivityMenu';
 import OfficeObjectMenu from './OfficeObjectMenu';
 import OfficeMusicPlayer from './OfficeMusicPlayer';
 import OfficeSignEditor from './OfficeSignEditor';
-import OfficeWeather from './OfficeWeather';
+import OfficeWeather, { type OfficeLocation } from './OfficeWeather';
 import HolidayAdminControl from './HolidayAdminControl';
 import OfficeThemeControl from './OfficeThemeControl';
 import { useHolidayAccess } from '@/components/auth/HolidayAccessContext';
@@ -132,6 +132,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
   const [data, setData] = useState<Data>(() => ({ members: demo ? DEMO_MEMBERS : [], syncedAt: '', seats: reconcileSeats(new Map(), demo ? DEMO_MEMBERS : []) }));
   const [now, setNow] = useState(0);
   const [schedule, setSchedule] = useState<AttendanceSchedule>();
+  const [officeLocation, setOfficeLocation] = useState<OfficeLocation | null>(null);
   useEffect(() => {
     const tick = () => setNow(Date.now()); queueMicrotask(tick); const timer = setInterval(tick, 1000);
     let cancelled = false;
@@ -139,7 +140,7 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
     load(); const poll = setInterval(load, 300000);
     return () => { cancelled = true; clearInterval(timer); clearInterval(poll); };
   }, [demo]);
-  const clock = officeTime(now, schedule);
+  const clock = officeTime(now, schedule, officeLocation?.timezone);
   const [activityMenu,setActivityMenu]=useState(false);
   const [musicOpen,setMusicOpen]=useState(false);
   const [signOpen,setSignOpen]=useState(false);
@@ -680,10 +681,10 @@ export default function OfficeDashboard({ demo = false, immersive = false, workC
       <div className="office-game-brand">{/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={isDark ? OFFICE_BRAND.darkLogo : OFFICE_BRAND.logo} alt="" /><div><strong>{OFFICE_BRAND.name}</strong><span>{workCenterPreview ? `WORK CENTER${demo ? ' PREVIEW' : ''} · ${active} ONLINE` : demo ? 'SIMULASI' : error ? 'KONEKSI TERPUTUS' : dataReady ? `${active} CHECK-IN · AREA ${currentRoom + 1}` : 'MENGHUBUNGKAN…'}</span></div></div>
       <div className="office-game-actions">
-        <div className="office-clock" title={`Zona waktu ${clock.timezone}${schedule?.configured ? '' : ' · jadwal standar Sen–Jum 08:30–17:30'}`}>
-          {clock.phase === 'Malam' ? <Moon size={14} /> : <Sun size={14} />}<div><time>{now ? clock.clock : '—:—:—'}</time><small>{clock.phase} · {clock.timezone.split('/').at(-1)}</small></div>
+        <div className="office-clock" title={`Zona waktu ${clock.timezone}${officeLocation ? ` · ${officeLocation.place}` : ''}`}>
+          {clock.phase === 'Malam' ? <Moon size={14} /> : <Sun size={14} />}<div><time>{now ? clock.clock : '—:—:—'}</time><small>{clock.phase} · {officeLocation?.place || clock.timezone.split('/').at(-1)}</small></div>
         </div>
-        <OfficeWeather />
+        <OfficeWeather onLocationChange={setOfficeLocation} />
         {rooms > 1 && <select aria-label="Area kantor" value={currentRoom} onChange={event => { setRoom(Number(event.target.value)); setSelectedOrnament(''); }}>{Array.from({ length: rooms }, (_, i) => <option key={i} value={i}>Area {i + 1}</option>)}</select>}
         {onStatistics ? <button type="button" title="Kembali ke workspace" aria-label="Kembali ke workspace" onClick={onStatistics}><LayoutDashboard size={17} /><span className="office-back-copy">Workspace</span></button> : <Link className="office-back-dashboard" href="/dashboard" aria-label="Kembali ke workspace"><LayoutDashboard size={17} /><span className="office-back-copy">Workspace</span></Link>}
         <button type="button" aria-label="Sinkronkan data kantor" disabled={refreshing} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></button>
