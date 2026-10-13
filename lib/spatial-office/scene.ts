@@ -81,8 +81,8 @@ export class OfficeScene {
   private focusReturnCamera: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
   private focusTarget = new THREE.Vector3();
   private focusPosition = new THREE.Vector3();
-  private focusFraming = new THREE.Vector3(1, 1.05, -.8);
-  private focusOffset = new THREE.Vector3(4.2, 3.2, 5.2);
+  private focusFraming = new THREE.Vector3(.72, .88, -.55);
+  private focusOffset = new THREE.Vector3(2.45, 1.65, 2.9);
   private visible = true;
   private observer: IntersectionObserver;
   private contextLost = (event: Event) => { event.preventDefault(); this.options.onError('Tampilan 3D terhenti. Muat ulang tampilan atau gunakan daftar tim.'); };
@@ -884,6 +884,7 @@ export class OfficeScene {
       const loungeSeatChanged=zone==='lounge'&&!occupant.route.length&&Math.hypot(occupant.rig.root.position.x-destination.x,occupant.rig.root.position.z-destination.z)>.08;
       if (zone !== occupant.zone || loungeSeatChanged || (zone==='meeting'&&previous.find(p=>p.member.id===member.id)?.member.activity?.seat!==member.activity?.seat)) this.changeZone(occupant, zone);
     }
+    this.syncFocusVisibility();
   }
 
   private removeOccupant(id: string, occupant: Occupant) {
@@ -900,6 +901,13 @@ export class OfficeScene {
 
   setMotion(enabled: boolean) { this.moving = enabled; }
   select(id: string) { this.selected = id; }
+  private syncFocusVisibility() {
+    for (const [id, occupant] of this.occupants) {
+      const visible = !this.focusedMemberId || id === this.focusedMemberId;
+      occupant.rig.root.visible = visible;
+      if (!visible) occupant.label.style.visibility = 'hidden';
+    }
+  }
   focusMember(id: string | null) {
     const next = id || '';
     if (next) {
@@ -909,7 +917,8 @@ export class OfficeScene {
       this.focusedMemberId = next;
       this.focusReturning = false;
       this.controls.enabled = false;
-      this.controls.minDistance = 5;
+      this.controls.minDistance = 3;
+      this.syncFocusVisibility();
       return;
     }
     if (!this.focusedMemberId && !this.focusReturning) return;
@@ -921,6 +930,7 @@ export class OfficeScene {
       this.controls.enabled = true;
       this.controls.minDistance = 9;
     }
+    this.syncFocusVisibility();
   }
   resetCamera() {
     if (this.options.environmentStyle === 'work-center') {
@@ -955,6 +965,10 @@ export class OfficeScene {
       this.focusPosition.copy(this.focusTarget).add(this.focusOffset);
       this.controls.target.lerp(this.focusTarget, easing);
       this.camera.position.lerp(this.focusPosition, easing);
+      occupant.rig.root.rotation.y = Math.atan2(
+        this.camera.position.x - occupant.rig.root.position.x,
+        this.camera.position.z - occupant.rig.root.position.z,
+      );
       return;
     }
     if (!this.focusReturning || !this.focusReturnCamera) return;
@@ -1040,7 +1054,8 @@ export class OfficeScene {
       const text = settled ? bubbleLabel(member, occupant.zone, this.moving||chatActive ? bubbleNow : 0) : '';
       if (occupant.bubble.textContent !== text) occupant.bubble.textContent = text;
       const ambientPhase=(t+occupant.slot*AMBIENT_BUBBLE_STAGGER_SECONDS)%AMBIENT_BUBBLE_PERIOD_SECONDS;
-      occupant.bubble.hidden = !text || (!chatActive && id !== this.selected && (!this.moving || ambientPhase >= AMBIENT_BUBBLE_VISIBLE_SECONDS));
+      const focusMode=Boolean(this.focusedMemberId),focusSuppressed=focusMode&&id!==this.focusedMemberId;
+      occupant.bubble.hidden = focusMode || !text || (!chatActive && id !== this.selected && (!this.moving || ambientPhase >= AMBIENT_BUBBLE_VISIBLE_SECONDS));
       occupant.bubble.dataset.chat=String(chatActive);
       if(occupant.bubble.hidden) occupant.reportedBubbleKey='';
       else {
@@ -1054,8 +1069,10 @@ export class OfficeScene {
       occupant.label.dataset.walking = String(!settled);
       occupant.label.dataset.status = member.status;
       occupant.label.dataset.selected = String(id === this.selected);
+      occupant.label.dataset.focused = String(id === this.focusedMemberId);
       occupant.label.dataset.paused = String(member.status === 'paused');
-      this.placeLabel(occupant.label, rig.root.position.clone().add(new THREE.Vector3(0, 1.7, 0)));
+      if(focusSuppressed) occupant.label.style.visibility='hidden';
+      else this.placeLabel(occupant.label, rig.root.position.clone().add(new THREE.Vector3(0, 1.7, 0)));
     }
     for (const [slot, label] of this.deskLabels) {
       const occupant = this.current.find(item => item.slot % DESKS_PER_ROOM === slot);

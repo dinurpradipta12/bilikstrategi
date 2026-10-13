@@ -1197,6 +1197,7 @@ html[data-ui-style='m3'] [data-office-shell] main>.office-game { animation:none;
 .office-viewport.is-focus-mode .office-camera-controls,.office-viewport.is-focus-mode .office-camera-hint{opacity:0;pointer-events:none;transform:translateY(8px)}
 .office-viewport .office-camera-controls,.office-viewport .office-camera-hint{transition:opacity .2s ease,transform .2s ease}
 .office-focus-active .office-avatar-label:not([data-selected=true]){opacity:.22}
+.office-focus-active .office-avatar-label[data-focused=true] .office-name{border-color:#4e8059;background:#f2faed;box-shadow:0 0 0 4px #78a47a24,0 8px 22px #1b382c35;color:#284632}
 
 .office-member-focus-panel{grid-column:1;grid-row:2;z-index:32;align-self:center;justify-self:end;width:min(300px,calc(100% - 32px));max-height:calc(100% - 34px);margin-right:17px;overflow:hidden;border:1px solid #cedbc9;border-radius:18px;background:#fffffff5;color:#2e4537;box-shadow:0 24px 70px #172b2447,0 5px 18px #20352e24;animation:office-focus-panel-enter .22s ease-out;pointer-events:auto}
 @keyframes office-focus-panel-enter{from{opacity:0;transform:translateX(14px) scale(.985)}to{opacity:1;transform:translateX(0) scale(1)}}

@@ -362,20 +362,24 @@ test('member focus follows the avatar and restores the exact previous camera',()
   Object.assign(engine,{
     focusedMemberId:'',focusReturning:false,focusReturnCamera:null,
     focusTarget:new THREE.Vector3(),focusPosition:new THREE.Vector3(),
-    focusFraming:new THREE.Vector3(1,1.05,-.8),focusOffset:new THREE.Vector3(4.2,3.2,5.2),
+    focusFraming:new THREE.Vector3(.72,.88,-.55),focusOffset:new THREE.Vector3(2.45,1.65,2.9),
   });
   engine.controls={target:new THREE.Vector3(2.3,.4,-1.8),update(){},enabled:true,minDistance:9};
   engine.camera.position.set(16.1,15.8,19.7);
   const originalPosition=engine.camera.position.clone(),originalTarget=engine.controls.target.clone();
-  engine.setMembers([{member:alice,slot:0}]);engine.focusMember('1');
+  engine.setMembers([{member:alice,slot:0},{member:{...alice,id:'2',name:'Bima'},slot:1}]);engine.focusMember('1');
   for(let frame=0;frame<100;frame++) engine.updateFocusedCamera(.05);
-  const avatar=engine.occupants.get('1').rig.root.position;
+  const focused=engine.occupants.get('1'),other=engine.occupants.get('2'),avatar=focused.rig.root.position;
   assert.ok(engine.controls.target.distanceTo(avatar.clone().add(engine.focusFraming))<.01);
-  assert.equal(engine.controls.enabled,false);assert.equal(engine.controls.minDistance,5);
+  assert.ok(engine.camera.position.distanceTo(engine.controls.target)<4.2,'focus should frame the avatar closely');
+  assert.equal(focused.rig.root.rotation.y,Math.atan2(engine.camera.position.x-avatar.x,engine.camera.position.z-avatar.z));
+  assert.equal(other.rig.root.visible,false);assert.equal(other.label.style.visibility,'hidden');
+  assert.equal(engine.controls.enabled,false);assert.equal(engine.controls.minDistance,3);
   engine.focusMember(null);
   for(let frame=0;frame<120;frame++) engine.updateFocusedCamera(.05);
   assert.ok(engine.camera.position.distanceTo(originalPosition)<1e-8);
   assert.ok(engine.controls.target.distanceTo(originalTarget)<1e-8);
+  assert.equal(other.rig.root.visible,true);
   assert.equal(engine.controls.enabled,true);assert.equal(engine.controls.minDistance,9);
 });
 test('front camera sits at eye level and looks horizontally toward the office',()=>{
